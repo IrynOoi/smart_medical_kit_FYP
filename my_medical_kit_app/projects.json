@@ -1,0 +1,85 @@
+{
+  "status": "success",
+  "result": [
+    {
+      "projectId": "fir-flutter-codelab-49eee",
+      "projectNumber": "969409085137",
+      "displayName": "Firebase-Flutter-Codelab",
+      "name": "projects/fir-flutter-codelab-49eee",
+      "resources": {
+        "hostingSite": "fir-flutter-codelab-49eee"
+      },
+      "state": "ACTIVE",
+      "etag": "1_75c3e1d2-eec6-4482-8d71-2da7698405a3"
+    },
+    {
+      "projectId": "nenass-c55f0",
+      "projectNumber": "961332354476",
+      "displayName": "NeNass",
+      "name": "projects/nenass-c55f0",
+      "resources": {
+        "hostingSite": "nenass-c55f0",
+        "realtimeDatabaseInstance": "nenass-c55f0-default-rtdb"
+      },
+      "state": "ACTIVE",
+      "etag": "1_e3b8e454-16f5-433f-be5c-f3f5fbf210f7"
+    },
+    {
+      "projectId": "projectfirebase-875d7",
+      "projectNumber": "61881235745",
+      "displayName": "ProjectFirebase",
+      "name": "projects/projectfirebase-875d7",
+      "resources": {
+        "hostingSite": "projectfirebase-875d7",
+        "realtimeDatabaseInstance": "projectfirebase-875d7-default-rtdb"
+      },
+      "state": "ACTIVE",
+      "etag": "1_b1c1ec91-4afd-416b-a2af-801f92bf68db"
+    },
+    {
+      "projectId": "slm02-mad",
+      "projectNumber": "253748953732",
+      "displayName": "slm02 mad",
+      "name": "projects/slm02-mad",
+      "resources": {
+        "hostingSite": "slm02-mad"
+      },
+      "state": "ACTIVE",
+      "etag": "1_4cca9878-ee27-45a9-b86b-52182e13be4d"
+    },
+    {
+      "projectId": "smart-medical-kit-1e971",
+      "projectNumber": "1071125880693",
+      "displayName": "Smart-Medical-Kit",
+      "name": "projects/smart-medical-kit-1e971",
+      "resources": {
+        "hostingSite": "smart-medical-kit-1e971",
+        "realtimeDatabaseInstance": "smart-medical-kit-1e971-default-rtdb"
+      },
+      "state": "ACTIVE",
+      "etag": "1_e59cc19b-fcb3-46ab-b526-343cf5f66ced"
+    },
+    {
+      "projectId": "workshop-shopping-app-95580",
+      "projectNumber": "497099193736",
+      "displayName": "Workshop Shopping App",
+      "name": "projects/workshop-shopping-app-95580",
+      "resources": {
+        "hostingSite": "workshop-shopping-app-95580"
+      },
+      "state": "ACTIVE",
+      "etag": "1_12827489-8351-4709-8598-e73ec01514c1"
+    },
+    {
+      "projectId": "workshop-shopping-app-f7e66",
+      "projectNumber": "329576382822",
+      "displayName": "Workshop Shopping App",
+      "name": "projects/workshop-shopping-app-f7e66",
+      "resources": {
+        "hostingSite": "workshop-shopping-app-f7e66"
+      },
+      "state": "ACTIVE",
+      "etag": "1_2c63e8c1-6760-4ee1-bac3-8dab02eed9b5"
+    }
+  ]
+}
