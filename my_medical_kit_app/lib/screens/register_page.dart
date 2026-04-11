@@ -1,3 +1,4 @@
+//register_page.dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -26,6 +27,40 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final String serverIp = "172.20.10.9";
 
+  /// Show date picker for selecting date of birth
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 20)),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryPurple,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryPurple,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _dobController.text =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -33,7 +68,9 @@ class _RegisterPageState extends State<RegisterPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator(color: AppColors.primaryPurple)),
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryPurple),
+        ),
       );
 
       final response = await http.post(
@@ -48,18 +85,24 @@ class _RegisterPageState extends State<RegisterPage> {
           "phone_no": _phoneController.text,
           "date_of_birth": _dobController.text,
           "address": _addressController.text,
-          "medical_notes": _selectedRole == 'Patient' ? _medicalNotesController.text : null,
-          "caregiver_id": 1 // Default for now
+          "medical_notes": _selectedRole == 'Patient'
+              ? _medicalNotesController.text
+              : null,
+          "caregiver_id": 1,
         }),
       );
 
       Navigator.pop(context);
 
       final result = jsonDecode(response.body);
+      if (!mounted) return;
       if (result['success']) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result['message']), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.green,
+            ),
           );
           Navigator.pop(context);
         }
@@ -70,7 +113,10 @@ class _RegisterPageState extends State<RegisterPage> {
       if (mounted) {
         if (Navigator.canPop(context)) Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
@@ -91,9 +137,7 @@ class _RegisterPageState extends State<RegisterPage> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: AppColors.mainGradient,
-        ),
+        decoration: const BoxDecoration(gradient: AppColors.mainGradient),
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -119,7 +163,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  // Form Card
+
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -130,24 +174,38 @@ class _RegisterPageState extends State<RegisterPage> {
                           color: Colors.black12,
                           blurRadius: 15,
                           offset: Offset(0, 10),
-                        )
+                        ),
                       ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Role Selector
-                        const Text('I am a:', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPurple)),
+                        Text(
+                          'I am a:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryPurple.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 8),
+
                         Row(
                           children: [
                             Expanded(
                               child: ChoiceChip(
                                 label: const Center(child: Text('Patient')),
                                 selected: _selectedRole == 'Patient',
-                                onSelected: (val) => setState(() => _selectedRole = 'Patient'),
-                                selectedColor: AppColors.primaryPurple.withOpacity(0.2),
-                                labelStyle: TextStyle(color: _selectedRole == 'Patient' ? AppColors.primaryPurple : Colors.grey),
+                                onSelected: (_) =>
+                                    setState(() => _selectedRole = 'Patient'),
+                                selectedColor: AppColors.primaryPurple
+                                    .withValues(alpha: 0.2),
+                                labelStyle: TextStyle(
+                                  color: _selectedRole == 'Patient'
+                                      ? AppColors.primaryPurple
+                                      : Colors.grey,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -155,46 +213,107 @@ class _RegisterPageState extends State<RegisterPage> {
                               child: ChoiceChip(
                                 label: const Center(child: Text('Caregiver')),
                                 selected: _selectedRole == 'Caregiver',
-                                onSelected: (val) => setState(() => _selectedRole = 'Caregiver'),
-                                selectedColor: AppColors.primaryPurple.withOpacity(0.2),
-                                labelStyle: TextStyle(color: _selectedRole == 'Caregiver' ? AppColors.primaryPurple : Colors.grey),
+                                onSelected: (_) =>
+                                    setState(() => _selectedRole = 'Caregiver'),
+                                selectedColor: AppColors.primaryPurple
+                                    .withValues(alpha: 0.2),
+                                labelStyle: TextStyle(
+                                  color: _selectedRole == 'Caregiver'
+                                      ? AppColors.primaryPurple
+                                      : Colors.grey,
+                                ),
                               ),
                             ),
                           ],
                         ),
+
                         const SizedBox(height: 24),
-                        _buildTextField(_nameController, 'Full Name', Icons.person_outline),
+
+                        _buildTextField(
+                          _nameController,
+                          'Full Name',
+                          Icons.person_outline,
+                        ),
                         const SizedBox(height: 16),
-                        _buildTextField(_emailController, 'Email Address', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+
+                        _buildTextField(
+                          _emailController,
+                          'Email Address',
+                          Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
                         const SizedBox(height: 16),
-                        _buildTextField(_passwordController, 'Password', Icons.lock_outline, obscureText: true),
+
+                        _buildTextField(
+                          _passwordController,
+                          'Password',
+                          Icons.lock_outline,
+                          obscureText: true,
+                        ),
                         const SizedBox(height: 16),
-                        _buildTextField(_phoneController, 'Phone Number', Icons.phone_outlined, keyboardType: TextInputType.phone),
+
+                        _buildTextField(
+                          _phoneController,
+                          'Phone Number',
+                          Icons.phone_outlined,
+                          keyboardType: TextInputType.phone,
+                        ),
                         const SizedBox(height: 16),
-                        // Row for Gender and DOB
+
                         Row(
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 initialValue: _selectedGender,
-                                decoration: _inputDecoration('Gender', Icons.wc_outlined),
-                                items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                                onChanged: (val) => setState(() => _selectedGender = val!),
+                                decoration: _inputDecoration(
+                                  'Gender',
+                                  Icons.wc_outlined,
+                                ),
+                                items: ['Male', 'Female', 'Other']
+                                    .map(
+                                      (g) => DropdownMenuItem(
+                                        value: g,
+                                        child: Text(g),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) =>
+                                    setState(() => _selectedGender = val!),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: _buildTextField(_dobController, 'DOB (YYYY-MM-DD)', Icons.calendar_today_outlined),
+                              child: _buildTextField(
+                                _dobController,
+                                'Date of Birth (YYYY-MM-DD)',
+                                Icons.calendar_today_outlined,
+                                readOnly: true,
+                                onTap: () => _selectDate(context),
+                              ),
                             ),
                           ],
                         ),
+
                         const SizedBox(height: 16),
-                        _buildTextField(_addressController, 'Address', Icons.location_on_outlined),
+
+                        _buildTextField(
+                          _addressController,
+                          'Address',
+                          Icons.location_on_outlined,
+                        ),
+
                         if (_selectedRole == 'Patient') ...[
                           const SizedBox(height: 16),
-                          _buildTextField(_medicalNotesController, 'Medical Notes', Icons.note_alt_outlined, maxLines: 2),
+                          _buildTextField(
+                            _medicalNotesController,
+                            'Medical Notes',
+                            Icons.note_alt_outlined,
+                            maxLines: 2,
+                          ),
                         ],
+
                         const SizedBox(height: 32),
+
                         ElevatedButton(
                           onPressed: _register,
                           style: ElevatedButton.styleFrom(
@@ -207,12 +326,16 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           child: const Text(
                             'REGISTER NOW',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -223,15 +346,26 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, 
-      {bool obscureText = false, TextInputType? keyboardType, int maxLines = 1}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool obscureText = false,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    bool readOnly = false,
+    VoidCallback? onTap,
+  }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      readOnly: readOnly,
+      onTap: onTap,
       decoration: _inputDecoration(label, icon),
-      validator: (value) => value == null || value.isEmpty ? 'Please enter your $label' : null,
+      validator: (value) =>
+          value == null || value.isEmpty ? 'Please enter your $label' : null,
     );
   }
 

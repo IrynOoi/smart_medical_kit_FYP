@@ -1,7 +1,8 @@
-//splash_screen.dart
+// screens/splash_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:my_medical_kit_app/screens/onboarding_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'landing_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,38 +11,20 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('🚀 SplashScreen: Initializing...');
-    _controller = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-
-    _controller.forward();
-
-    // Navigate to Onboarding after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LandingPage()),
-        );
-      }
+    // Navigate to BottomNavBar after 2 seconds
+    Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const OnboardingPage()),
+                  // MaterialPageRoute(builder: (context) => const BottomNavBar()),
+                );
+              }
     });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 
   @override
@@ -50,41 +33,43 @@ class _SplashScreenState extends State<SplashScreen>
       body: Container(
         width: double.infinity,
         decoration: const BoxDecoration(gradient: AppColors.mainGradient),
-        child: FadeTransition(
-          opacity: _animation,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Image.asset(
-                  'assets/images/medical-smart-kit-logo.png',
-                  width: 150,
-                  height: 150,
-                  fit: BoxFit.contain,
-                ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 30),
-              const Text(
-                'Smart Medical Kit',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
+              child: const Icon(
+                Icons.medical_services,
+                size: 80,
+                color: Colors.white,
               ),
-              const SizedBox(height: 10),
-              CircularProgressIndicator(
-                color: Colors.white.withValues(alpha: 0.8),
-                strokeWidth: 2,
+            ),
+            const SizedBox(height: 30),
+            const Text(
+              'Smart Medical Kit',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'IoT-Based Medication Management',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.white.withValues(alpha: 0.9),
+              ),
+            ),
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ],
         ),
       ),
     );

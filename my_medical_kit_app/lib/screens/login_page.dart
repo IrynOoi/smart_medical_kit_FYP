@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/widget/bottom_nav_bar.dart';
 import 'package:my_medical_kit_app/screens/register_page.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -38,6 +39,7 @@ class _LoginPageState extends State<LoginPage> {
         }),
       );
 
+      if (!mounted) return;
       Navigator.pop(context);
 
       final result = jsonDecode(response.body);
@@ -92,10 +94,14 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               children: [
                 const SizedBox(height: 120),
-                const Icon(
-                  Icons.lock_person_rounded,
-                  size: 80,
-                  color: Colors.white,
+                SvgPicture.asset(
+                  'assets/images/login.svg',
+                  width: 300,
+                  height: 300,
+                  // colorFilter: const ColorFilter.mode(
+                  //   Colors.white,
+                  //   BlendMode.srcIn,
+                  // ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
@@ -107,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 Text(
-                  'Sign in to continue your care',
+                  'Sign in your account',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.white.withValues(alpha: 0.8),

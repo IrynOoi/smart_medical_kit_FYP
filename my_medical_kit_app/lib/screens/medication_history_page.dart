@@ -1,3 +1,4 @@
+//medication_history_page.dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -54,7 +55,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         body: jsonEncode(patientData),
       );
 
+      if (!context.mounted) return;
       Navigator.pop(context);
+      if (!mounted) return;
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
@@ -69,9 +72,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     } catch (e) {
       if (mounted) {
         if (Navigator.canPop(context)) Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to connect to AI: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unable to connect to AI: $e')));
       }
     }
   }
@@ -158,11 +161,15 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                   contentPadding: const EdgeInsets.all(16),
                   leading: Icon(
                     log['status'] == 1 ? Icons.check_circle : Icons.cancel,
-                    color: log['status'] == 1 ? AppColors.primaryPurple : Colors.red,
+                    color: log['status'] == 1
+                        ? AppColors.primaryPurple
+                        : Colors.red,
                     size: 48,
                   ),
                   title: Text(
-                    log['status'] == 1 ? 'Medication Taken' : 'Missed Medication',
+                    log['status'] == 1
+                        ? 'Medication Taken'
+                        : 'Missed Medication',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,

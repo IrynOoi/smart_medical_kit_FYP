@@ -1,6 +1,7 @@
-//
+//onboarding_page.dart
 import 'package:flutter/material.dart';
-import 'package:my_medical_kit_app/theme/colors.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../theme/colors.dart';
 import 'landing_page.dart';
 
 class OnboardingPage extends StatefulWidget {
@@ -11,24 +12,29 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+  final PageController _controller = PageController();
+  int currentPage = 0;
 
-  final List<OnboardingContent> _contents = [
+  // 🌟 Onboarding pages data
+  final List<OnboardingContent> pages = [
     OnboardingContent(
       title: 'Never Miss a Dose',
-      description: 'The Smart Medical Kit reminds you exactly when to take your medication, ensuring you stay healthy.',
-      icon: Icons.notifications_active_rounded,
+      description:
+          'The Smart Medical Kit reminds you exactly when to take your medication.',
+      image: 'assets/images/reminder-icon.svg',
+      isWhiteIcon: true, // needs to be converted to white
     ),
     OnboardingContent(
       title: 'AI Health Insights',
-      description: 'Our advanced AI predicts forgetfulness patterns and provides alerts to keep you and your loved ones safe.',
-      icon: Icons.psychology_rounded,
+      description: 'AI predicts patterns to improve your medication adherence.',
+      image: 'assets/images/ai.svg',
+      isWhiteIcon: false, // keep original colors
     ),
     OnboardingContent(
       title: 'Stay Connected',
-      description: 'Caregivers receive real-time notifications about medication adherence, providing peace of mind.',
-      icon: Icons.favorite_rounded,
+      description: 'Caregivers receive real-time updates instantly.',
+      image: 'assets/images/notification.svg',
+      isWhiteIcon: true,
     ),
   ];
 
@@ -36,102 +42,128 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: AppColors.mainGradient,
-        ),
+        decoration: const BoxDecoration(gradient: AppColors.mainGradient),
         child: Column(
           children: [
             Expanded(
               flex: 3,
               child: PageView.builder(
-                controller: _pageController,
-                onPageChanged: (index) => setState(() => _currentPage = index),
-                itemCount: _contents.length,
+                controller: _controller,
+                onPageChanged: (i) => setState(() => currentPage = i),
+                itemCount: pages.length,
                 itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.all(40.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(30),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _contents[index].icon,
-                            size: 100,
-                            color: Colors.white,
-                          ),
+                  final item = pages[index];
+
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 🌟 Icon container with fixed size
+                      SizedBox(
+                        width: 220,
+                        height: 220,
+                        child: SvgPicture.asset(
+                          item.image,
+                          // 🌟 Apply white color conditionally
+                          colorFilter: item.isWhiteIcon
+                              ? const ColorFilter.mode(
+                                  Colors.white,
+                                  BlendMode.srcIn,
+                                )
+                              : null,
                         ),
-                        const SizedBox(height: 40),
-                        Text(
-                          _contents[index].title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      Text(
+                        item.title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                        const SizedBox(height: 20),
-                        Text(
-                          _contents[index].description,
+                      ),
+
+                      const SizedBox(height: 15),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 30),
+                        child: Text(
+                          item.description,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 15,
                             color: Colors.white.withValues(alpha: 0.9),
-                            height: 1.5,
+                            height: 1.4,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
                 },
               ),
             ),
+
+            // dots + button section
             Expanded(
-              flex: 1,
               child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      _contents.length,
-                      (index) => buildDot(index),
+                      pages.length,
+                      (i) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.all(4),
+                        width: currentPage == i ? 20 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                            alpha: currentPage == i ? 1 : 0.4,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
                   ),
+
                   const Spacer(),
+
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 40.0),
+                    padding: const EdgeInsets.all(30),
                     child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 55),
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.primaryPurple,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
                       onPressed: () {
-                        if (_currentPage == _contents.length - 1) {
+                        if (currentPage == pages.length - 1) {
                           Navigator.pushReplacement(
                             context,
-                            MaterialPageRoute(builder: (context) => const LandingPage()),
+                            MaterialPageRoute(
+                              builder: (_) => const LandingPage(),
+                            ),
                           );
                         } else {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 500),
+                          _controller.nextPage(
+                            duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut,
                           );
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.primaryPurple,
-                        minimumSize: const Size(double.infinity, 55),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        elevation: 5,
-                      ),
                       child: Text(
-                        _currentPage == _contents.length - 1 ? 'GET STARTED' : 'NEXT',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        currentPage == pages.length - 1
+                            ? "GET STARTED"
+                            : "NEXT",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -143,29 +175,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
       ),
     );
   }
-
-  Widget buildDot(int index) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.only(right: 8),
-      height: 10,
-      width: _currentPage == index ? 24 : 10,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: _currentPage == index ? 1.0 : 0.4),
-        borderRadius: BorderRadius.circular(5),
-      ),
-    );
-  }
 }
 
+// 🌟 Data model
 class OnboardingContent {
   final String title;
   final String description;
-  final IconData icon;
+  final String image;
+  final bool isWhiteIcon;
 
   OnboardingContent({
     required this.title,
     required this.description,
-    required this.icon,
+    required this.image,
+    this.isWhiteIcon = false,
   });
 }

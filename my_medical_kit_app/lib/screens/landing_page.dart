@@ -1,7 +1,9 @@
 //landing_page.dart
 import 'package:flutter/material.dart';
+import 'package:my_medical_kit_app/screens/login_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'login_page.dart';
+
+// import 'login_page.dart';
 import 'register_page.dart';
 
 class LandingPage extends StatelessWidget {
@@ -34,7 +36,7 @@ class LandingPage extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(25),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      // color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -44,11 +46,15 @@ class LandingPage extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: Image.asset(
-                      'assets/images/medical-smart-kit-logo.png', // <-- your PNG file
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.contain,
+                    child: ClipRRect(
+                      // ← 加这个
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.asset(
+                        'assets/images/medical-smart-kit-logo.png',
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -92,6 +98,8 @@ class LandingPage extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => const LoginPage(),
+
+                          // builder: (context) => const BottomNavBar(),
                         ),
                       );
                     },
