@@ -1,11 +1,13 @@
 //bottom_nav_bar.dart
-
+// bottom_nav_bar.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient_dashboard_page.dart';
+import 'package:my_medical_kit_app/screens/caregiver_dashboard_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/screens/medication_history_page.dart';
+import 'package:my_medical_kit_app/screens/profile_page.dart'; // ✅ ADD THIS IMPORT
+import 'package:shared_preferences/shared_preferences.dart';
 
-// Coming soon placeholder
 class ComingSoonPage extends StatelessWidget {
   final String title;
   const ComingSoonPage({super.key, required this.title});
@@ -22,7 +24,7 @@ class ComingSoonPage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.white.withOpacity(0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -45,7 +47,7 @@ class ComingSoonPage extends StatelessWidget {
               'Feature Coming Soon',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.white.withValues(alpha: 0.8),
+                color: Colors.white.withOpacity(0.8),
               ),
             ),
           ],
@@ -55,15 +57,6 @@ class ComingSoonPage extends StatelessWidget {
   }
 }
 
-// ✅ CORRECT PAGE ORDER - Index 0 MUST be PatientDashboardPage
-List<Widget> _pages = [
-  PatientDashboardPage(), // INDEX 0 - HOME (Your purple dashboard)
-  ComingSoonPage(title: 'AI Analytics'), // INDEX 1 - AI Predict
-  ComingSoonPage(title: 'Smart Assistant'), // INDEX 2 - FAB Chat
-  MedicationHistoryScreen(), // INDEX 3 - History (Medication records)
-  ComingSoonPage(title: 'My Profile'), // INDEX 4 - Profile
-];
-
 class BottomNavBar extends StatefulWidget {
   const BottomNavBar({super.key});
 
@@ -72,21 +65,58 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class _BottomNavBarState extends State<BottomNavBar> {
-  int selectedIndex = 0; // Start with index 0 = Home/Dashboard
+  int selectedIndex = 0;
+
+  // Role loaded from SharedPreferences (saved during login)
+  String _role = 'patient';
+  bool _sessionLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _role = prefs.getString('role') ?? 'patient';
+      _sessionLoaded = true;
+    });
+  }
+
+  // Pages change based on role
+  List<Widget> get _pages {
+    final homePage = _role == 'caregiver'
+        ? const CaregiverDashboardPage() // caregiver sees their own dashboard
+        : const PatientDashboardPage(); // patient sees patient dashboard
+
+    return [
+      homePage, // 0: Home (Dashboard)
+      const ComingSoonPage(title: 'AI Analytics'), // 1: AI Predict
+      const ComingSoonPage(title: 'Smart Assistant'), // 2: FAB (Chat)
+      const MedicationHistoryScreen(), // 3: History
+      const ProfilePage(), // 4: Profile ✅ FIXED - Now shows ProfilePage
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Show loading while reading SharedPreferences
+    if (!_sessionLoaded) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF4F6FB),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       body: _pages[selectedIndex],
 
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primaryPurple,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onPressed: () {
-          setState(() {
-            selectedIndex = 2; // Smart Assistant
-          });
-        },
+        onPressed: () => setState(() => selectedIndex = 2),
         child: const Icon(
           Icons.chat_bubble_outline_rounded,
           color: Colors.white,
@@ -105,16 +135,10 @@ class _BottomNavBarState extends State<BottomNavBar> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home_outlined, 'Home', 0), // Dashboard
+            _buildNavItem(Icons.home_outlined, 'Home', 0),
             _buildNavItem(Icons.analytics_outlined, 'AI Predict', 1),
-
-            const SizedBox(width: 48), // Space for FAB
-
-            _buildNavItem(
-              Icons.history_outlined,
-              'History',
-              3,
-            ), // Medication History
+            const SizedBox(width: 48),
+            _buildNavItem(Icons.history_outlined, 'History', 3),
             _buildNavItem(Icons.person_outline, 'Profile', 4),
           ],
         ),
@@ -125,11 +149,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
   Widget _buildNavItem(IconData icon, String label, int index) {
     final bool isSelected = selectedIndex == index;
     return InkWell(
-      onTap: () {
-        setState(() {
-          selectedIndex = index;
-        });
-      },
+      onTap: () => setState(() => selectedIndex = index),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),

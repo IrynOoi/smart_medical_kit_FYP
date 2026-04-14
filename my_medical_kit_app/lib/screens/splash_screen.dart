@@ -1,6 +1,6 @@
 // screens/splash_screen.dart
-
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:my_medical_kit_app/screens/onboarding_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 
@@ -15,15 +15,13 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Navigate to BottomNavBar after 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const OnboardingPage()),
-                  // MaterialPageRoute(builder: (context) => const BottomNavBar()),
-                );
-              }
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const OnboardingPage()),
+        );
+      }
     });
   }
 
@@ -36,18 +34,15 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.medical_services,
-                size: 80,
-                color: Colors.white,
-              ),
+            // --- UPDATED SECTION START ---
+            SvgPicture.asset(
+              'assets/images/splash_screen.svg',
+              width: 150, // Increased size from 80 to 150
+              height: 150, // Increased size from 80 to 150
+              // fit: BoxFit.contain, // Optional: ensures the SVG maintains its aspect ratio
             ),
+
+            // --- UPDATED SECTION END ---
             const SizedBox(height: 30),
             const Text(
               'Smart Medical Kit',

@@ -1,5 +1,4 @@
-//api_service.dart
-
+// lib/services/api_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/patient.dart';
@@ -7,26 +6,10 @@ import '../models/medication.dart';
 import '../models/adherence_log.dart';
 import '../models/notification.dart';
 import '../models/ai_prediction.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // ==========================================
-  // 🔧 IMPORTANT: Change this based on where you run the app
-  // ==========================================
-
-  // For Android Emulator (use this!)
-  // api_service.dart — fix this line
-  static const String baseUrl =
-      'http://172.20.10.9:5000'; // ← physical device IP
-  // static const String baseUrl = 'http://10.0.2.2:5000'; // ← comment this out
-
-  // For Physical Device on same WiFi/Hotspot (uncomment this, comment the above)
-  // static const String baseUrl = 'http://172.20.10.9:5000';
-
-  // For iOS Simulator (use this)
-  // static const String baseUrl = 'http://localhost:5000';
-
-  // For Testing with Chrome (web) - use your computer's IP
-  // static const String baseUrl = 'http://172.20.10.9:5000';
+  static const String baseUrl = 'http://172.20.10.9:5000';
 
   // ==========================================
   // 🔐 AUTHENTICATION ENDPOINTS
@@ -41,7 +24,6 @@ class ApiService {
       );
       return jsonDecode(response.body);
     } catch (e) {
-      // error logged in production would go here
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -55,7 +37,6 @@ class ApiService {
       );
       return jsonDecode(response.body);
     } catch (e) {
-      // error logging
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -67,17 +48,15 @@ class ApiService {
   Future<Patient?> getPatient(int patientId) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/patient/$patientId'));
-
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         if (jsonResponse['success']) {
-          final patient = Patient.fromJson(jsonResponse['data']);
-          return patient;
+          return Patient.fromJson(jsonResponse['data']);
         }
       }
       return null;
     } catch (e) {
-      // error logging
+      print('Error getting patient: $e');
       return null;
     }
   }
@@ -96,7 +75,7 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      // error logging
+      print('Error getting medications: $e');
       return [];
     }
   }
@@ -120,7 +99,7 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      // error logging
+      print('Error getting adherence logs: $e');
       return [];
     }
   }
@@ -138,8 +117,39 @@ class ApiService {
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
-      // error logging
+      print('Error recording medication: $e');
       return false;
+    }
+  }
+
+  Future<List<double>> getChartData(int caregiverId, String period) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/chart_data?period=$period'),
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+
+        if (json['success']) {
+          // Convert backend response like [0, 3.0, 0...] into List<double>
+          return (json['data'] as List)
+              .map((e) => (e as num).toDouble())
+              .toList();
+        }
+      }
+
+      // Return default empty data based on period if request fails
+      return period == 'Month'
+          ? [0, 0, 0, 0]
+          : (period == 'Day' ? [0, 0, 0, 0, 0, 0] : [0, 0, 0, 0, 0, 0, 0]);
+    } catch (e) {
+      debugPrint('Error getting chart data: $e');
+
+      // Return default empty data if an error occurs
+      return period == 'Month'
+          ? [0, 0, 0, 0]
+          : (period == 'Day' ? [0, 0, 0, 0, 0, 0] : [0, 0, 0, 0, 0, 0, 0]);
     }
   }
 
@@ -157,7 +167,7 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      // error logging
+      print('Error getting notifications: $e');
       return [];
     }
   }
@@ -170,7 +180,7 @@ class ApiService {
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
-      // error logging
+      print('Error marking notification read: $e');
       return false;
     }
   }
@@ -188,7 +198,7 @@ class ApiService {
       }
       return null;
     } catch (e) {
-      // error logging
+      print('Error getting AI prediction: $e');
       return null;
     }
   }
@@ -211,13 +221,101 @@ class ApiService {
         'adherence_score': 0,
       };
     } catch (e) {
-      // error logging
+      print('Error getting adherence stats: $e');
       return {
         'taken_count': 0,
         'missed_count': 0,
         'upcoming_count': 0,
         'adherence_score': 0,
       };
+    }
+  }
+
+  // ==========================================
+  // 👤 CAREGIVER ENDPOINTS
+  // ==========================================
+
+  Future<Map<String, dynamic>> getCaregiverOverview(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/overview_stats'),
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success']) return json['data'];
+      }
+      return {
+        'taken_count': 0,
+        'missed_count': 0,
+        'pending_count': 0,
+        'total_patients': 0,
+        'low_stock_count': 0,
+      };
+    } catch (e) {
+      print('Error getting caregiver overview: $e');
+      return {
+        'taken_count': 0,
+        'missed_count': 0,
+        'pending_count': 0,
+        'total_patients': 0,
+        'low_stock_count': 0,
+      };
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllRecentLogs(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/all_recent_logs?limit=20'),
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting all logs: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCaregiverPatients(
+    int caregiverId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/patients'),
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting caregiver patients: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/recent_alerts'),
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting caregiver alerts: $e');
+      return [];
     }
   }
 }

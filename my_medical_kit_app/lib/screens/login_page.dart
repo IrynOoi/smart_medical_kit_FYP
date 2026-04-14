@@ -6,6 +6,7 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/widget/bottom_nav_bar.dart';
 import 'package:my_medical_kit_app/screens/register_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -43,8 +44,25 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pop(context);
 
       final result = jsonDecode(response.body);
+
       if (result['success']) {
         if (mounted) {
+          final prefs = await SharedPreferences.getInstance();
+          final user = result['user'];
+
+          // Save role + ID so BottomNavBar knows which dashboard to show
+          await prefs.setString(
+            'role',
+            user['role'],
+          ); // 'patient' or 'caregiver'
+          await prefs.setString('user_name', user['name']);
+
+          if (user['role'] == 'patient') {
+            await prefs.setInt('patient_id', user['id']);
+          } else {
+            await prefs.setInt('caregiver_id', user['id']);
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message']),
@@ -98,10 +116,6 @@ class _LoginPageState extends State<LoginPage> {
                   'assets/images/login.svg',
                   width: 300,
                   height: 300,
-                  // colorFilter: const ColorFilter.mode(
-                  //   Colors.white,
-                  //   BlendMode.srcIn,
-                  // ),
                 ),
                 const SizedBox(height: 24),
                 const Text(

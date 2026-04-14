@@ -75,6 +75,30 @@ except Exception as e:
 days_map = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
 times_map = {'Morning': 0, 'Afternoon': 1, 'Evening': 2}
 
+
+@app.route('/caregiver/<int:caregiver_id>/all_recent_logs', methods=['GET'])
+def get_all_recent_logs(caregiver_id):
+    """Return all recent adherence logs (TAKEN, MISSED, PENDING) for the caregiver"""
+    try:
+        limit = request.args.get('limit', default=20, type=int)
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT al.adlog_id, u.full_name AS patient_name,
+                       pc.medication_name, al.scheduled_time, al.status
+                FROM adherence_logs al
+                JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                JOIN patient p ON pc.patient_id = p.patient_id
+                JOIN users u ON p.patient_id = u.user_id
+                WHERE p.caregiver_id = %s
+                ORDER BY al.scheduled_time DESC
+                LIMIT %s
+            ''', (caregiver_id, limit))
+            logs = cursor.fetchall()
+        return jsonify({"success": True, "data": logs})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 # ==========================================
 # 🔐 AUTHENTICATION ENDPOINTS
 # ==========================================
@@ -313,12 +337,13 @@ def get_caregiver_overview(caregiver_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 1. 抓取吃藥狀態 (只看最近 7 天的服藥表現)
             cursor.execute('''
                 SELECT
                     COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken_count,
                     COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed_count,
-                    COUNT(CASE WHEN al.status = 'PENDING' THEN 1 END) AS pending_count,
-                    COUNT(DISTINCT pc.patient_id) AS total_patients
+                    COUNT(CASE WHEN al.status = 'PENDING' THEN 1 END) AS pending_count
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 JOIN patient p ON pc.patient_id = p.patient_id
@@ -327,6 +352,17 @@ def get_caregiver_overview(caregiver_id):
             ''', (caregiver_id,))
             stats = cursor.fetchone()
 
+            # 2. 🌟 抓取真實的病患總數 (直接算這個家屬綁定了幾個活躍的病患)
+            cursor.execute('''
+                SELECT COUNT(*) AS total_patients
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                WHERE p.caregiver_id = %s AND u.is_active = true
+            ''', (caregiver_id,))
+            total_patients_data = cursor.fetchone()
+            total_patients = total_patients_data['total_patients'] if total_patients_data else 0
+
+            # 3. 抓取庫存過低的藥物數量
             cursor.execute('''
                 SELECT COUNT(*) AS low_stock_count
                 FROM prescription_config pc
@@ -335,8 +371,10 @@ def get_caregiver_overview(caregiver_id):
                   AND pc.current_inventory <= pc.refill_threshold
             ''', (caregiver_id,))
             low = cursor.fetchone()
+            
             cursor.close()
 
+        # 計算達成率
         total_doses = (stats['taken_count'] or 0) + (stats['missed_count'] or 0)
         adherence_score = int((stats['taken_count'] or 0) / total_doses * 100) if total_doses > 0 else 100
 
@@ -344,7 +382,7 @@ def get_caregiver_overview(caregiver_id):
             "taken_count": stats['taken_count'] or 0,
             "missed_count": stats['missed_count'] or 0,
             "pending_count": stats['pending_count'] or 0,
-            "total_patients": stats['total_patients'] or 0,
+            "total_patients": total_patients,  # 🌟 現在這裡會永遠回傳正確的 5 人了！
             "low_stock_count": low['low_stock_count'] or 0,
             "total_doses": total_doses,
             "adherence_score": adherence_score
@@ -352,8 +390,6 @@ def get_caregiver_overview(caregiver_id):
     except Exception as e:
         print(f"Get caregiver overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-
 @app.route('/caregiver/<int:caregiver_id>/chart_data', methods=['GET'])
 def get_chart_data(caregiver_id):
     """Dynamically fetch real chart data for Day, Week, and Month"""
@@ -450,6 +486,31 @@ def get_caregiver_alerts(caregiver_id):
         return jsonify({"success": True, "data": alerts})
     except Exception as e:
         print(f"Get caregiver alerts error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route('/caregiver/<int:caregiver_id>/patients', methods=['GET'])
+def get_caregiver_patients(caregiver_id):
+    """Get all patients under this caregiver"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT u.user_id as patient_id, u.full_name, u.date_of_birth, u.gender,
+                       u.phone_no, u.address, p.medical_notes,
+                       d.battery_level, d.device_serial, d.last_active_timestamp
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                LEFT JOIN iot_device d ON d.patient_id = p.patient_id
+                WHERE p.caregiver_id = %s AND u.is_active = true
+                ORDER BY u.full_name ASC
+            ''', (caregiver_id,))
+            patients = cursor.fetchall()
+            cursor.close()
+        return jsonify({"success": True, "data": patients})
+    except Exception as e:
+        print(f"Error in get_caregiver_patients: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

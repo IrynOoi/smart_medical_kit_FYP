@@ -51,8 +51,8 @@ class LandingPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       child: Image.asset(
                         'assets/images/medical-smart-kit-logo.png',
-                        width: 100,
-                        height: 100,
+                        width: 150,
+                        height: 150,
                         fit: BoxFit.contain,
                       ),
                     ),
