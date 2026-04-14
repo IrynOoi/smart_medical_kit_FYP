@@ -1022,6 +1022,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 }
 
 // DONUT CHART PAINTER (UI only - acceptable to hardcode colors)
+// DONUT CHART PAINTER (UI only - acceptable to hardcode colors)
 class _DonutPainter extends CustomPainter {
   final double taken, missed, pending;
   _DonutPainter({
@@ -1033,10 +1034,24 @@ class _DonutPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final total = taken + missed + pending;
-    if (total == 0) return;
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 20;
     const stroke = 30.0;
+
+    // 🌟 FIX: Always draw a light grey background circle first!
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      0,
+      2 * pi,
+      false,
+      Paint()
+        ..color = Colors.grey.shade100
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke,
+    );
+
+    // If there is no data, we stop here (leaving the clean grey circle)
+    if (total == 0) return;
 
     final segments = [
       {'v': taken, 'c': const Color(0xFF6C63FF)},
@@ -1047,6 +1062,10 @@ class _DonutPainter extends CustomPainter {
     double start = -pi / 2;
     for (final seg in segments) {
       final v = seg['v'] as double;
+
+      // Skip drawing empty segments to prevent overlapping 0% text
+      if (v == 0) continue;
+
       final c = seg['c'] as Color;
       final sweep = (v / total) * 2 * pi;
 

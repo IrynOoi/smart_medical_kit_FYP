@@ -192,6 +192,15 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
+  void _navigateToAlertsDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AlertsDetailsPage(caregiverId: _caregiverId),
+      ),
+    );
+  }
+
   // ──────────────────────────────────────────────────────────────
   //  Build
   // ──────────────────────────────────────────────────────────────
@@ -620,22 +629,25 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   }
 
   // ==========================================
-  // 4. CHART SECTION (IMPROVISED VERSION)
+  // 4. CHART SECTION (IMPROVISED VERSION - NO OVERFLOW)
   // ==========================================
   Widget _buildChartSection() {
-    // 確保不會出現除以 0 的情況
     final double maxValue =
         _chartData.isEmpty || _chartData.every((e) => e == 0)
         ? 5.0
         : _chartData.reduce(max).toDouble();
 
     final days = _chartLabels;
-
-    // 判斷高亮索引 (僅在 Week 模式下高亮今天)
     final int todayIndex = _selectedPeriod == 'Week'
         ? (DateTime.now().weekday - 1)
         : -1;
     final int barCount = min(days.length, _chartData.length);
+
+    // 🌟 動態設定標題，切換 Month 就不會再顯示 Weekly 了！
+    String chartTitle = 'Performance';
+    if (_selectedPeriod == 'Day') chartTitle = 'Daily Performance';
+    if (_selectedPeriod == 'Week') chartTitle = 'Weekly Performance';
+    if (_selectedPeriod == 'Month') chartTitle = 'Monthly Performance';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -653,19 +665,19 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Weekly Performance',
-                style: TextStyle(
+              Text(
+                chartTitle, // 👈 應用動態標題
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textDark,
                 ),
               ),
-              // 時間選擇器切換按鈕
               Container(
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
@@ -707,89 +719,90 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           ),
           const SizedBox(height: 24),
 
-          // 圖表繪製區
+          // 圖表本體
           SizedBox(
-            height: 150,
+            height: 160,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Y 軸刻度
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      maxValue.toInt().toString(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade400,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        maxValue.toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade400,
+                        ),
                       ),
-                    ),
-                    Text(
-                      (maxValue / 2).toInt().toString(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade400,
+                      Text(
+                        (maxValue / 2).toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade400,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '0',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade400,
+                      Text(
+                        '0',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade400,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20), // 給底部的星期標籤留空隙
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 12),
-
-                // 柱狀圖與網格線
                 Expanded(
                   child: Stack(
                     children: [
-                      // 背景網格線 (Horizontal Lines)
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(
-                          3,
-                          (index) => Divider(
-                            color: Colors.grey.shade100,
-                            height: 1,
-                            thickness: 1,
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: List.generate(
+                            3,
+                            (index) => Divider(
+                              color: Colors.grey.shade100,
+                              height: 1,
+                              thickness: 1,
+                            ),
                           ),
                         ),
                       ),
-
-                      // 柱子本體
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: List.generate(barCount, (index) {
                           final value = _chartData[index];
-                          final height = (value / maxValue) * 115;
+                          final height = (value / maxValue) * 100;
                           final isToday = index == todayIndex;
 
                           return Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              if (value > 0)
-                                Text(
-                                  value.toInt().toString(),
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isToday
-                                        ? AppColors.primaryPurple
-                                        : Colors.grey.shade600,
-                                  ),
-                                ),
-                              const SizedBox(height: 4),
-
-                              // 🌟 帶漸層的柱子
+                              SizedBox(
+                                height: 14,
+                                child: value > 0
+                                    ? Text(
+                                        value.toInt().toString(),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isToday
+                                              ? AppColors.primaryPurple
+                                              : Colors.grey.shade600,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(height: 2),
                               Container(
                                 width: 22,
-                                height: height.clamp(4.0, 115.0),
+                                height: height.clamp(4.0, 100.0),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topCenter,
@@ -808,7 +821,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                                             AppColors.primaryPurple.withOpacity(
                                               0.3,
                                             ),
-                                          ], // 🌟 加深了顏色
+                                          ],
                                   ),
                                   borderRadius: const BorderRadius.vertical(
                                     top: Radius.circular(6),
@@ -816,8 +829,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-
-                              // 下方的星期/時間標籤
                               Text(
                                 days[index],
                                 style: TextStyle(
@@ -843,8 +854,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           const SizedBox(height: 20),
           const Divider(height: 1),
           const SizedBox(height: 16),
-
-          // 底部統計文字
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -932,7 +941,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                 ),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed:
+                    _navigateToAlertsDetails, // ✅ FIX: Add the navigation function here
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -1043,6 +1053,327 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
 }
 
 // ==========================================
+// 🌟 Alerts Details Page – Fetches full alert history
+// ==========================================
+class _AlertsDetailsPage extends StatefulWidget {
+  final int caregiverId;
+  const _AlertsDetailsPage({required this.caregiverId});
+
+  @override
+  State<_AlertsDetailsPage> createState() => _AlertsDetailsPageState();
+}
+
+class _AlertsDetailsPageState extends State<_AlertsDetailsPage> {
+  final ApiService _apiService = ApiService();
+  List<Map<String, dynamic>> _alerts = [];
+  bool _isLoading = true;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAlerts();
+  }
+
+  Future<void> _fetchAlerts() async {
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+    try {
+      // 這裡的 API 現在會支援回傳更多警告（透過後端設定 limit=50）
+      final data = await _apiService.getCaregiverAlerts(widget.caregiverId);
+      setState(() {
+        _alerts = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatDateTime(String? dtString) {
+    if (dtString == null) return '';
+    try {
+      final dt = DateTime.parse(dtString).toLocal();
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return dtString.length > 16 ? dtString.substring(0, 16) : dtString;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Recent Alerts',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF4F6FB),
+      body: RefreshIndicator(
+        onRefresh: _fetchAlerts,
+        color: AppColors.primaryPurple,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error.isNotEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Error: $_error',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _fetchAlerts,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            : _alerts.isEmpty
+            ? const Center(
+                child: Text(
+                  'All Good! No recent alerts 🎉',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _alerts.length,
+                itemBuilder: (_, i) {
+                  final act = _alerts[i];
+                  final isMissed = act['status'] == 'MISSED';
+                  final iconColor = isMissed ? Colors.redAccent : Colors.orange;
+
+                  return Card(
+                    elevation: 2,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: iconColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          isMissed
+                              ? Icons.cancel_rounded
+                              : Icons.access_time_rounded,
+                          color: iconColor,
+                        ),
+                      ),
+                      title: Text(
+                        act['patient_name'] ?? 'Unknown Patient',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          '${act['medication_name'] ?? 'Medication'} • ${act['status']}',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      trailing: Text(
+                        _formatDateTime(act['scheduled_time']),
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 11,
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// Patient Detail Page – Full personal info
+// ==========================================
+class PatientDetailPage extends StatelessWidget {
+  final Map<String, dynamic> patient;
+
+  const PatientDetailPage({super.key, required this.patient});
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'Not provided';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(patient['full_name'] ?? 'Patient Details'),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF4F6FB),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Personal Information Card
+            _buildInfoCard(
+              title: 'Personal Information',
+              icon: Icons.person,
+              children: [
+                _infoRow('Full Name', patient['full_name'] ?? '—'),
+                _infoRow('Email', patient['email'] ?? '—'),
+                _infoRow('Phone', patient['phone_no'] ?? '—'),
+                _infoRow('Address', patient['address'] ?? '—'),
+                _infoRow('Gender', patient['gender'] ?? '—'),
+                _infoRow(
+                  'Date of Birth',
+                  _formatDate(patient['date_of_birth']),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Medical Information Card
+            _buildInfoCard(
+              title: 'Medical Information',
+              icon: Icons.health_and_safety,
+              children: [
+                _infoRow(
+                  'Medical Notes',
+                  patient['medical_notes'] ?? 'No notes',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Device Information Card
+            _buildInfoCard(
+              title: 'Device Information',
+              icon: Icons.devices,
+              children: [
+                _infoRow(
+                  'Device Serial',
+                  patient['device_serial'] ?? 'Not paired',
+                ),
+                _infoRow(
+                  'Battery Level',
+                  patient['battery_level'] != null
+                      ? '${patient['battery_level']}%'
+                      : '—',
+                ),
+                _infoRow(
+                  'Last Active',
+                  patient['last_active_timestamp'] != null
+                      ? _formatDate(patient['last_active_timestamp'])
+                      : '—',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: AppColors.primaryPurple),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14, color: AppColors.textDark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// Patients List Page – Fetches data directly from PostgreSQL
+// ==========================================
+// ==========================================
 // Patients List Page – Fetches data directly from PostgreSQL
 // ==========================================
 class _PatientsListPage extends StatefulWidget {
@@ -1088,6 +1419,23 @@ class _PatientsListPageState extends State<_PatientsListPage> {
     }
   }
 
+  // Helper to calculate age from date_of_birth
+  String _getAge(String? dob) {
+    if (dob == null || dob.isEmpty) return 'N/A';
+    try {
+      final birthDate = DateTime.parse(dob);
+      final today = DateTime.now();
+      int age = today.year - birthDate.year;
+      if (today.month < birthDate.month ||
+          (today.month == birthDate.month && today.day < birthDate.day)) {
+        age--;
+      }
+      return age.toString();
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1129,9 +1477,16 @@ class _PatientsListPageState extends State<_PatientsListPage> {
                       child: Text(p['full_name']?.substring(0, 1) ?? '?'),
                     ),
                     title: Text(p['full_name'] ?? 'Unknown'),
-                    subtitle: Text('Battery: ${p['battery_level'] ?? 'N/A'}%'),
+                    subtitle: Text('Age: ${_getAge(p['date_of_birth'])}'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _showPatientDetails(p),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PatientDetailPage(patient: p),
+                        ),
+                      );
+                    },
                   );
                 },
               ),

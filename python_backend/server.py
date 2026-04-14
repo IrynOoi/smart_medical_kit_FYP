@@ -390,12 +390,16 @@ def get_caregiver_overview(caregiver_id):
     except Exception as e:
         print(f"Get caregiver overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+
 @app.route('/caregiver/<int:caregiver_id>/chart_data', methods=['GET'])
 def get_chart_data(caregiver_id):
     """Dynamically fetch real chart data for Day, Week, and Month"""
     try:
         period = request.args.get('period', 'Week')
         
+        # 🛡️ 這裡開始使用 with 自動管理連線，絕對不要再手動寫 conn.close()！
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
@@ -412,18 +416,20 @@ def get_chart_data(caregiver_id):
                 ''', (caregiver_id,))
                 
             elif period == 'Month':
+                # 🌟 升級版：精準切割過去 28 天為 4 個區間 (Wk1, Wk2, Wk3, Wk4)
                 cursor.execute('''
-                    SELECT (EXTRACT(DOY FROM al.scheduled_time)::int / 7) AS label_index, COUNT(*) AS count
+                    SELECT WIDTH_BUCKET(CURRENT_DATE - DATE(al.scheduled_time), 0, 28, 4) AS week_ago, 
+                           COUNT(*) AS count
                     FROM adherence_logs al
                     JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                     JOIN patient p ON pc.patient_id = p.patient_id
                     WHERE p.caregiver_id = %s 
-                      AND al.scheduled_time >= CURRENT_DATE - INTERVAL '30 days'
+                      AND al.scheduled_time >= CURRENT_DATE - INTERVAL '28 days'
                       AND al.status = 'TAKEN'
-                    GROUP BY label_index
+                    GROUP BY week_ago
                 ''', (caregiver_id,))
                 
-            else:
+            else: # Week
                 cursor.execute('''
                     SELECT EXTRACT(ISODOW FROM al.scheduled_time) AS label_index, COUNT(*) AS count
                     FROM adherence_logs al
@@ -438,18 +444,22 @@ def get_chart_data(caregiver_id):
             results = cursor.fetchall()
             cursor.close()
 
+        # 將資料轉換成 Flutter 陣列
         if period == 'Week':
             data_array = [0.0] * 7
             for row in results:
                 idx = int(row['label_index']) - 1
                 if 0 <= idx < 7:
                     data_array[idx] = float(row['count'])
+
         elif period == 'Month':
             data_array = [0.0] * 4
             for row in results:
-                idx = int(row['label_index']) % 4
-                data_array[idx] += float(row['count'])
-        else:
+                w = int(row['week_ago'])
+                if 1 <= w <= 4:
+                    data_array[4 - w] += float(row['count'])
+
+        else: # Day 
             data_array = [0.0] * 6
             for row in results:
                 hour = int(row['label_index'])
@@ -467,6 +477,8 @@ def get_chart_data(caregiver_id):
 @app.route('/caregiver/<int:caregiver_id>/recent_alerts', methods=['GET'])
 def get_caregiver_alerts(caregiver_id):
     try:
+        # 🌟 支援 limit 參數，讓 Details Page 可以載入更多警告紀錄
+        limit = request.args.get('limit', default=20, type=int)
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
@@ -479,8 +491,8 @@ def get_caregiver_alerts(caregiver_id):
                 WHERE p.caregiver_id = %s
                   AND al.status IN ('MISSED', 'PENDING')
                 ORDER BY al.scheduled_time DESC
-                LIMIT 10
-            ''', (caregiver_id,))
+                LIMIT %s
+            ''', (caregiver_id, limit))
             alerts = cursor.fetchall()
             cursor.close()
         return jsonify({"success": True, "data": alerts})

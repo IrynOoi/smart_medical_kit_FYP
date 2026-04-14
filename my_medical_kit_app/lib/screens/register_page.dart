@@ -14,6 +14,11 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
 
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
+
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -248,7 +253,40 @@ class _RegisterPageState extends State<RegisterPage> {
                           _passwordController,
                           'Password',
                           Icons.lock_outline,
-                          obscureText: true,
+                          obscureText: !_isPasswordVisible,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          _confirmPasswordController,
+                          'Confirm Password',
+                          Icons.lock_outline,
+                          obscureText: !_isConfirmPasswordVisible,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isConfirmPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isConfirmPasswordVisible =
+                                    !_isConfirmPasswordVisible;
+                              });
+                            },
+                          ),
                         ),
                         const SizedBox(height: 16),
 
@@ -355,6 +393,7 @@ class _RegisterPageState extends State<RegisterPage> {
     int maxLines = 1,
     bool readOnly = false,
     VoidCallback? onTap,
+    Widget? suffixIcon, // 👈 ADD THIS
   }) {
     return TextFormField(
       controller: controller,
@@ -363,9 +402,20 @@ class _RegisterPageState extends State<RegisterPage> {
       maxLines: maxLines,
       readOnly: readOnly,
       onTap: onTap,
-      decoration: _inputDecoration(label, icon),
-      validator: (value) =>
-          value == null || value.isEmpty ? 'Please enter your $label' : null,
+      decoration: _inputDecoration(label, icon).copyWith(
+        suffixIcon: suffixIcon, // 👈 ADD THIS
+      ),
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Please enter your $label';
+        }
+
+        if (label == 'Confirm Password' && value != _passwordController.text) {
+          return 'Passwords do not match';
+        }
+
+        return null;
+      },
     );
   }
 
