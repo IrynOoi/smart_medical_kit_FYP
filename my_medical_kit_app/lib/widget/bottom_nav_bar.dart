@@ -1,11 +1,10 @@
 //bottom_nav_bar.dart
-// bottom_nav_bar.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient_dashboard_page.dart';
 import 'package:my_medical_kit_app/screens/caregiver_dashboard_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/screens/medication_history_page.dart';
-import 'package:my_medical_kit_app/screens/profile_page.dart'; // ✅ ADD THIS IMPORT
+import 'package:my_medical_kit_app/screens/caregiver_medication_history_page.dart';
+import 'package:my_medical_kit_app/screens/profile_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ComingSoonPage extends StatelessWidget {
@@ -110,37 +109,48 @@ class _BottomNavBarState extends State<BottomNavBar> {
       );
     }
 
-    return Scaffold(
-      body: _pages[selectedIndex],
+    return WillPopScope(
+      onWillPop: () async {
+        if (selectedIndex != 0) {
+          setState(() => selectedIndex = 0); // go Home tab
+          return false; // prevent app exit
+        }
+        return true; // allow exit only on Home
+      },
+      child: Scaffold(
+        body: _pages[selectedIndex],
 
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primaryPurple,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onPressed: () => setState(() => selectedIndex = 2),
-        child: const Icon(
-          Icons.chat_bubble_outline_rounded,
-          color: Colors.white,
-          size: 28,
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: AppColors.primaryPurple,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          onPressed: () => setState(() => selectedIndex = 2),
+          child: const Icon(
+            Icons.chat_bubble_outline_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
-        height: 60,
-        padding: EdgeInsets.zero,
-        color: Colors.white,
-        elevation: 8,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(Icons.home_outlined, 'Home', 0),
-            _buildNavItem(Icons.analytics_outlined, 'AI Predict', 1),
-            const SizedBox(width: 48),
-            _buildNavItem(Icons.history_outlined, 'History', 3),
-            _buildNavItem(Icons.person_outline, 'Profile', 4),
-          ],
+        bottomNavigationBar: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8,
+          height: 60,
+          padding: EdgeInsets.zero,
+          color: Colors.white,
+          elevation: 8,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(Icons.home_outlined, 'Home', 0),
+              _buildNavItem(Icons.analytics_outlined, 'AI Predict', 1),
+              const SizedBox(width: 48),
+              _buildNavItem(Icons.history_outlined, 'History', 3),
+              _buildNavItem(Icons.person_outline, 'Profile', 4),
+            ],
+          ),
         ),
       ),
     );

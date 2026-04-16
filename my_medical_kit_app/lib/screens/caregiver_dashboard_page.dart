@@ -40,7 +40,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     try {
       final data = await _apiService.getChartData(_caregiverId, period);
       setState(() {
-        _chartData = data;
+        _chartData = data['taken'] ?? []; // 🌟 只取 'taken' 的數據來畫圖表
+
         if (period == 'Day') {
           _chartLabels = ['12AM', '4AM', '8AM', '12PM', '4PM', '8PM'];
         } else if (period == 'Month') {
@@ -112,7 +113,10 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   // ──────────────────────────────────────────────────────────────
   int get _totalPatients => _overviewStats['total_patients'] ?? 0;
   int get _totalDoses => _overviewStats['total_doses'] ?? 0;
+  int get _totalPrescriptions => _overviewStats['total_prescriptions'] ?? 0;
   int get _devicesOnline => _patients.length;
+
+  // 👇 RESTORED: This line was missing! 👇
   int get _adherenceRate => _overviewStats['adherence_score']?.toInt() ?? 0;
 
   int get _pendingAlerts => _overviewStats['pending_count'] ?? 0;
@@ -197,6 +201,20 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       context,
       MaterialPageRoute(
         builder: (_) => _AlertsDetailsPage(caregiverId: _caregiverId),
+      ),
+    );
+  }
+
+  void _navigateToPerformanceDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _PerformanceDetailsPage(
+          caregiverId: _caregiverId,
+          chartData: _chartData,
+          chartLabels: _chartLabels,
+          period: _selectedPeriod,
+        ),
       ),
     );
   }
@@ -512,14 +530,16 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                 ),
               ),
               const SizedBox(width: 14),
+              // 🌟 UPDATED: Now shows the Number of Prescriptions
               Expanded(
                 child: _buildStatCard(
-                  title: 'Doses Taken',
-                  value: _totalDoses.toString(),
-                  subtitle: 'All records',
-                  icon: Icons.medication_rounded,
+                  title: 'Prescriptions',
+                  value: _totalPrescriptions
+                      .toString(), // Shows the actual number
+                  subtitle: 'Tap to manage', // Hint that they can tap it
+                  icon: Icons.post_add_rounded,
                   color: const Color(0xFF4CAF82),
-                  onTap: _navigateToDosesDetails,
+                  onTap: _navigateToPrescriptionSetup,
                 ),
               ),
             ],
@@ -551,6 +571,17 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // 👇 ADD THIS NEW HELPER FUNCTION IF YOU HAVEN'T ALREADY 👇
+  void _navigateToPrescriptionSetup() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            CaregiverPrescriptionSetupPage(caregiverId: _caregiverId),
       ),
     );
   }
@@ -631,57 +662,31 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   // ==========================================
   // 4. CHART SECTION (IMPROVISED VERSION - NO OVERFLOW)
   // ==========================================
+  // ==========================================
+  // 4. CHART SECTION (Redesigned matching reference image)
+  // ==========================================
   Widget _buildChartSection() {
-    final double maxValue =
-        _chartData.isEmpty || _chartData.every((e) => e == 0)
-        ? 5.0
-        : _chartData.reduce(max).toDouble();
-
-    final days = _chartLabels;
-    final int todayIndex = _selectedPeriod == 'Week'
-        ? (DateTime.now().weekday - 1)
-        : -1;
-    final int barCount = min(days.length, _chartData.length);
-
-    // 🌟 動態設定標題，切換 Month 就不會再顯示 Weekly 了！
-    String chartTitle = 'Performance';
-    if (_selectedPeriod == 'Day') chartTitle = 'Daily Performance';
-    if (_selectedPeriod == 'Week') chartTitle = 'Weekly Performance';
-    if (_selectedPeriod == 'Month') chartTitle = 'Monthly Performance';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
+          // Title & Toggles Outside the Card
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                chartTitle, // 👈 應用動態標題
-                style: const TextStyle(
+              const Text(
+                'Performance',
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textDark,
                 ),
               ),
               Container(
-                padding: const EdgeInsets.all(3),
+                padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -695,18 +700,24 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primaryPurple
-                              : Colors.transparent,
+                          color: isSelected ? Colors.white : Colors.transparent,
                           borderRadius: BorderRadius.circular(20),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 4,
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Text(
                           period,
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: isSelected
-                                ? Colors.white
+                                ? AppColors.primaryPurple
                                 : Colors.grey.shade600,
                           ),
                         ),
@@ -717,143 +728,44 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // 圖表本體
-          SizedBox(
-            height: 160,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        maxValue.toInt().toString(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade400,
-                        ),
-                      ),
-                      Text(
-                        (maxValue / 2).toInt().toString(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade400,
-                        ),
-                      ),
-                      Text(
-                        '0',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade400,
-                        ),
-                      ),
-                    ],
+          // The Clickable Chart Card
+          GestureDetector(
+            onTap: _navigateToPerformanceDetails, // 🌟 Click to view details!
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                height: 180,
+                width: double.infinity,
+                child: CustomPaint(
+                  // 🌟 Draws the smooth curve based on real PostgreSQL data!
+                  painter: _CurvedChartPainter(
+                    data: _chartData,
+                    labels: _chartLabels,
+                    lineColor: AppColors.primaryPurple,
+                    selectedIndex: _selectedPeriod == 'Week'
+                        ? (DateTime.now().weekday - 1)
+                        : _chartData.length - 1, // Highlights today or latest
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: List.generate(
-                            3,
-                            (index) => Divider(
-                              color: Colors.grey.shade100,
-                              height: 1,
-                              thickness: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: List.generate(barCount, (index) {
-                          final value = _chartData[index];
-                          final height = (value / maxValue) * 100;
-                          final isToday = index == todayIndex;
-
-                          return Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              SizedBox(
-                                height: 14,
-                                child: value > 0
-                                    ? Text(
-                                        value.toInt().toString(),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: isToday
-                                              ? AppColors.primaryPurple
-                                              : Colors.grey.shade600,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(height: 2),
-                              Container(
-                                width: 22,
-                                height: height.clamp(4.0, 100.0),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: isToday
-                                        ? [
-                                            AppColors.primaryPurple,
-                                            AppColors.primaryPurple.withOpacity(
-                                              0.7,
-                                            ),
-                                          ]
-                                        : [
-                                            AppColors.primaryPurple.withOpacity(
-                                              0.5,
-                                            ),
-                                            AppColors.primaryPurple.withOpacity(
-                                              0.3,
-                                            ),
-                                          ],
-                                  ),
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(6),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                days[index],
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: isToday
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
-                                  color: isToday
-                                      ? AppColors.primaryPurple
-                                      : Colors.grey.shade400,
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
+
+          // Summary Stats moved below the card
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1370,9 +1282,6 @@ class PatientDetailPage extends StatelessWidget {
   }
 }
 
-// ==========================================
-// Patients List Page – Fetches data directly from PostgreSQL
-// ==========================================
 // ==========================================
 // Patients List Page – Fetches data directly from PostgreSQL
 // ==========================================
@@ -2026,6 +1935,926 @@ class _DosesDetailsPageState extends State<_DosesDetailsPage> {
                 ],
               ),
       ),
+    );
+  }
+}
+
+// ==========================================
+// 🎨 Curved Line Chart Painter (Matches Reference Image)
+// ==========================================
+class _CurvedChartPainter extends CustomPainter {
+  final List<double> data;
+  final List<String> labels;
+  final Color lineColor;
+  final int selectedIndex;
+
+  _CurvedChartPainter({
+    required this.data,
+    required this.labels,
+    required this.lineColor,
+    required this.selectedIndex,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty || labels.isEmpty) return;
+
+    // Chart boundary definitions
+    const double leftPadding = 30.0;
+    const double bottomPadding = 25.0;
+    final double chartWidth = size.width - leftPadding;
+    final double chartHeight = size.height - bottomPadding;
+
+    final double maxV = data.isEmpty || data.every((e) => e == 0)
+        ? 5.0
+        : data.reduce(max).clamp(1.0, double.infinity);
+
+    // 1. Draw Y-Axis Text
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    final yLabels = [
+      maxV.toInt().toString(),
+      (maxV / 2).toInt().toString(),
+      '0',
+    ];
+    for (int i = 0; i < yLabels.length; i++) {
+      textPainter.text = TextSpan(
+        text: yLabels[i],
+        style: TextStyle(
+          color: Colors.grey.shade400,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+      textPainter.layout();
+      final yPos = (i * (chartHeight / 2)) - (textPainter.height / 2);
+      textPainter.paint(canvas, Offset(0, yPos));
+    }
+
+    // Generate Points for the curve
+    final int pointCount = min(data.length, labels.length);
+    final points = List.generate(pointCount, (i) {
+      final x = leftPadding + (i * chartWidth / (pointCount - 1));
+      final y = chartHeight - ((data[i] / maxV) * chartHeight);
+      return Offset(x, y);
+    });
+
+    if (points.isEmpty) return;
+
+    // 2. Draw Gradient Fill
+    final fillPath = Path()..moveTo(points.first.dx, chartHeight);
+    for (int i = 0; i < points.length - 1; i++) {
+      final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
+      final cp2 = Offset(
+        (points[i].dx + points[i + 1].dx) / 2,
+        points[i + 1].dy,
+      );
+      fillPath.cubicTo(
+        cp1.dx,
+        cp1.dy,
+        cp2.dx,
+        cp2.dy,
+        points[i + 1].dx,
+        points[i + 1].dy,
+      );
+    }
+    fillPath.lineTo(points.last.dx, chartHeight);
+    fillPath.close();
+
+    canvas.drawPath(
+      fillPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [lineColor.withOpacity(0.3), lineColor.withOpacity(0.0)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, chartHeight)),
+    );
+
+    // 3. Draw Smooth Line
+    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+    for (int i = 0; i < points.length - 1; i++) {
+      final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
+      final cp2 = Offset(
+        (points[i].dx + points[i + 1].dx) / 2,
+        points[i + 1].dy,
+      );
+      linePath.cubicTo(
+        cp1.dx,
+        cp1.dy,
+        cp2.dx,
+        cp2.dy,
+        points[i + 1].dx,
+        points[i + 1].dy,
+      );
+    }
+    canvas.drawPath(
+      linePath,
+      Paint()
+        ..color = lineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // 4. Draw X-Axis Labels and the Active Dot
+    for (int i = 0; i < points.length; i++) {
+      final isSelected = i == selectedIndex;
+
+      // X-Axis Text
+      textPainter.text = TextSpan(
+        text: labels[i],
+        style: TextStyle(
+          color: isSelected ? AppColors.textDark : Colors.grey.shade400,
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+        ),
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(points[i].dx - textPainter.width / 2, chartHeight + 10),
+      );
+
+      // Active Dot with Tooltip
+      if (isSelected && data[i] > 0) {
+        // Dot
+        canvas.drawCircle(points[i], 6, Paint()..color = Colors.white);
+        canvas.drawCircle(points[i], 4, Paint()..color = lineColor);
+
+        // Tooltip bubble
+        final valueText = data[i].toInt().toString();
+        textPainter.text = TextSpan(
+          text: valueText,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        );
+        textPainter.layout();
+
+        final bubbleRect = RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(points[i].dx, points[i].dy - 22),
+            width: textPainter.width + 16,
+            height: 20,
+          ),
+          const Radius.circular(6),
+        );
+        canvas.drawRRect(bubbleRect, Paint()..color = lineColor);
+        textPainter.paint(
+          canvas,
+          Offset(points[i].dx - textPainter.width / 2, points[i].dy - 29),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CurvedChartPainter old) => true;
+}
+
+// ==========================================
+// 📊 Performance Details Page
+// ==========================================
+class _PerformanceDetailsPage extends StatelessWidget {
+  final int caregiverId;
+  final List<double> chartData;
+  final List<String> chartLabels;
+  final String period;
+
+  const _PerformanceDetailsPage({
+    required this.caregiverId,
+    required this.chartData,
+    required this.chartLabels,
+    required this.period,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final int totalDoses = chartData.fold(0, (sum, item) => sum + item.toInt());
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('$period Performance Details'),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF4F6FB),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Total Doses Taken',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$totalDoses',
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryPurple,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 200,
+                    width: double.infinity,
+                    child: CustomPaint(
+                      painter: _CurvedChartPainter(
+                        data: chartData,
+                        labels: chartLabels,
+                        lineColor: AppColors.primaryPurple,
+                        selectedIndex: chartData.length - 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Data Insights',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.teal,
+                  child: Icon(Icons.insights, color: Colors.white),
+                ),
+                title: const Text('Highest Activity'),
+                subtitle: Text(
+                  'The most doses were taken on ${chartLabels[chartData.indexOf(chartData.reduce(max))]}',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blueAccent,
+                  child: Icon(Icons.info_outline, color: Colors.white),
+                ),
+                title: Text('About this metric'),
+                subtitle: Text(
+                  'This chart tracks successful physical dispenses verified by the IoT Smart Kit sensors.',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 🌟 Prescription Setup Details Page
+// ==========================================
+class CaregiverPrescriptionSetupPage extends StatefulWidget {
+  final int caregiverId;
+  const CaregiverPrescriptionSetupPage({super.key, required this.caregiverId});
+
+  @override
+  State<CaregiverPrescriptionSetupPage> createState() =>
+      _CaregiverPrescriptionSetupPageState();
+}
+
+class _CaregiverPrescriptionSetupPageState
+    extends State<CaregiverPrescriptionSetupPage> {
+  final ApiService _apiService = ApiService();
+  List<Map<String, dynamic>> _patients = [];
+  bool _isLoading = true;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPatients();
+  }
+
+  Future<void> _fetchPatients() async {
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+    try {
+      final patients = await _apiService.getCaregiverPatients(
+        widget.caregiverId,
+      );
+      setState(() {
+        _patients = patients;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Helper method to open the Prescription Form Bottom Sheet
+  void _openPrescriptionForm(Map<String, dynamic> patient) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _PrescriptionFormSheet(
+        patient: patient,
+        caregiverId: widget.caregiverId,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Prescription Setup'),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFFF4F6FB),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error.isNotEmpty
+          ? Center(
+              child: Text(
+                'Error: $_error',
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          : _patients.isEmpty
+          ? const Center(
+              child: Text(
+                'No patients assigned to manage.',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _patients.length,
+              itemBuilder: (context, index) {
+                final p = _patients[index];
+                return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  // 🌟 Wrap Padding with InkWell to make the whole card clickable
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      // 🌟 Navigate to the new View Prescriptions Page
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PatientPrescriptionsPage(patient: p),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          // 🌟 RESTORED: Circular Profile Avatar
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: AppColors.primaryPurple
+                                .withOpacity(0.1),
+                            child: Text(
+                              p['full_name']?.substring(0, 1).toUpperCase() ??
+                                  '?',
+                              style: const TextStyle(
+                                color: AppColors.primaryPurple,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // 🌟 RESTORED: Patient Name and Device Info
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p['full_name'] ?? 'Unknown Patient',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Device: ${p['device_serial'] ?? 'Not Paired'}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => _openPrescriptionForm(p),
+                            icon: const Icon(
+                              Icons.add,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              "Set prescription",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryPurple,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+// ==========================================
+// 🌟 The Form Sheet for Adding Meds
+// ==========================================
+class _PrescriptionFormSheet extends StatefulWidget {
+  final Map<String, dynamic> patient;
+  final int caregiverId;
+
+  const _PrescriptionFormSheet({
+    required this.patient,
+    required this.caregiverId,
+  });
+
+  @override
+  State<_PrescriptionFormSheet> createState() => _PrescriptionFormSheetState();
+}
+
+class _PrescriptionFormSheetState extends State<_PrescriptionFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  String _medicationName = '';
+  String _dosage = '';
+
+  // 🌟 REPLACED: String _timeOfDay with a precise TimeOfDay object
+  TimeOfDay? _selectedTime;
+
+  List<String> _selectedDays = [];
+
+  final List<String> _daysOfWeek = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+
+  bool _isSaving = false;
+
+  // 🌟 NEW: Helper to show the clock picker
+  Future<void> _pickTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryPurple, // Header color
+              onPrimary: Colors.white, // Header text color
+              onSurface: Colors.black, // Body text color
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedTime) {
+      setState(() {
+        _selectedTime = picked;
+      });
+    }
+  }
+
+  void _savePrescription() async {
+    if (_formKey.currentState!.validate()) {
+      // Validate Time
+      if (_selectedTime == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a precise time.')),
+        );
+        return;
+      }
+
+      // Validate Days
+      if (_selectedDays.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select at least one day.')),
+        );
+        return;
+      }
+
+      _formKey.currentState!.save();
+      setState(() => _isSaving = true);
+
+      try {
+        // Prepare the formatted time string (e.g., "08:30" or "14:15") for your PostgreSQL database
+        final String formattedTime =
+            '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+
+        // TODO: Send to API
+        // Example: await _apiService.addPrescription(widget.patient['patient_id'], _medicationName, _dosage, _selectedDays, formattedTime);
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (mounted) {
+          Navigator.pop(context); // Close the sheet
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Successfully added $_medicationName at ${_selectedTime!.format(context)} for ${widget.patient['full_name']}',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      margin: const EdgeInsets.only(top: kToolbarHeight),
+      padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomInset),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Setup Prescription',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'For ${widget.patient['full_name']}',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 24),
+
+              // Medication Name
+              TextFormField(
+                decoration: InputDecoration(
+                  labelText: 'Medication Name',
+                  prefixIcon: const Icon(
+                    Icons.medication_outlined,
+                    color: AppColors.primaryPurple,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                validator: (val) =>
+                    val == null || val.isEmpty ? 'Required' : null,
+                onSaved: (val) => _medicationName = val!,
+              ),
+              const SizedBox(height: 16),
+
+              // Dosage
+              TextFormField(
+                decoration: InputDecoration(
+                  labelText: 'Dosage (e.g., 1 Pill, 500mg)',
+                  prefixIcon: const Icon(
+                    Icons.vaccines_outlined,
+                    color: AppColors.primaryPurple,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                validator: (val) =>
+                    val == null || val.isEmpty ? 'Required' : null,
+                onSaved: (val) => _dosage = val!,
+              ),
+              const SizedBox(height: 24),
+
+              // 🌟 Precise Time Picker UI
+              const Text(
+                'Precise Time',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickTime,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: _selectedTime == null
+                          ? Colors.grey.shade400
+                          : AppColors.primaryPurple,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.access_time_filled_rounded,
+                        color: _selectedTime == null
+                            ? Colors.grey
+                            : AppColors.primaryPurple,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _selectedTime != null
+                            ? _selectedTime!.format(context)
+                            : 'Tap to select time...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: _selectedTime != null
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: _selectedTime != null
+                              ? AppColors.textDark
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Days of the week
+              const Text(
+                'Schedule Days',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _daysOfWeek.map((day) {
+                  final isSelected = _selectedDays.contains(day);
+                  return FilterChip(
+                    label: Text(day),
+                    selected: isSelected,
+                    selectedColor: AppColors.primaryPurple.withOpacity(0.2),
+                    checkmarkColor: AppColors.primaryPurple,
+                    onSelected: (selected) {
+                      setState(() {
+                        selected
+                            ? _selectedDays.add(day)
+                            : _selectedDays.remove(day);
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+
+              // Save Button
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _savePrescription,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPurple,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Assign Prescription',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 🌟 View Existing Prescriptions Page
+// ==========================================
+class PatientPrescriptionsPage extends StatefulWidget {
+  final Map<String, dynamic> patient;
+
+  const PatientPrescriptionsPage({super.key, required this.patient});
+
+  @override
+  State<PatientPrescriptionsPage> createState() =>
+      _PatientPrescriptionsPageState();
+}
+
+class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
+  final ApiService _apiService = ApiService();
+  List<Map<String, dynamic>> _prescriptions = [];
+  bool _isLoading = true;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPrescriptions();
+  }
+
+  Future<void> _fetchPrescriptions() async {
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+    try {
+      // 🌟 Calls your existing Flask GET endpoint!
+      final prescriptions = await _apiService.getPatientPrescriptions(
+        widget.patient['patient_id'],
+      );
+      setState(() {
+        _prescriptions = List<Map<String, dynamic>>.from(prescriptions);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${widget.patient['full_name']}\'s Prescriptions'),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: const Color(0xFFF4F6FB),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primaryPurple),
+            )
+          : _error.isNotEmpty
+          ? Center(
+              child: Text(
+                'Error: $_error',
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          : _prescriptions.isEmpty
+          ? const Center(
+              child: Text(
+                'No active prescriptions found.',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _fetchPrescriptions,
+              color: AppColors.primaryPurple,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _prescriptions.length,
+                itemBuilder: (context, index) {
+                  final rx = _prescriptions[index];
+                  return Card(
+                    elevation: 2,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: const CircleAvatar(
+                        backgroundColor: AppColors.primaryPurple,
+                        child: Icon(Icons.medication, color: Colors.white),
+                      ),
+                      title: Text(
+                        rx['medication_name'] ?? 'Unknown Med',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Dosage: ${rx['dosage_tablet']}'),
+                            Text(
+                              'Schedule: ${rx['dispense_schedule']}',
+                            ), // Note: CRON string, you might want to parse this later!
+                            Text('Inventory: ${rx['current_inventory']} left'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

@@ -9,7 +9,8 @@ import '../models/ai_prediction.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://172.20.10.9:5000';
+  static const String baseUrl =
+      'https://reluctant-scrambled-badge.ngrok-free.dev';
 
   // ==========================================
   // 🔐 AUTHENTICATION ENDPOINTS
@@ -17,13 +18,23 @@ class ApiService {
 
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
+      print("🚀 [API] Preparing to send login request to: $baseUrl/login");
+
       final response = await http.post(
         Uri.parse('$baseUrl/login'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
         body: jsonEncode({'email': email, 'password': password}),
       );
+
+      print("📥 [API] Received response status code: ${response.statusCode}");
+      print("📥 [API] Received raw server response: ${response.body}"); // 👈 most important
+
       return jsonDecode(response.body);
     } catch (e) {
+      print("❌ [API] Critical error occurred: $e");
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -32,7 +43,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json,','ngrok-skip-browser-warning': 'true',},
         body: jsonEncode(userData),
       );
       return jsonDecode(response.body);
@@ -122,7 +133,10 @@ class ApiService {
     }
   }
 
-  Future<List<double>> getChartData(int caregiverId, String period) async {
+  Future<Map<String, List<double>>> getChartData(
+    int caregiverId,
+    String period,
+  ) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/caregiver/$caregiverId/chart_data?period=$period'),
@@ -132,25 +146,45 @@ class ApiService {
         final json = jsonDecode(response.body);
 
         if (json['success']) {
-          // Convert backend response like [0, 3.0, 0...] into List<double>
-          return (json['data'] as List)
+          // 🌟 正確解析 Python 傳來的 {"taken": [...], "missed": [...]}
+          final takenList = (json['data']['taken'] as List)
               .map((e) => (e as num).toDouble())
               .toList();
+          final missedList = (json['data']['missed'] as List)
+              .map((e) => (e as num).toDouble())
+              .toList();
+
+          return {'taken': takenList, 'missed': missedList};
         }
       }
 
-      // Return default empty data based on period if request fails
-      return period == 'Month'
-          ? [0, 0, 0, 0]
-          : (period == 'Day' ? [0, 0, 0, 0, 0, 0] : [0, 0, 0, 0, 0, 0, 0]);
+      return _emptyChartData(period);
     } catch (e) {
       debugPrint('Error getting chart data: $e');
-
-      // Return default empty data if an error occurs
-      return period == 'Month'
-          ? [0, 0, 0, 0]
-          : (period == 'Day' ? [0, 0, 0, 0, 0, 0] : [0, 0, 0, 0, 0, 0, 0]);
+      return _emptyChartData(period);
     }
+  }
+
+  Future<List<dynamic>> getPatientPrescriptions(int patientId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/patient/$patientId/prescriptions'),
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        return data['data'];
+      }
+    }
+    throw Exception('Failed to load prescriptions');
+  }
+
+  // 產生預設的空陣列，防止 UI 崩潰
+  Map<String, List<double>> _emptyChartData(String period) {
+    int length = period == 'Month' ? 4 : (period == 'Day' ? 6 : 7);
+    return {
+      'taken': List.filled(length, 0.0),
+      'missed': List.filled(length, 0.0),
+    };
   }
 
   Future<List<NotificationModel>> getNotifications(int patientId) async {

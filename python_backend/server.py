@@ -1,7 +1,6 @@
 # server.py
 #backend codes
-# server.py - Updated for new Users table schema
-# server.py - Complete Flask Backend for IoT-Based Smart Medical Kit
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask.json.provider import DefaultJSONProvider
@@ -9,6 +8,7 @@ import numpy as np
 import tensorflow as tf
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import pool
 import datetime
 import os
 from contextlib import contextmanager
@@ -33,26 +33,28 @@ DB_CONFIG = {
     'password': '123456',
     'port': 5433
 }
+db_pool = pool.SimpleConnectionPool(
+    1, 10,
+    **DB_CONFIG
+)
 
 @contextmanager
 def get_db_connection():
-    """Context manager for database connections - automatically closes connections"""
     conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = db_pool.getconn()
         yield conn
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        raise
     finally:
         if conn:
-            conn.close()
+            db_pool.putconn(conn)
 
 def init_db():
     """Test database connection"""
     try:
         with get_db_connection() as conn:
-            conn.close()
+            cursor = conn.cursor()
+            cursor.execute('SELECT 1')
+            cursor.close()
         print("PostgreSQL connected successfully!")
     except Exception as e:
         print(f"Failed to connect to PostgreSQL: {e}")
@@ -328,17 +330,13 @@ def get_ai_prediction(patient_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ==========================================
-# 👤 CAREGIVER ENDPOINTS
-# ==========================================
-
 @app.route('/caregiver/<int:caregiver_id>/overview_stats', methods=['GET'])
 def get_caregiver_overview(caregiver_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 1. 抓取吃藥狀態 (只看最近 7 天的服藥表現)
+    
             cursor.execute('''
                 SELECT
                     COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken_count,
@@ -352,7 +350,7 @@ def get_caregiver_overview(caregiver_id):
             ''', (caregiver_id,))
             stats = cursor.fetchone()
 
-            # 2. 🌟 抓取真實的病患總數 (直接算這個家屬綁定了幾個活躍的病患)
+            # 2. 🌟 抓取真實的病患總數
             cursor.execute('''
                 SELECT COUNT(*) AS total_patients
                 FROM patient p
@@ -371,6 +369,17 @@ def get_caregiver_overview(caregiver_id):
                   AND pc.current_inventory <= pc.refill_threshold
             ''', (caregiver_id,))
             low = cursor.fetchone()
+
+            # 4. 🌟 NEW: Calculate Total Active Prescriptions for this caregiver's patients
+            cursor.execute('''
+                SELECT COUNT(*) AS total_prescriptions
+                FROM prescription_config pc
+                JOIN patient p ON pc.patient_id = p.patient_id
+                WHERE p.caregiver_id = %s
+                  AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+            ''', (caregiver_id,))
+            rx_data = cursor.fetchone()
+            total_rx = rx_data['total_prescriptions'] if rx_data else 0
             
             cursor.close()
 
@@ -382,98 +391,112 @@ def get_caregiver_overview(caregiver_id):
             "taken_count": stats['taken_count'] or 0,
             "missed_count": stats['missed_count'] or 0,
             "pending_count": stats['pending_count'] or 0,
-            "total_patients": total_patients,  # 🌟 現在這裡會永遠回傳正確的 5 人了！
+            "total_patients": total_patients,
             "low_stock_count": low['low_stock_count'] or 0,
             "total_doses": total_doses,
-            "adherence_score": adherence_score
+            "adherence_score": adherence_score,
+            "total_prescriptions": total_rx  # 🌟 NEW: Now sending this to Flutter!
         }})
     except Exception as e:
         print(f"Get caregiver overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-
-
 @app.route('/caregiver/<int:caregiver_id>/chart_data', methods=['GET'])
 def get_chart_data(caregiver_id):
-    """Dynamically fetch real chart data for Day, Week, and Month"""
+    """Return taken and missed counts for each period (Day/Week/Month)"""
     try:
         period = request.args.get('period', 'Week')
         
-        # 🛡️ 這裡開始使用 with 自動管理連線，絕對不要再手動寫 conn.close()！
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
             if period == 'Day':
+                # 4‑hour blocks today
                 cursor.execute('''
-                    SELECT EXTRACT(HOUR FROM al.scheduled_time) AS label_index, COUNT(*) AS count
+                    SELECT 
+                        EXTRACT(HOUR FROM al.scheduled_time) AS hour,
+                        COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
+                        COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                     FROM adherence_logs al
                     JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                     JOIN patient p ON pc.patient_id = p.patient_id
                     WHERE p.caregiver_id = %s 
                       AND DATE(al.scheduled_time) = CURRENT_DATE 
-                      AND al.status = 'TAKEN'
-                    GROUP BY label_index
+                      AND al.status IN ('TAKEN', 'MISSED')
+                    GROUP BY hour
+                    ORDER BY hour
                 ''', (caregiver_id,))
                 
             elif period == 'Month':
-                # 🌟 升級版：精準切割過去 28 天為 4 個區間 (Wk1, Wk2, Wk3, Wk4)
+                # 4 weekly buckets over last 28 days
                 cursor.execute('''
-                    SELECT WIDTH_BUCKET(CURRENT_DATE - DATE(al.scheduled_time), 0, 28, 4) AS week_ago, 
-                           COUNT(*) AS count
+                    SELECT 
+                        WIDTH_BUCKET(CURRENT_DATE - DATE(al.scheduled_time), 0, 28, 4) AS week_ago,
+                        COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
+                        COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                     FROM adherence_logs al
                     JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                     JOIN patient p ON pc.patient_id = p.patient_id
                     WHERE p.caregiver_id = %s 
                       AND al.scheduled_time >= CURRENT_DATE - INTERVAL '28 days'
-                      AND al.status = 'TAKEN'
+                      AND al.status IN ('TAKEN', 'MISSED')
                     GROUP BY week_ago
+                    ORDER BY week_ago
                 ''', (caregiver_id,))
                 
-            else: # Week
+            else:  # Week
                 cursor.execute('''
-                    SELECT EXTRACT(ISODOW FROM al.scheduled_time) AS label_index, COUNT(*) AS count
+                    SELECT 
+                        EXTRACT(ISODOW FROM al.scheduled_time) AS dow,
+                        COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
+                        COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                     FROM adherence_logs al
                     JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                     JOIN patient p ON pc.patient_id = p.patient_id
                     WHERE p.caregiver_id = %s 
                       AND al.scheduled_time >= CURRENT_DATE - INTERVAL '7 days'
-                      AND al.status = 'TAKEN'
-                    GROUP BY label_index
+                      AND al.status IN ('TAKEN', 'MISSED')
+                    GROUP BY dow
+                    ORDER BY dow
                 ''', (caregiver_id,))
 
-            results = cursor.fetchall()
+            rows = cursor.fetchall()
             cursor.close()
 
-        # 將資料轉換成 Flutter 陣列
+        # Build arrays (default zero for all periods)
         if period == 'Week':
-            data_array = [0.0] * 7
-            for row in results:
-                idx = int(row['label_index']) - 1
+            taken = [0.0] * 7
+            missed = [0.0] * 7
+            for row in rows:
+                idx = int(row['dow']) - 1
                 if 0 <= idx < 7:
-                    data_array[idx] = float(row['count'])
-
+                    taken[idx] = float(row['taken'])
+                    missed[idx] = float(row['missed'])
         elif period == 'Month':
-            data_array = [0.0] * 4
-            for row in results:
+            taken = [0.0] * 4
+            missed = [0.0] * 4
+            for row in rows:
                 w = int(row['week_ago'])
                 if 1 <= w <= 4:
-                    data_array[4 - w] += float(row['count'])
-
-        else: # Day 
-            data_array = [0.0] * 6
-            for row in results:
-                hour = int(row['label_index'])
+                    taken[4-w] = float(row['taken'])
+                    missed[4-w] = float(row['missed'])
+        else:  # Day
+            taken = [0.0] * 6
+            missed = [0.0] * 6
+            for row in rows:
+                hour = int(row['hour'])
                 idx = hour // 4
                 if 0 <= idx < 6:
-                    data_array[idx] += float(row['count'])
+                    taken[idx] += float(row['taken'])
+                    missed[idx] += float(row['missed'])
 
-        return jsonify({"success": True, "data": data_array})
+        return jsonify({"success": True, "data": {"taken": taken, "missed": missed}})
         
     except Exception as e:
         print(f"Chart Data Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-
+        
 @app.route('/caregiver/<int:caregiver_id>/recent_alerts', methods=['GET'])
 def get_caregiver_alerts(caregiver_id):
     try:
@@ -664,6 +687,83 @@ def record_medication():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ==========================================
+# 📋 PRESCRIPTION SETUP ENDPOINTS
+# ==========================================
+
+@app.route('/add_prescription', methods=['POST'])
+def add_prescription():
+    """Create a new prescription config and return it for the setup page"""
+    try:
+        data = request.get_json()
+        
+        # Extract required fields from the frontend request
+        patient_id = data.get('patient_id')
+        medication_name = data.get('medication_name')
+        dosage_tablet = data.get('dosage_tablet')
+        dispense_schedule = data.get('dispense_schedule')  # e.g., '0 8 * * *'
+        current_inventory = data.get('current_inventory', 0)
+        refill_threshold = data.get('refill_threshold', 5)
+        start_date = data.get('start_date') 
+        device_id = data.get('device_id') # Can be None/null if not assigned yet
+
+        # Basic validation
+        if not all([patient_id, medication_name, dosage_tablet, dispense_schedule, start_date]):
+            return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # Insert and return the full row so the frontend can display it immediately
+            cursor.execute('''
+                INSERT INTO prescription_config 
+                (patient_id, medication_name, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING prescription_id, patient_id, medication_name, dosage_tablet, 
+                          dispense_schedule, current_inventory, refill_threshold, 
+                          start_date, end_date, created_at, updated_at, device_id
+            ''', (patient_id, medication_name, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id))
+            
+            new_prescription = cursor.fetchone()
+            conn.commit()
+            cursor.close()
+
+        return jsonify({
+            "success": True, 
+            "message": "Prescription created successfully!", 
+            "data": new_prescription
+        })
+        
+    except Exception as e:
+        print(f"Add prescription error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/prescription/<int:prescription_id>', methods=['GET'])
+def get_prescription_details(prescription_id):
+    """View details of a specific prescription setup"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT prescription_id, patient_id, medication_name, dosage_tablet, 
+                       dispense_schedule, current_inventory, refill_threshold, 
+                       start_date, end_date, created_at, updated_at, device_id
+                FROM prescription_config
+                WHERE prescription_id = %s
+            ''', (prescription_id,))
+            prescription = cursor.fetchone()
+            cursor.close()
+
+        if prescription:
+            return jsonify({"success": True, "data": prescription})
+        else:
+            return jsonify({"success": False, "error": "Prescription not found"}), 404
+            
+    except Exception as e:
+        print(f"Get prescription details error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/predict', methods=['POST'])
 def predict_forgetfulness():
     try:
@@ -765,4 +865,5 @@ if __name__ == '__main__':
     print("="*50)
     print(f"Server running on: http://0.0.0.0:5000")
     print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+ 

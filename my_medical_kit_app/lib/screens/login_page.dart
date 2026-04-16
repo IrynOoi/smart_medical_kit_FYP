@@ -1,12 +1,12 @@
 //login_page.dart
+// lib/screens/login_page.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/widget/bottom_nav_bar.dart';
 import 'package:my_medical_kit_app/screens/register_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_medical_kit_app/services/api_service.dart'; // 🌟 1. 导入你的 ApiService
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,7 +19,8 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  final String serverIp = "172.20.10.9";
+  // 🌟 2. 使用 ApiService，不再把旧的 IP 写死在这里！
+  final ApiService _apiService = ApiService();
 
   bool _isPasswordVisible = false;
 
@@ -33,58 +34,51 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
 
-      final response = await http.post(
-        Uri.parse('http://$serverIp:5000/login'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "email": _emailController.text,
-          "password": _passwordController.text,
-        }),
+      // 🌟 3. 直接通过 ApiService 登录，它会自动去抓你设好的 Ngrok 网址
+      final result = await _apiService.login(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
       );
 
       if (!mounted) return;
       Navigator.pop(context);
 
-      final result = jsonDecode(response.body);
+      if (result['success'] == true) {
+        final prefs = await SharedPreferences.getInstance();
+        final user = result['user'];
 
-      if (result['success']) {
-        if (mounted) {
-          final prefs = await SharedPreferences.getInstance();
-          final user = result['user'];
+        // Save role + ID so BottomNavBar knows which dashboard to show
+        await prefs.setString(
+          'role',
+          user['role'],
+        ); // 'patient' or 'caregiver'
+        await prefs.setString('user_name', user['name']);
 
-          // Save role + ID so BottomNavBar knows which dashboard to show
-          await prefs.setString(
-            'role',
-            user['role'],
-          ); // 'patient' or 'caregiver'
-          await prefs.setString('user_name', user['name']);
-
-          if (user['role'] == 'patient') {
-            await prefs.setInt('patient_id', user['id']);
-          } else {
-            await prefs.setInt('caregiver_id', user['id']);
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const BottomNavBar()),
-          );
+        if (user['role'] == 'patient') {
+          await prefs.setInt('patient_id', user['id']);
+        } else {
+          await prefs.setInt('caregiver_id', user['id']);
         }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const BottomNavBar()),
+        );
       } else {
-        throw Exception(result['message']);
+        throw Exception(result['message'] ?? 'Invalid credentials');
       }
     } catch (e) {
       if (mounted) {
         if (Navigator.canPop(context)) Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Login failed: $e'),
+            content: Text('Login failed: ${e.toString().replaceAll('Exception: ', '')}'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -201,7 +195,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 16),
                       // Forgot Password Link
                       Align(
@@ -212,7 +205,7 @@ class _LoginPageState extends State<LoginPage> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) =>
-                                    const ForgotPasswordPage(),
+                                const ForgotPasswordPage(),
                               ),
                             );
                           },
@@ -282,8 +275,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// Paste this at the VERY BOTTOM of login_page.dart
-
 // ==========================================
 // 🌟 NEW: Forgot Password Page UI
 // ==========================================
@@ -298,8 +289,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
 
-  void _handleResetPassword() {
+  void _handleResetPassword() async {
     final email = _emailController.text.trim();
+
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your email address')),
@@ -309,19 +301,40 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     setState(() => _isLoading = true);
 
-    // 🚀 MOCK API CALL: Connect this to your Flask backend later
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password reset link sent to your email!'),
-            backgroundColor: Colors.green,
+    try {
+      // 🔥 Replace with your real API later
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      // ✅ Show confirmation dialog instead of simple snackbar
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Reset Password'),
+          content: Text(
+            'A password reset request has been made for:\n\n$email\n\nPlease proceed to reset your password.',
           ),
-        );
-        Navigator.pop(context); // Go back to the login screen
-      }
-    });
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // close dialog
+                Navigator.pop(context); // back to login
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -408,21 +421,21 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 child: _isLoading
                     ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
                     : const Text(
-                        'Send Reset Link',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                  'Send Reset Link',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ],
           ),
