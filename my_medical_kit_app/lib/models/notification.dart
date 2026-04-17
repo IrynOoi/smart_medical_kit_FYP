@@ -1,4 +1,5 @@
-//notification.dart
+// lib/models/notification.dart
+
 class NotificationModel {
   final int notificationId;
   final int patientId;
@@ -25,5 +26,16 @@ class NotificationModel {
       isRead: json['is_read'] == 1 || json['is_read'] == true,
       createdAt: DateTime.parse(json['created_at']),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'notification_id': notificationId,
+      'patient_id': patientId,
+      'title': title,
+      'message': message,
+      'is_read': isRead,
+      'created_at': createdAt.toIso8601String(),
+    };
   }
 }

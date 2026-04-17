@@ -1,7 +1,10 @@
 // lib/screens/profile_page.dart
 
-import 'package:my_medical_kit_app/screens/landing_page.dart';
+// lib/screens/profile_page.dart
+
 import 'dart:convert';
+import 'dart:io';                               // ← needed for File
+import 'package:image_picker/image_picker.dart'; // ← add image_picker dependency in pubspec.yaml
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -17,6 +20,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final ApiService _apiService = ApiService();
+  final ImagePicker _picker = ImagePicker();   // ← added missing field
 
   bool _isLoading = true;
   bool _isEditing = false;
@@ -37,6 +41,9 @@ class _ProfilePageState extends State<ProfilePage> {
   DateTime? _selectedDate;
   final _notesController = TextEditingController();
 
+  // For image picking
+  File? _selectedImage;                         // ← added missing field
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +58,29 @@ class _ProfilePageState extends State<ProfilePage> {
     _emailController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+          _isEditing = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to pick image')),
+        );
+      }
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -71,13 +101,14 @@ class _ProfilePageState extends State<ProfilePage> {
         if (patient != null) {
           _userData = {
             'name': patient.fullName,
-            'email': patient.email ?? 'Not provided',
+            'email': patient.email,
             'phone': patient.phoneNo ?? 'Not provided',
             'address': patient.address ?? 'Not provided',
             'gender': patient.gender?.toString().split('.').last ?? 'Male',
             'dob': patient.dateOfBirth,
             'notes': patient.medicalNotes ?? 'No medical notes',
             'is_active': patient.isActive,
+            'profile_photo': patient.profilePhoto, // if your model has it
           };
           debugPrint('🔵 Patient data loaded: ${_userData['name']}');
         } else {
@@ -96,6 +127,7 @@ class _ProfilePageState extends State<ProfilePage> {
             'dob': _parseDateSafely(caregiverData['date_of_birth']),
             'notes': null,
             'is_active': caregiverData['is_active'] ?? true,
+            'profile_photo': caregiverData['profile_photo']?.toString(),
           };
           debugPrint('🔵 Caregiver data loaded: ${_userData['name']}');
         } else {
@@ -127,35 +159,42 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
 
     try {
-      final Map<String, dynamic> updateData = {
-        'full_name': _nameController.text,
-        'phone_no': _phoneController.text,
-        'address': _addressController.text,
-        'email': _emailController.text,
-        'gender': _selectedGender,
-      };
+      var uri = Uri.parse('${ApiService.baseUrl}/update_$_userRole/$_userId');
+      var request = http.MultipartRequest('PUT', uri);
 
-      // Add date of birth if selected
+      // 1. Add standard text fields
+      request.fields['full_name'] = _nameController.text;
+      request.fields['phone_no'] = _phoneController.text;
+      request.fields['address'] = _addressController.text;
+      request.fields['email'] = _emailController.text;
+      request.fields['gender'] = _selectedGender;
+
       if (_selectedDate != null) {
-        updateData['date_of_birth'] =
-            "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
+        request.fields['date_of_birth'] = "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
       }
 
-      // Add medical notes for patients
       if (_userRole == 'patient') {
-        updateData['medical_notes'] = _notesController.text;
+        request.fields['medical_notes'] = _notesController.text;
       }
 
-      debugPrint('🔵 Updating profile with: $updateData');
+      // 2. Add the image file if one was selected
+      if (_selectedImage != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'profile_photo',
+            _selectedImage!.path,
+          ),
+        );
+      }
 
-      final response = await http.put(
-        Uri.parse('${ApiService.baseUrl}/update_$_userRole/$_userId'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(updateData),
-      );
+      debugPrint('🔵 Updating profile via Multipart...');
 
+      // 3. Send the request
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
       final result = jsonDecode(response.body);
-      if (result['success']) {
+
+      if (response.statusCode == 200 && result['success']) {
         setState(() {
           _userData['name'] = _nameController.text;
           _userData['phone'] = _phoneController.text;
@@ -166,20 +205,24 @@ class _ProfilePageState extends State<ProfilePage> {
           if (_userRole == 'patient') {
             _userData['notes'] = _notesController.text;
           }
+          // Reset the selected image so it falls back to the newly loaded network image on next refresh
+          _selectedImage = null;
           _isEditing = false;
         });
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile updated successfully!'),
             backgroundColor: Colors.green,
           ),
         );
-        _loadUserData(); // Reload fresh data
+        _loadUserData(); // Reload fresh data to get the new photo URL
       } else {
         throw Exception(result['error'] ?? 'Update failed');
       }
     } catch (e) {
       debugPrint('❌ Update error: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Update failed: $e'),
@@ -195,7 +238,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate:
-          _selectedDate ??
+      _selectedDate ??
           DateTime.now().subtract(const Duration(days: 365 * 20)),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
@@ -225,10 +268,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (!mounted) return;
 
-    Navigator.pushAndRemoveUntil(
+    Navigator.pushNamedAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => const LandingPage()),
-      (route) => false, // removes all previous pages
+      '/login',
+      (route) => false,
     );
   }
 
@@ -389,14 +432,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: _isEditing
                     ? _buildEditForm()
                     : _buildViewMode(
-                        fullName,
-                        email,
-                        phone,
-                        address,
-                        gender,
-                        dob,
-                        notes,
-                      ),
+                  fullName,
+                  email,
+                  phone,
+                  address,
+                  gender,
+                  dob,
+                  notes,
+                ),
               ),
             ),
           ),
@@ -406,14 +449,14 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildViewMode(
-    String fullName,
-    String email,
-    String phone,
-    String address,
-    String gender,
-    String dob,
-    String? notes,
-  ) {
+      String fullName,
+      String email,
+      String phone,
+      String address,
+      String gender,
+      String dob,
+      String? notes,
+      ) {
     return Column(
       children: [
         const SizedBox(height: 24),
@@ -527,7 +570,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: _selectedGender,
+                        value: _selectedGender,
                         decoration: InputDecoration(
                           labelText: 'Gender',
                           border: OutlineInputBorder(
@@ -541,7 +584,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         items: ['Male', 'Female', 'Other']
                             .map(
                               (g) => DropdownMenuItem(value: g, child: Text(g)),
-                            )
+                        )
                             .toList(),
                         onChanged: (val) =>
                             setState(() => _selectedGender = val!),
@@ -696,6 +739,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildAvatarSection(String name, String role) {
+    final existingPhotoUrl = _userData['profile_photo']?.toString();
+
     return Column(
       children: [
         Container(
@@ -712,38 +757,48 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           child: Stack(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 54,
                 backgroundColor: Colors.white,
                 child: CircleAvatar(
                   radius: 50,
                   backgroundColor: AppColors.primaryPurple,
-                  child: Icon(
+                  backgroundImage: _selectedImage != null
+                      ? FileImage(_selectedImage!) as ImageProvider
+                      : (existingPhotoUrl != null && existingPhotoUrl.isNotEmpty
+                      ? NetworkImage(existingPhotoUrl)
+                      : null),
+                  child: _selectedImage == null && (existingPhotoUrl == null || existingPhotoUrl.isEmpty)
+                      ? const Icon(
                     Icons.person_rounded,
                     size: 60,
                     color: Colors.white,
-                  ),
+                  )
+                      : null,
                 ),
               ),
               Positioned(
                 bottom: 0,
                 right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_rounded,
-                    color: AppColors.primaryPurple,
-                    size: 20,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      color: AppColors.primaryPurple,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
@@ -869,11 +924,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildEditField(
-    IconData icon,
-    String label,
-    TextEditingController controller, {
-    TextInputType keyboardType = TextInputType.text,
-  }) {
+      IconData icon,
+      String label,
+      TextEditingController controller, {
+        TextInputType keyboardType = TextInputType.text,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
@@ -902,7 +957,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               validator: (value) =>
-                  value == null || value.isEmpty ? 'Please enter $label' : null,
+              value == null || value.isEmpty ? 'Please enter $label' : null,
             ),
           ),
         ],

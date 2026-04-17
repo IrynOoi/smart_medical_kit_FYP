@@ -662,9 +662,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   // ==========================================
   // 4. CHART SECTION (IMPROVISED VERSION - NO OVERFLOW)
   // ==========================================
-  // ==========================================
-  // 4. CHART SECTION (Redesigned matching reference image)
-  // ==========================================
+
   Widget _buildChartSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2512,8 +2510,8 @@ class _PrescriptionFormSheetState extends State<_PrescriptionFormSheet> {
 
       try {
         // Prepare the formatted time string (e.g., "08:30" or "14:15") for your PostgreSQL database
-        final String formattedTime =
-            '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+        // final String formattedTime =
+        //     '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
 
         // TODO: Send to API
         // Example: await _apiService.addPrescription(widget.patient['patient_id'], _medicationName, _dosage, _selectedDays, formattedTime);
@@ -2532,6 +2530,7 @@ class _PrescriptionFormSheetState extends State<_PrescriptionFormSheet> {
         }
       } catch (e) {
         setState(() => _isSaving = false);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to save: $e'),

@@ -1,66 +1,45 @@
 //patient.dart
-enum Gender { male, female, other }
+// lib/models/patient.dart
+
+import 'user.dart';
 
 class Patient {
-  final int patientId;
-  final int caregiverId;
-  final String fullName;
-  final DateTime dateOfBirth;
-  final Gender? gender;
-  final String? address;
+  final int patientId;      // same as user_id
+  final int? caregiverId;
   final String? medicalNotes;
-  final String? email;
-  final String? phoneNo;
-  final bool isActive;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final User user;          // embedded user data
 
   Patient({
     required this.patientId,
-    required this.caregiverId,
-    required this.fullName,
-    required this.dateOfBirth,
-    this.gender,
-    this.address,
+    this.caregiverId,
     this.medicalNotes,
-    this.email,
-    this.phoneNo,
-    required this.isActive,
-    required this.createdAt,
-    required this.updatedAt,
+    required this.user,
   });
 
-  int get age {
-    final today = DateTime.now();
-    int age = today.year - dateOfBirth.year;
-    if (today.month < dateOfBirth.month ||
-        (today.month == dateOfBirth.month && today.day < dateOfBirth.day)) {
-      age--;
-    }
-    return age;
-  }
+  String get fullName => user.fullName;
+  String get email => user.email;
+  String? get phoneNo => user.phoneNo;
+  String? get address => user.address;
+  String? get gender => user.gender;
+  DateTime? get dateOfBirth => user.dateOfBirth;
+  bool get isActive => user.isActive;
+  String? get profilePhoto => user.profilePhoto;
 
   factory Patient.fromJson(Map<String, dynamic> json) {
     return Patient(
       patientId: json['patient_id'],
       caregiverId: json['caregiver_id'],
-      fullName: json['full_name'],
-      dateOfBirth: DateTime.parse(json['date_of_birth']),
-      gender: json['gender'] != null
-          ? Gender.values.firstWhere(
-              (e) =>
-                  e.toString().split('.').last.toLowerCase() ==
-                  json['gender'].toLowerCase(),
-              orElse: () => Gender.other,
-            )
-          : null,
-      address: json['address'],
       medicalNotes: json['medical_notes'],
-      email: json['email'],
-      phoneNo: json['phone_no'],
-      isActive: json['is_active'] == 1 || json['is_active'] == true,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      user: User.fromJson(json['user'] ?? {}), // requires nested user object
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'patient_id': patientId,
+      'caregiver_id': caregiverId,
+      'medical_notes': medicalNotes,
+      'user': user.toJson(),
+    };
   }
 }

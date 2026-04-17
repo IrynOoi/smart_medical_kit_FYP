@@ -97,6 +97,7 @@ class _RegisterPageState extends State<RegisterPage> {
         }),
       );
 
+      if (!mounted) return;
       Navigator.pop(context);
 
       final result = jsonDecode(response.body);

@@ -30,7 +30,9 @@ class ApiService {
       );
 
       print("📥 [API] Received response status code: ${response.statusCode}");
-      print("📥 [API] Received raw server response: ${response.body}"); // 👈 most important
+      print(
+        "📥 [API] Received raw server response: ${response.body}",
+      ); // 👈 most important
 
       return jsonDecode(response.body);
     } catch (e) {
@@ -43,7 +45,10 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
-        headers: {'Content-Type': 'application/json,','ngrok-skip-browser-warning': 'true',},
+        headers: {
+          'Content-Type': 'application/json,',
+          'ngrok-skip-browser-warning': 'true',
+        },
         body: jsonEncode(userData),
       );
       return jsonDecode(response.body);
@@ -349,6 +354,56 @@ class ApiService {
       return [];
     } catch (e) {
       print('Error getting caregiver alerts: $e');
+      return [];
+    }
+  }
+
+  // ==========================================
+  // 📊 AI ANALYTICS ENDPOINTS
+  // ==========================================
+
+  Future<Map<String, dynamic>> getAnalyticsOverview(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/analytics_overview'),
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return jsonResponse['data'];
+        }
+      }
+      return {
+        'overall_adherence_prediction': 85.0,
+        'high_risk_patients': 0,
+        'medium_risk_patients': 0,
+        'total_analyzed': 0,
+      };
+    } catch (e) {
+      print('Error getting analytics overview: $e');
+      return {
+        'overall_adherence_prediction': 85.0,
+        'high_risk_patients': 0,
+        'medium_risk_patients': 0,
+        'total_analyzed': 0,
+      };
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/at_risk_patients'),
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting at-risk patients: $e');
       return [];
     }
   }

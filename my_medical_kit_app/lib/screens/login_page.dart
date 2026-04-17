@@ -1,4 +1,3 @@
-//login_page.dart
 // lib/screens/login_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -48,10 +47,7 @@ class _LoginPageState extends State<LoginPage> {
         final user = result['user'];
 
         // Save role + ID so BottomNavBar knows which dashboard to show
-        await prefs.setString(
-          'role',
-          user['role'],
-        ); // 'patient' or 'caregiver'
+        await prefs.setString('role', user['role']); // 'patient' or 'caregiver'
         await prefs.setString('user_name', user['name']);
 
         if (user['role'] == 'patient') {
@@ -60,12 +56,46 @@ class _LoginPageState extends State<LoginPage> {
           await prefs.setInt('caregiver_id', user['id']);
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message']),
-            backgroundColor: Colors.green,
+        if (!mounted) return;
+
+        // 🌟 CHANGED: Show a Pop-Up Dialog instead of a bottom SnackBar
+        await showDialog(
+          context: context,
+          barrierDismissible: false, // User must tap continue
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+                SizedBox(width: 10),
+                Text('Success', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              result['message'] ?? 'Login successful!',
+              style: const TextStyle(fontSize: 16),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context), // Close dialog
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(
+                    color: AppColors.primaryPurple,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
           ),
         );
+
+        if (!mounted) return;
+
+        // Navigate to BottomNavBar after they click "Continue"
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const BottomNavBar()),
@@ -78,7 +108,9 @@ class _LoginPageState extends State<LoginPage> {
         if (Navigator.canPop(context)) Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Login failed: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text(
+              'Login failed: ${e.toString().replaceAll('Exception: ', '')}',
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -205,7 +237,7 @@ class _LoginPageState extends State<LoginPage> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) =>
-                                const ForgotPasswordPage(),
+                                    const ForgotPasswordPage(),
                               ),
                             );
                           },
@@ -421,21 +453,21 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 child: _isLoading
                     ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
                     : const Text(
-                  'Send Reset Link',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                        'Send Reset Link',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ],
           ),

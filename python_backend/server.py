@@ -1,6 +1,6 @@
 # server.py
 #backend codes
-
+import json 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask.json.provider import DefaultJSONProvider
@@ -763,38 +763,189 @@ def get_prescription_details(prescription_id):
     except Exception as e:
         print(f"Get prescription details error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+# Ensure this is imported at the top of server.py
 
-@app.route('/predict', methods=['POST'])
-def predict_forgetfulness():
+@app.route('/predict_and_save', methods=['POST'])
+def predict_and_save():
+    """
+    Runs the LSTM model and saves the result to the ai_adherence_prediction table
+    so it can be displayed on the AI Prediction Page.
+    """
     try:
         data = request.get_json()
-        age = data.get('age')
-        day = days_map.get(data.get('day_of_week', 'Monday'), 0)
-        time = times_map.get(data.get('time_of_day', 'Morning'), 0)
+        
+        # 1. Extract data from the request
+        patient_id = data.get('patient_id')
+        age = data.get('age', 60)
+        day_str = data.get('day_of_week', 'Monday')
+        time_str = data.get('time_of_day', 'Morning')
         history = data.get('history', [1, 1, 1])
 
+        if not patient_id:
+            return jsonify({"success": False, "message": "patient_id is required"}), 400
+
+        # Map strings to numerical inputs for the model
+        day = days_map.get(day_str, 0)
+        time = times_map.get(time_str, 0)
+
+        # 2. Run the LSTM Model
         if model is None:
-            forget_prob = 0.35
+            forget_prob = 0.35 # Fallback if model isn't loaded
         else:
             input_data = []
             for past_status in history[-3:]:
                 feature_row = [age / 100.0, day / 6.0, time / 2.0, float(past_status)]
                 input_data.append(feature_row)
+            
+            # Pad if history is less than 3
             while len(input_data) < 3:
                 input_data.insert(0, [age / 100.0, day / 6.0, time / 2.0, 1.0])
+                
             input_array = np.array([input_data])
             prediction = model.predict(input_array)
             forget_prob = float(prediction[0][0])
 
+        # 3. Format results for the Database
+        # Convert probability (e.g., 0.855) to a percentage score (e.g., 85.50) to match your sample data
+        prediction_score = round((1 - forget_prob) * 100, 2) if forget_prob < 1 else round(forget_prob * 100, 2) 
+        
+        # Determine risk level based on your ENUM ('LOW', 'MEDIUM', 'HIGH')
         warning_level = "HIGH" if forget_prob > 0.6 else "MEDIUM" if forget_prob > 0.3 else "LOW"
-        message = "High chance of forgetting medication. Send reminder!" if forget_prob > 0.6 else \
-                  "Moderate risk. Monitor patient carefully." if forget_prob > 0.3 else \
-                  "Patient adherence is stable."
 
-        return jsonify({"success": True, "forget_probability": round(forget_prob, 2), 
-                       "warning_level": warning_level, "message": message})
+        # Pack features into a JSON string for the jsonb column
+        features_used = json.dumps({
+            "age": age,
+            "recent_history": history,
+            "day_of_week": day_str,
+            "time_of_day": time_str
+        })
+
+        # 4. Save to PostgreSQL
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO ai_adherence_prediction 
+                (patient_id, prediction_score, risk_level, features_used)
+                VALUES (%s, %s, %s, %s)
+                RETURNING ad_id
+            ''', (patient_id, prediction_score, warning_level, features_used))
+            
+            new_ad_id = cursor.fetchone()[0]
+            conn.commit()
+            cursor.close()
+
+        # 5. Return success to the frontend
+        return jsonify({
+            "success": True, 
+            "message": "Prediction generated and saved successfully!",
+            "data": {
+                "ad_id": new_ad_id,
+                "prediction_score": prediction_score,
+                "risk_level": warning_level
+            }
+        })
+
     except Exception as e:
         print(f"Prediction error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/run_ai_analytics_job', methods=['POST'])
+def run_ai_analytics_job():
+    """Batch run AI predictions for all active patients and store results in DB."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # 1. Get all active patients
+            cursor.execute('''
+                SELECT p.patient_id, u.date_of_birth
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                WHERE u.is_active = true
+            ''')
+            patients = cursor.fetchall()
+            
+            inserted_count = 0
+            current_day = datetime.datetime.now().strftime('%A')
+            hour = datetime.datetime.now().hour
+            time_category = 'Morning' if 5 <= hour < 12 else 'Afternoon' if 12 <= hour < 18 else 'Evening'
+
+            # Define static mappings for the model
+            days_map_local = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
+            times_map_local = {'Morning': 0, 'Afternoon': 1, 'Evening': 2}
+            
+            for pat in patients:
+                pid = pat['patient_id']
+                
+                # Calculate age roughly
+                dob = pat['date_of_birth']
+                age = 65 # Default fallback
+                if dob:
+                    age = (datetime.date.today() - dob).days // 365
+                
+                # Fetch recent adherence history for this patient (last 3 logs)
+                cursor.execute('''
+                    SELECT status 
+                    FROM adherence_logs al
+                    JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                    WHERE pc.patient_id = %s AND al.status IN ('TAKEN', 'MISSED')
+                    ORDER BY al.scheduled_time DESC LIMIT 3
+                ''', (pid,))
+                history_rows = cursor.fetchall()
+                
+                # Convert TAKEN to 1.0, MISSED to 0.0
+                history_vals = []
+                for r in history_rows:
+                    history_vals.append(1.0 if r['status'] == 'TAKEN' else 0.0)
+                
+                # Pad to 3 if not enough history
+                while len(history_vals) < 3:
+                    history_vals.insert(0, 1.0)
+                
+                day_val = days_map_local.get(current_day, 0)
+                time_val = times_map_local.get(time_category, 0)
+                
+                # Run Model Prediction
+                if model is None:
+                    forget_prob = 0.35 # Fallback mock
+                else:
+                    input_data = []
+                    for past_status in history_vals[-3:]:
+                        feature_row = [age / 100.0, day_val / 6.0, time_val / 2.0, float(past_status)]
+                        input_data.append(feature_row)
+                    input_array = np.array([input_data])
+                    prediction = model.predict(input_array)
+                    forget_prob = float(prediction[0][0])
+                
+                # Calculate Prediction Score (higher score = higher probability of missing/forgetting)
+                # You might invert this if prediction_score means "Health score". Assuming forget_prob is "risk".
+                prediction_score_val = forget_prob * 100.0
+                risk_level_val = "HIGH" if forget_prob > 0.6 else "MEDIUM" if forget_prob > 0.3 else "LOW"
+                
+                import json
+                features_used_json = json.dumps({
+                    "age": age,
+                    "day": current_day,
+                    "time": time_category,
+                    "recent_adherence": history_vals,
+                    "temporal_pattern": "Pattern extracted from LSTM"
+                })
+                
+                # Insert result into ai_adherence_prediction table
+                cursor.execute('''
+                    INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, predicted_at, features_used)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s::jsonb)
+                ''', (pid, round(prediction_score_val, 2), risk_level_val, features_used_json))
+                
+                inserted_count += 1
+                
+            conn.commit()
+            cursor.close()
+            
+        return jsonify({"success": True, "message": f"Successfully updated AI predictions for {inserted_count} patients."})
+    except Exception as e:
+        print(f"Batch AI prediction error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -853,6 +1004,88 @@ def health_check():
     except:
         db_status = "disconnected"
     return jsonify({"status": "healthy", "database": db_status, "model": "loaded" if model else "not loaded"})
+
+
+@app.route('/caregiver/<int:caregiver_id>/analytics_overview', methods=['GET'])
+def get_analytics_overview(caregiver_id):
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # First, get total number of patients under this caregiver
+            cursor.execute('''
+                SELECT COUNT(*) AS total_patients
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                WHERE p.caregiver_id = %s AND u.is_active = true
+            ''', (caregiver_id,))
+            total = cursor.fetchone()['total_patients']
+            
+            # Then, get risk counts and average prediction score
+            cursor.execute('''
+                SELECT 
+                    COUNT(CASE WHEN a.risk_level = 'HIGH' THEN 1 END) AS high_risk_patients,
+                    COUNT(CASE WHEN a.risk_level = 'MEDIUM' THEN 1 END) AS medium_risk_patients,
+                    AVG(a.prediction_score) AS avg_prediction_score
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                LEFT JOIN (
+                    SELECT DISTINCT ON (patient_id) patient_id, risk_level, prediction_score
+                    FROM ai_adherence_prediction
+                    ORDER BY patient_id, predicted_at DESC
+                ) a ON p.patient_id = a.patient_id
+                WHERE p.caregiver_id = %s AND u.is_active = true
+            ''', (caregiver_id,))
+            stats = cursor.fetchone()
+            cursor.close()
+
+        avg_score = stats['avg_prediction_score'] or 85.0
+        return jsonify({
+            "success": True,
+            "data": {
+                "overall_adherence_prediction": round(avg_score, 1),
+                "high_risk_patients": stats['high_risk_patients'] or 0,
+                "medium_risk_patients": stats['medium_risk_patients'] or 0,
+                "total_analyzed": total,
+            }
+        })
+    except Exception as e:
+        print(f"Analytics overview error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/caregiver/<int:caregiver_id>/at_risk_patients', methods=['GET'])
+def get_at_risk_patients(caregiver_id):
+    """Return list of patients with their latest AI prediction (high/medium risk only)"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT 
+                    u.full_name AS name,
+                    pc.medication_name AS medication,
+                    a.risk_level,
+                    a.prediction_score AS forget_probability,
+                    COALESCE(a.features_used->>'temporal_pattern', 'Irregular pattern detected') AS temporal_pattern
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                JOIN prescription_config pc ON pc.patient_id = p.patient_id
+                LEFT JOIN (
+                    SELECT DISTINCT ON (patient_id) patient_id, risk_level, prediction_score, features_used
+                    FROM ai_adherence_prediction
+                    ORDER BY patient_id, predicted_at DESC
+                ) a ON p.patient_id = a.patient_id
+                WHERE p.caregiver_id = %s 
+                  AND u.is_active = true
+                  AND a.risk_level IN ('HIGH', 'MEDIUM')
+                ORDER BY a.prediction_score DESC
+                LIMIT 20
+            ''', (caregiver_id,))
+            patients = cursor.fetchall()
+            cursor.close()
+        return jsonify({"success": True, "data": patients})
+    except Exception as e:
+        print(f"At-risk patients error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ==========================================

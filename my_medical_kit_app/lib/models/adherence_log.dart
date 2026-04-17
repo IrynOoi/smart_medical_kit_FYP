@@ -1,56 +1,44 @@
-//adherence_log.dart
-import 'medication.dart';
+// lib/models/adherence_log.dart
 
 class AdherenceLog {
-  final int adlogId;
-  final int prescriptionId;
-  final int deviceId;
-  final DateTime scheduledTime;
-  final DateTime? dispensedTime;
-  final Status status;
-  final DateTime recordedAt;
-  final String? medicationName; // ✅ ADD THIS
+  final int logId;
+  final int patientId;
+  final String status;
+  final DateTime? scheduledTime;
+  final DateTime? takenTime;
+  final String? medicationName;
+
+  bool get isTaken => status.toUpperCase() == 'TAKEN';
+  bool get isMissed => status.toUpperCase() == 'MISSED';
 
   AdherenceLog({
-    required this.adlogId,
-    required this.prescriptionId,
-    required this.deviceId,
-    required this.scheduledTime,
-    this.dispensedTime,
+    required this.logId,
+    required this.patientId,
     required this.status,
-    required this.recordedAt,
-    this.medicationName, // ✅ ADD THIS
+    this.scheduledTime,
+    this.takenTime,
+    this.medicationName,
   });
 
-  bool get isTaken => status == Status.taken;
-  bool get isMissed => status == Status.missed;
-  bool get isPending => status == Status.pending;
-
   factory AdherenceLog.fromJson(Map<String, dynamic> json) {
-    Status parseStatus(String status) {
-      switch (status.toLowerCase()) {
-        case 'taken':
-          return Status.taken;
-        case 'missed':
-          return Status.missed;
-        case 'snoozed':
-          return Status.snoozed;
-        default:
-          return Status.pending;
-      }
-    }
-
     return AdherenceLog(
-      adlogId: json['adlog_id'],
-      prescriptionId: json['prescription_id'],
-      deviceId: json['device_id'],
-      scheduledTime: DateTime.parse(json['scheduled_time']),
-      dispensedTime: json['dispensed_time'] != null
-          ? DateTime.parse(json['dispensed_time'])
-          : null,
-      status: parseStatus(json['status']),
-      recordedAt: DateTime.parse(json['recorded_at']),
-      medicationName: json['medication_name'], // ✅ MAP THIS
+      logId: json['log_id'] ?? json['id'] ?? 0,
+      patientId: json['patient_id'] ?? 0,
+      status: json['status'] ?? 'PENDING',
+      scheduledTime: json['scheduled_time'] != null ? DateTime.tryParse(json['scheduled_time']) : null,
+      takenTime: json['taken_time'] != null ? DateTime.tryParse(json['taken_time']) : null,
+      medicationName: json['medication_name'] ?? json['drug_name'] ?? 'Medication',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'log_id': logId,
+      'patient_id': patientId,
+      'status': status,
+      'scheduled_time': scheduledTime?.toIso8601String(),
+      'taken_time': takenTime?.toIso8601String(),
+      'medication_name': medicationName,
+    };
   }
 }

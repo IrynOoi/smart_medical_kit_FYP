@@ -1,7 +1,5 @@
 //caregiver_medication_history_page.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,6 +64,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     }
   }
 
+  /*
   Future<void> _askAIDoctor() async {
     final String apiUrl = "http://$serverIp:5000/predict";
     final Map<String, dynamic> patientData = {
@@ -150,6 +149,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
       ),
     );
   }
+  */
 
   @override
   Widget build(BuildContext context) {

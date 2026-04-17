@@ -122,6 +122,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     for (final log in logs) {
       if (!log.isTaken) continue;
       final scheduledTime = log.scheduledTime;
+      if (scheduledTime == null) continue;
       final diff = scheduledTime.difference(
         DateTime(weekStart.year, weekStart.month, weekStart.day),
       );
@@ -137,8 +138,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     for (final log in _recentLogs) {
       if (log.isTaken) {
         streak++;
-      } else if (log.isMissed)
+      } else if (log.isMissed) {
         break;
+      }
     }
     return streak;
   }
