@@ -29,14 +29,12 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   bool _isRefreshing = false;
   String _errorMessage = '';
 
-  // Device data from backend
   Map<String, dynamic> _deviceData = {};
-
-  // Inventory list from prescription_config
   List<Map<String, dynamic>> _inventoryList = [];
-
-  // For caregiver view - store patient names mapping
   Map<int, String> _patientNames = {};
+
+  // Constant for determining online/offline status
+  static const int _onlineThresholdHours = 24;
 
   @override
   void initState() {
@@ -117,6 +115,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
       }
     }
 
+    // For caregiver view, device info is not shown; set a placeholder.
     _deviceData = {
       'device_serial': 'N/A',
       'battery_level': null,
@@ -124,17 +123,79 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     };
   }
 
-  Future<void> _restockMedication(
+  // ------------------------------------------------------------
+  // RESTOCK WITH DIALOG (removes hardcoded quantity)
+  // ------------------------------------------------------------
+  Future<void> _showRestockDialog(
     int prescriptionId,
     String medicationName,
   ) async {
+    final quantityController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Restock $medicationName'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: quantityController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Number of pills to add',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty)
+                return 'Please enter a quantity';
+              final qty = int.tryParse(value);
+              if (qty == null || qty <= 0) return 'Enter a positive number';
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, true);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryPurple,
+            ),
+            child: const Text('Restock'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final quantity = int.parse(quantityController.text);
+      await _restockMedication(prescriptionId, medicationName, quantity);
+    }
+  }
+
+  Future<void> _restockMedication(
+    int prescriptionId,
+    String medicationName,
+    int quantity,
+  ) async {
     setState(() => _isRefreshing = true);
     try {
-      final success = await _apiService.restockMedication(prescriptionId, 30);
+      final success = await _apiService.restockMedication(
+        prescriptionId,
+        quantity,
+      );
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Restocked $medicationName successfully!'),
+            content: Text('✅ Restocked $medicationName with $quantity pills!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -156,6 +217,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     }
   }
 
+  // ------------------------------------------------------------
+  // TEST DEVICE (improved error handling)
+  // ------------------------------------------------------------
   Future<void> _testDevice() async {
     try {
       final response = await http.post(
@@ -166,7 +230,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? 'Buzzer Signal Sent to Kit! 🔊'),
+            content: Text(
+              result['message'] ?? 'Test signal sent successfully.',
+            ),
             backgroundColor: AppColors.primaryPurple,
           ),
         );
@@ -174,15 +240,18 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Test signal sent to device!'),
-            backgroundColor: AppColors.primaryPurple,
+          SnackBar(
+            content: Text('Failed to send test signal: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
     }
   }
 
+  // ------------------------------------------------------------
+  // FORMAT LAST ACTIVE & ONLINE STATUS
+  // ------------------------------------------------------------
   String _formatLastActive(String? timestamp) {
     if (timestamp == null) return 'Never';
     try {
@@ -198,106 +267,92 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     }
   }
 
+  bool _isDeviceOnline() {
+    final lastActive = _deviceData['last_active_timestamp'];
+    if (lastActive == null) return false;
+    try {
+      final last = DateTime.parse(lastActive);
+      return DateTime.now().difference(last).inHours < _onlineThresholdHours;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // BUILD METHOD
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryPurple),
-        ),
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryPurple),
       );
     }
 
     if (_errorMessage.isNotEmpty) {
-      return Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 60,
-                color: Colors.redAccent,
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            Text(_errorMessage, textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _loadData,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryPurple,
               ),
-              const SizedBox(height: 16),
-              Text(_errorMessage, textAlign: TextAlign.center),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loadData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                ),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+              child: const Text('Retry'),
+            ),
+          ],
         ),
       );
     }
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
-      appBar: AppBar(
-        backgroundColor: AppColors.primaryPurple,
-        elevation: 0,
-        title: const Text(
-          'Inventory & Device',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-          ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadData,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          color: AppColors.primaryPurple,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDeviceHeader(),
-                const SizedBox(height: 24),
-                if (widget.role == 'patient') _buildPatientControls(),
-                const SizedBox(height: 24),
-                _buildInventorySummary(),
-                const SizedBox(height: 16),
-                _buildInventorySection(),
-                const SizedBox(height: 32),
-              ],
-            ),
+      // Removed the SafeArea and outer Column to allow the purple header to reach the very top
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: AppColors.primaryPurple,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDeviceHeader(),
+              const SizedBox(height: 24),
+              if (widget.role == 'patient') _buildPatientControls(),
+              const SizedBox(height: 24),
+              _buildInventorySummary(),
+              const SizedBox(height: 16),
+              _buildInventorySection(),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // ==========================================
-  // TOP DEVICE HEADER (improved)
-  // ==========================================
+  // ------------------------------------------------------------
+  // DEVICE HEADER (Signal replaced with Online/Offline status)
+  // ------------------------------------------------------------
   Widget _buildDeviceHeader() {
-    final batteryLevel = _deviceData['battery_level'] ?? 100;
-    final isLowBattery = batteryLevel < 20;
+    final batteryLevel = _deviceData['battery_level'];
+    final isLowBattery = batteryLevel != null && batteryLevel < 20;
     final deviceName = _deviceData['device_serial'] ?? 'Not Connected';
+    final isOnline = _isDeviceOnline();
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        MediaQuery.of(context).padding.top + 24,
+        24,
+        32,
+      ),
       decoration: const BoxDecoration(
         color: AppColors.primaryPurple,
         borderRadius: BorderRadius.only(
@@ -308,6 +363,15 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Inventory & Device',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 24),
           Row(
             children: [
               Container(
@@ -352,23 +416,31 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
+                  color: (isOnline ? Colors.green : Colors.grey).withOpacity(
+                    0.2,
+                  ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.greenAccent),
+                  border: Border.all(
+                    color: isOnline ? Colors.greenAccent : Colors.grey.shade400,
+                  ),
                 ),
                 child: Row(
-                  children: const [
+                  children: [
                     Icon(
-                      Icons.wifi_rounded,
-                      color: Colors.greenAccent,
+                      isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                      color: isOnline
+                          ? Colors.greenAccent
+                          : Colors.grey.shade400,
                       size: 14,
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Text(
-                      'Online',
+                      isOnline ? 'Online' : 'Offline',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.greenAccent,
+                        color: isOnline
+                            ? Colors.greenAccent
+                            : Colors.grey.shade400,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -388,10 +460,10 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                 isLowBattery ? Colors.redAccent : Colors.greenAccent,
               ),
               _buildDeviceStatCard(
-                'Signal',
-                'Strong',
-                Icons.signal_cellular_alt_rounded,
-                Colors.blueAccent,
+                'Status',
+                isOnline ? 'Online' : 'Offline',
+                isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                isOnline ? Colors.blueAccent : Colors.grey,
               ),
               _buildDeviceStatCard(
                 'Sync',
@@ -432,9 +504,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     );
   }
 
-  // ==========================================
-  // PATIENT CONTROLS (unchanged)
-  // ==========================================
+  // ------------------------------------------------------------
+  // PATIENT CONTROLS
+  // ------------------------------------------------------------
   Widget _buildPatientControls() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -506,10 +578,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Test',
-                    style: TextStyle(color: Colors.white),
-                  ),
+                  child: const Text('Test'),
                 ),
               ],
             ),
@@ -519,9 +588,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     );
   }
 
-  // ==========================================
-  // INVENTORY SUMMARY (new)
-  // ==========================================
+  // ------------------------------------------------------------
+  // INVENTORY SUMMARY
+  // ------------------------------------------------------------
   Widget _buildInventorySummary() {
     if (_inventoryList.isEmpty) return const SizedBox.shrink();
 
@@ -612,9 +681,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     );
   }
 
-  // ==========================================
-  // INVENTORY LIST (improved card design)
-  // ==========================================
+  // ------------------------------------------------------------
+  // INVENTORY LIST (improved progress bar max)
+  // ------------------------------------------------------------
   Widget _buildInventorySection() {
     if (_inventoryList.isEmpty) {
       return Padding(
@@ -666,8 +735,12 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     final threshold = med['refill_threshold'] as int;
     final isLowStock = current <= threshold;
     final isOutOfStock = current == 0;
-    final maxInventory = (threshold * 3) > current ? (threshold * 3) : current;
-    final progressValue = (current / maxInventory).clamp(0.0, 1.0);
+
+    // Set max for progress bar: either threshold * 2 or current, whichever is larger (minimum 10)
+    final maxInventory = (threshold * 2) > current ? (threshold * 2) : current;
+    final progressValue = maxInventory > 0
+        ? (current / maxInventory).clamp(0.0, 1.0)
+        : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -760,17 +833,13 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                 child: Text(
                   isOutOfStock
                       ? 'Empty'
-                      : isLowStock
-                      ? 'Low Stock'
-                      : 'Sufficient',
+                      : (isLowStock ? 'Low Stock' : 'Sufficient'),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     color: isOutOfStock
                         ? Colors.red
-                        : isLowStock
-                        ? Colors.orange
-                        : Colors.green,
+                        : (isLowStock ? Colors.orange : Colors.green),
                   ),
                 ),
               ),
@@ -807,9 +876,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                       backgroundColor: Colors.grey.shade200,
                       color: isOutOfStock
                           ? Colors.red
-                          : isLowStock
-                          ? Colors.orange
-                          : Colors.green,
+                          : (isLowStock ? Colors.orange : Colors.green),
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -822,7 +889,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   child: ElevatedButton(
                     onPressed: _isRefreshing
                         ? null
-                        : () => _restockMedication(
+                        : () => _showRestockDialog(
                             med['prescription_id'],
                             med['medication_name'],
                           ),

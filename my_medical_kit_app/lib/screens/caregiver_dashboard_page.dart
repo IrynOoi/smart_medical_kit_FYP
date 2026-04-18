@@ -538,7 +538,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                       .toString(), // Shows the actual number
                   subtitle: 'Tap to manage', // Hint that they can tap it
                   icon: Icons.post_add_rounded,
-                  color: const Color(0xFF4CAF82),
+                  color: AppColors.premiumLight,
                   onTap: _navigateToPrescriptionSetup,
                 ),
               ),
@@ -553,7 +553,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                   value: _devicesOnline.toString(),
                   subtitle: 'Smart Kits',
                   icon: Icons.router_rounded,
-                  color: const Color(0xFF5B8DEF),
+                  color: AppColors.premiumMid,
                   onTap: _navigateToDevicesList,
                 ),
               ),
@@ -564,7 +564,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                   value: '$_adherenceRate%',
                   subtitle: 'Overall',
                   icon: Icons.trending_up_rounded,
-                  color: const Color(0xFFF5A623),
+                  color: AppColors.premiumDark.withOpacity(0.6),
                   onTap: _navigateToAdherenceDetails,
                 ),
               ),
@@ -770,22 +770,22 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
               _buildSummaryStat(
                 'Pending',
                 _pendingAlerts.toString(),
-                Colors.orange,
+                AppColors.premiumLight,
               ),
               _buildSummaryStat(
                 'Missed',
                 _missedDoses.toString(),
-                Colors.redAccent,
+                AppColors.premiumDark.withOpacity(0.6),
               ),
               _buildSummaryStat(
                 'Stock',
                 _lowStockCount.toString(),
-                Colors.orange,
+                AppColors.premiumDark,
               ),
               _buildSummaryStat(
                 'Battery',
                 _lowBatteryCount.toString(),
-                Colors.blue,
+                AppColors.primaryPurple,
               ),
             ],
           ),
@@ -893,7 +893,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   Widget _buildActivityItem(Map<String, dynamic> activity) {
     /* unchanged */
     final isMissed = activity['status'] == 'MISSED';
-    final color = isMissed ? Colors.redAccent : Colors.orange;
+    final color = AppColors.primaryPurple;
     final icon = isMissed ? Icons.close_rounded : Icons.access_time_rounded;
     final statusText = isMissed ? 'Missed' : 'Pending';
     DateTime? dt;

@@ -256,92 +256,210 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: AppColors.premiumLight.withOpacity(0.1),
       body: SafeArea(
+        top: false,
         child: RefreshIndicator(
           onRefresh: _loadAll,
           color: AppColors.primaryPurple,
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _buildAppBar()),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _buildDonutCard(),
-                    const SizedBox(height: 18),
-                    _buildWeeklyLineChart(),
-                    const SizedBox(height: 18),
-                    _buildAIPredictionBanner(),
-                    const SizedBox(height: 18),
-                    _buildNextDoseCard(),
-                    const SizedBox(height: 18),
-                    _buildInventoryRow(),
-                    const SizedBox(height: 18),
-                    _buildRecentLogs(),
-                    const SizedBox(height: 30),
-                  ]),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      _buildDonutCard(),
+                      const SizedBox(height: 18),
+                      _buildWeeklyLineChart(),
+                      const SizedBox(height: 18),
+                      _buildAIPredictionBanner(),
+                      const SizedBox(height: 18),
+                      _buildNextDoseCard(),
+                      const SizedBox(height: 18),
+                      _buildInventoryRow(),
+                      const SizedBox(height: 18),
+                      _buildRecentLogs(),
+                      const SizedBox(height: 30),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  String get _formattedDate {
+    final now = DateTime.now();
+    return '${now.day} ${_getMonthName(now.month)} ${now.year}';
+  }
+
+  String _getMonthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
   // ──────────────────────────────────────────
-  // TOP APP BAR
+  // TOP APP BAR (HEADER)
   // ──────────────────────────────────────────
-  Widget _buildAppBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildHeader() {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final patientName = _patient?.fullName.split(' ').first ?? 'Patient';
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(24, topPadding + 16, 24, 32),
+      decoration: const BoxDecoration(
+        gradient: AppColors.mainGradient,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                _getGreeting(),
-                style: const TextStyle(fontSize: 13, color: Colors.grey),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.medical_information_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'MedSmart',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                _patient?.fullName.split(' ').first ?? 'Patient',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {},
+                    child: Stack(
+                      children: [
+                        _buildIconBox(Icons.notifications_outlined),
+                        if (_unreadNotifications > 0)
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _getGreeting().toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      letterSpacing: 1.5,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    patientName,
+                    style: const TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.white,
+                  child: Text(
+                    patientName.isNotEmpty
+                        ? patientName[0].toUpperCase()
+                        : 'P',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryPurple,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () {},
-                child: Stack(
-                  children: [
-                    _buildIconBox(Icons.notifications_outlined),
-                    if (_unreadNotifications > 0)
-                      Positioned(
-                        right: 6,
-                        top: 6,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                  ],
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.calendar_today, size: 14, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  _formattedDate,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              _buildIconBox(Icons.tune_rounded),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -352,17 +470,10 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     return Container(
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
-      child: Icon(icon, size: 20, color: Colors.black87),
+      child: Icon(icon, size: 20, color: Colors.white),
     );
   }
 
@@ -398,14 +509,14 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     Text(
                       '${_adherenceScore.toStringAsFixed(0)}%',
                       style: TextStyle(
-                        fontSize: 30,
+                        fontSize: 36,
                         fontWeight: FontWeight.bold,
                         color: scoreColor,
                       ),
                     ),
                     const Text(
                       'Adherence Rate',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -419,19 +530,19 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               _buildDonutStat(
                 'Taken',
                 _taken.toString(),
-                const Color(0xFF6C63FF),
+                AppColors.primaryPurple,
               ),
               _buildVertDivider(),
               _buildDonutStat(
                 'Missed',
                 _missed.toString(),
-                const Color(0xFFFF6584),
+                AppColors.premiumLight,
               ),
               _buildVertDivider(),
               _buildDonutStat(
                 'Pending',
                 _upcoming.toString(),
-                const Color(0xFF43C6AC),
+                AppColors.premiumDark.withOpacity(0.6),
               ),
             ],
           ),
@@ -442,15 +553,15 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               Icon(
                 Icons.local_fire_department,
                 size: 16,
-                color: Colors.deepPurple.shade600,
+                color: AppColors.premiumDark,
               ),
               const SizedBox(width: 4),
               Text(
                 '$_streak day streak',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: Colors.deepPurple.shade700,
+                  color: AppColors.premiumDark,
                 ),
               ),
             ],
@@ -466,13 +577,13 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         Text(
           value,
           style: TextStyle(
-            fontSize: 24,
+            fontSize: 28,
             fontWeight: FontWeight.bold,
             color: color,
           ),
         ),
         const SizedBox(height: 3),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: const TextStyle(fontSize: 15, color: Colors.grey)),
       ],
     );
   }
@@ -485,66 +596,71 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   // ──────────────────────────────────────────
   Widget _buildWeeklyLineChart() {
     const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Weekly Doses Taken',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Weekly Doses Taken',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'This Week',
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  fontSize: 14,
+                  color: AppColors.primaryPurple,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'This Week',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.primaryPurple,
-                    fontWeight: FontWeight.w600,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 110,
+                child: CustomPaint(
+                  size: const Size(double.infinity, 110),
+                  painter: _LinePainter(
+                    data: _weeklyTaken,
+                    lineColor: AppColors.primaryPurple,
                   ),
                 ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: weekDays
+                    .map(
+                      (d) => Text(
+                        d,
+                        style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    )
+                    .toList(),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 110,
-            child: CustomPaint(
-              size: const Size(double.infinity, 110),
-              painter: _LinePainter(
-                data: _weeklyTaken,
-                lineColor: AppColors.primaryPurple,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: weekDays
-                .map(
-                  (d) => Text(
-                    d,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -560,11 +676,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         .last
         .toUpperCase();
     final score = _aiPrediction!.predictionScore;
-    final riskColor = risk == 'HIGH'
-        ? Colors.redAccent
-        : risk == 'MEDIUM'
-        ? Colors.orange
-        : Colors.green;
+    final riskColor = AppColors.primaryPurple;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -597,7 +709,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               children: [
                 const Text(
                   'AI Health Prediction',
-                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 Text(
                   risk == 'HIGH'
@@ -608,7 +720,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 16,
                   ),
                 ),
               ],
@@ -622,7 +734,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 20,
+                  fontSize: 24,
                 ),
               ),
               Container(
@@ -659,12 +771,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.1),
+                color: AppColors.primaryPurple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
                 Icons.celebration,
-                color: Colors.teal,
+                color: AppColors.primaryPurple,
                 size: 26,
               ),
             ),
@@ -684,12 +796,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.shade50,
+              color: AppColors.primaryPurple.withOpacity(0.1),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
               Icons.medication_rounded,
-              color: Colors.orange.shade600,
+              color: AppColors.primaryPurple,
               size: 28,
             ),
           ),
@@ -700,18 +812,18 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               children: [
                 const Text(
                   'Next Dose',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 15, color: Colors.grey),
                 ),
                 Text(
                   dose.medicationName,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
                   '${dose.dosageTablet.toStringAsFixed(0)} tablet · Stock: ${dose.currentInventory}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
                 ),
               ],
             ),
@@ -720,7 +832,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             onPressed: () =>
                 _markTaken(dose.prescriptionId, dose.deviceId ?? 1),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
+              backgroundColor: AppColors.primaryPurple,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               shape: RoundedRectangleBorder(
@@ -730,7 +842,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             ),
             child: const Text(
               'Take',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
         ],
@@ -756,7 +868,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             const Text(
               'Inventory Status',
               style: TextStyle(
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),
@@ -768,14 +880,14 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: AppColors.primaryPurple.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${lowStock.length} low stock',
                   style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.redAccent,
+                    fontSize: 14,
+                    color: AppColors.primaryPurple,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -826,7 +938,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 child: Text(
                   med.medicationName,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -836,7 +948,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 const Icon(
                   Icons.warning_amber_rounded,
                   size: 13,
-                  color: Colors.orange,
+                  color: AppColors.primaryPurple,
                 ),
             ],
           ),
@@ -847,15 +959,15 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               value: pct,
               minHeight: 5,
               backgroundColor: Colors.grey.shade200,
-              color: isLow ? Colors.orange : Colors.teal,
+              color: AppColors.primaryPurple,
             ),
           ),
           const SizedBox(height: 3),
           Text(
             '${med.currentInventory} left',
             style: TextStyle(
-              fontSize: 10,
-              color: isLow ? Colors.orange : Colors.grey.shade500,
+              fontSize: 13,
+              color: AppColors.premiumDark,
             ),
           ),
         ],
@@ -879,7 +991,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             const Text(
               'Recent History',
               style: TextStyle(
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),
@@ -888,7 +1000,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               onPressed: () {},
               child: Text(
                 'See all',
-                style: TextStyle(color: AppColors.primaryPurple, fontSize: 12),
+                style: TextStyle(color: AppColors.primaryPurple, fontSize: 15),
               ),
             ),
           ],
@@ -902,11 +1014,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               final log = entry.value;
               final isTaken = log.isTaken;
               final isMissed = log.isMissed;
-              final statusColor = isTaken
-                  ? Colors.teal
-                  : isMissed
-                  ? Colors.redAccent
-                  : Colors.orange;
+              final statusColor = AppColors.primaryPurple;
               final statusLabel = isTaken
                   ? 'Taken'
                   : isMissed
@@ -940,13 +1048,13 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       log.medicationName ?? 'Medication',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 16,
                       ),
                     ),
                     subtitle: Text(
                       _formatTime(log.scheduledTime!),
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 14,
                         color: Colors.grey.shade500,
                       ),
                     ),
@@ -962,7 +1070,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       child: Text(
                         statusLabel,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 14,
                           color: statusColor,
                           fontWeight: FontWeight.bold,
                         ),
@@ -992,9 +1100,13 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.premiumLight.withOpacity(0.4),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: AppColors.premiumDark.withOpacity(0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1056,9 +1168,9 @@ class _DonutPainter extends CustomPainter {
     if (total == 0) return;
 
     final segments = [
-      {'v': taken, 'c': const Color(0xFF6C63FF)},
-      {'v': missed, 'c': const Color(0xFFFF6584)},
-      {'v': pending, 'c': const Color(0xFF43C6AC)},
+      {'v': taken, 'c': AppColors.primaryPurple},
+      {'v': missed, 'c': AppColors.premiumLight},
+      {'v': pending, 'c': AppColors.premiumDark.withOpacity(0.6)},
     ];
 
     double start = -pi / 2;

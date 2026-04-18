@@ -102,11 +102,11 @@ class _BottomNavBarState extends State<BottomNavBar> {
         : const PatientDashboardPage();
 
     return [
-      homePage, // 0: Home (Dashboard)
-      AiAnalyticsPage(caregiverId: _userId), // 1: AI Predict
-      const ComingSoonPage(title: 'Medication Assistant'), // 2: FAB (Chat)
-      const MedicationHistoryScreen(), // 3: History
-      const ProfilePage(), // 4: Profile
+      homePage, // 0
+      AiAnalyticsPage(caregiverId: _userId), // 1
+      InventoryManagementPage(role: _role, userId: _userId), // 2 ✅ NEW
+      const MedicationHistoryScreen(), // 3
+      const ProfilePage(), // 4
     ];
   }
 
@@ -129,17 +129,27 @@ class _BottomNavBarState extends State<BottomNavBar> {
       child: Scaffold(
         body: _pages[selectedIndex],
 
-        floatingActionButton: FloatingActionButton(
-          backgroundColor: AppColors.primaryPurple,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          onPressed: () =>
-              _navigateToInventoryPage(), // ✅ CHANGED: Direct navigation
-          child: const Icon(
-            Icons.inventory_rounded, // Changed icon to inventory
-            color: Colors.white,
-            size: 28,
+        floatingActionButton: SizedBox(
+          height: 62, // Enlarge height
+          width: 62, // Enlarge width
+          child: FloatingActionButton(
+            backgroundColor: AppColors.primaryPurple,
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                22,
+              ), // Make it slightly rounder to match the size
+            ),
+            onPressed: () {
+              setState(() {
+                selectedIndex = 2;
+              });
+            },
+            child: const Icon(
+              Icons.inventory_rounded,
+              color: Colors.white,
+              size: 36, // 👇 Enlarge the icon
+            ),
           ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -192,19 +202,6 @@ class _BottomNavBarState extends State<BottomNavBar> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // ==========================================
-  // DIRECT NAVIGATION TO INVENTORY PAGE (NO POPUP)
-  // ==========================================
-  void _navigateToInventoryPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            InventoryManagementPage(role: _role, userId: _userId),
       ),
     );
   }

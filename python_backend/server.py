@@ -2,6 +2,7 @@
 #backend codes
 import json 
 from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from flask.json.provider import DefaultJSONProvider
 import numpy as np
@@ -195,7 +196,7 @@ def get_patient(patient_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT u.user_id as patient_id, u.email, u.full_name, u.phone_no, u.address, 
-                       u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at,
+                       u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at,u.profile_photo,
                        p.caregiver_id, p.medical_notes
                 FROM users u
                 JOIN patient p ON u.user_id = p.patient_id
@@ -556,7 +557,7 @@ def get_caregiver_profile(caregiver_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT u.user_id as caregiver_id, u.email, u.full_name, u.phone_no, u.address, 
-                       u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at
+                       u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at,u.profile_photo
                 FROM users u
                 JOIN caregiver c ON u.user_id = c.caregiver_id
                 WHERE u.user_id = %s AND u.role = 'caregiver'
@@ -579,76 +580,119 @@ def get_caregiver_profile(caregiver_id):
 
 @app.route('/update_patient/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
-    """Update patient profile"""
+    """Update patient profile with Multipart Form Data"""
     try:
-        data = request.get_json()
+        # CRITICAL FIX: Use request.form instead of request.get_json()
+        # request.form reads text fields from a multipart/form-data request
+        full_name = request.form.get('full_name')
+        phone_no = request.form.get('phone_no')
+        address = request.form.get('address')
+        email = request.form.get('email')
+        gender = request.form.get('gender')
+        date_of_birth = request.form.get('date_of_birth')
+        medical_notes = request.form.get('medical_notes')
+
+        # 2. Handle Image Upload
+        photo_url = None
+        if 'profile_photo' in request.files:
+            file = request.files['profile_photo']
+            if file.filename != '':
+                # Secure the filename and save to static/profiles
+                filename = secure_filename(f"patient_{patient_id}_{file.filename}")
+                filepath = os.path.join('static', 'profiles')
+                os.makedirs(filepath, exist_ok=True)
+                file.save(os.path.join(filepath, filename))
+                
+                # Generate URL accessible via your ngrok domain
+                # photo_url = f"{request.host_url}static/profiles/{filename}"
+                photo_url = f"/static/profiles/{filename}"
+
+        # 3. Update Database
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            
+            # Dynamic SQL based on whether a photo was uploaded
+            update_query = '''
                 UPDATE users 
-                SET full_name = %s, 
-                    phone_no = %s, 
-                    address = %s, 
-                    email = %s, 
-                    gender = %s, 
-                    date_of_birth = %s,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = %s AND role = 'patient'
-            ''', (
-                data.get('full_name'), 
-                data.get('phone_no'), 
-                data.get('address'), 
-                data.get('email'),
-                data.get('gender'),
-                data.get('date_of_birth'),
-                patient_id
-            ))
+                SET full_name = %s, phone_no = %s, address = %s, 
+                    email = %s, gender = %s, date_of_birth = %s, updated_at = CURRENT_TIMESTAMP
+            '''
+            params = [full_name, phone_no, address, email, gender, date_of_birth]
+
+            if photo_url:
+                update_query += ", profile_photo = %s"
+                params.append(photo_url)
+
+            update_query += " WHERE user_id = %s AND role = 'patient'"
+            params.append(patient_id)
+
+            # Update Users table
+            cursor.execute(update_query, tuple(params))
+            
+            # Update Patient table
             cursor.execute('''
                 UPDATE patient 
                 SET medical_notes = %s
                 WHERE patient_id = %s
-            ''', (data.get('medical_notes'), patient_id))
+            ''', (medical_notes, patient_id))
+            
             conn.commit()
             cursor.close()
-        return jsonify({"success": True, "message": "Profile updated successfully"})
+            
+        return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url})
     except Exception as e:
         print(f"Update patient error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-
 @app.route('/update_caregiver/<int:caregiver_id>', methods=['PUT'])
 def update_caregiver(caregiver_id):
-    """Update caregiver profile"""
+    """Update caregiver profile with Multipart Form Data"""
     try:
-        data = request.get_json()
+        # CRITICAL FIX: Use request.form
+        full_name = request.form.get('full_name')
+        phone_no = request.form.get('phone_no')
+        address = request.form.get('address')
+        email = request.form.get('email')
+        gender = request.form.get('gender')
+        date_of_birth = request.form.get('date_of_birth')
+
+        # Handle Image Upload
+        photo_url = None
+        if 'profile_photo' in request.files:
+            file = request.files['profile_photo']
+            if file.filename != '':
+                filename = secure_filename(f"caregiver_{caregiver_id}_{file.filename}")
+                filepath = os.path.join('static', 'profiles')
+                os.makedirs(filepath, exist_ok=True)
+                file.save(os.path.join(filepath, filename))
+                
+                photo_url = f"{request.host_url}static/profiles/{filename}"
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
+            
+            update_query = '''
                 UPDATE users 
-                SET full_name = %s, 
-                    phone_no = %s, 
-                    address = %s, 
-                    email = %s, 
-                    gender = %s, 
-                    date_of_birth = %s,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = %s AND role = 'caregiver'
-            ''', (
-                data.get('full_name'), 
-                data.get('phone_no'), 
-                data.get('address'), 
-                data.get('email'),
-                data.get('gender'),
-                data.get('date_of_birth'),
-                caregiver_id
-            ))
+                SET full_name = %s, phone_no = %s, address = %s, 
+                    email = %s, gender = %s, date_of_birth = %s, updated_at = CURRENT_TIMESTAMP
+            '''
+            params = [full_name, phone_no, address, email, gender, date_of_birth]
+
+            if photo_url:
+                update_query += ", profile_photo = %s"
+                params.append(photo_url)
+
+            update_query += " WHERE user_id = %s AND role = 'caregiver'"
+            params.append(caregiver_id)
+
+            cursor.execute(update_query, tuple(params))
             conn.commit()
             cursor.close()
-        return jsonify({"success": True, "message": "Profile updated successfully"})
+            
+        return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url})
     except Exception as e:
         print(f"Update caregiver error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 # ==========================================
 # 💊 MEDICATION ENDPOINTS
