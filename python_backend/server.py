@@ -1005,7 +1005,6 @@ def health_check():
         db_status = "disconnected"
     return jsonify({"status": "healthy", "database": db_status, "model": "loaded" if model else "not loaded"})
 
-
 @app.route('/caregiver/<int:caregiver_id>/analytics_overview', methods=['GET'])
 def get_analytics_overview(caregiver_id):
     try:
@@ -1021,7 +1020,7 @@ def get_analytics_overview(caregiver_id):
             ''', (caregiver_id,))
             total = cursor.fetchone()['total_patients']
             
-            # Then, get risk counts and average prediction score
+            # Then, get risk counts and average prediction score from REAL predictions
             cursor.execute('''
                 SELECT 
                     COUNT(CASE WHEN a.risk_level = 'HIGH' THEN 1 END) AS high_risk_patients,
@@ -1039,7 +1038,13 @@ def get_analytics_overview(caregiver_id):
             stats = cursor.fetchone()
             cursor.close()
 
-        avg_score = stats['avg_prediction_score'] or 85.0
+        # Calculate average score - if no predictions exist, use 85.0 as fallback
+        avg_score = stats['avg_prediction_score']
+        if avg_score is None:
+            avg_score = 85.0  # Only fallback when NO predictions exist
+        else:
+            avg_score = float(avg_score)
+        
         return jsonify({
             "success": True,
             "data": {
@@ -1086,6 +1091,62 @@ def get_at_risk_patients(caregiver_id):
     except Exception as e:
         print(f"At-risk patients error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Add to server.py
+
+@app.route('/iot_device/patient/<int:patient_id>', methods=['GET'])
+def get_patient_device(patient_id):
+    """Get IoT device info for a patient"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT device_id, device_serial, battery_level, last_active_timestamp
+                FROM iot_device
+                WHERE patient_id = %s
+                LIMIT 1
+            ''', (patient_id,))
+            device = cursor.fetchone()
+            cursor.close()
+        
+        if device:
+            return jsonify({"success": True, "data": device})
+        else:
+            return jsonify({"success": True, "data": {}})
+    except Exception as e:
+        print(f"Get device error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/restock_medication', methods=['POST'])
+def restock_medication():
+    """Restock medication by calling add_inventory_refill"""
+    try:
+        data = request.get_json()
+        prescription_id = data.get('prescription_id')
+        quantity = data.get('quantity', 30)
+        
+        if not prescription_id:
+            return jsonify({"success": False, "message": "prescription_id required"}), 400
+        
+        # Call the existing function
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT add_inventory_refill(%s, %s, %s)', 
+                          (prescription_id, quantity, 'caregiver_restock'))
+            conn.commit()
+            cursor.close()
+        
+        return jsonify({"success": True, "message": f"Added {quantity} pills to inventory"})
+    except Exception as e:
+        print(f"Restock error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/test_device/<int:user_id>', methods=['POST'])
+def test_device(user_id):
+    """Simulate testing the IoT device"""
+    # In a real implementation, this would send a signal to the actual hardware
+    return jsonify({"success": True, "message": "Buzzer Signal Sent to Kit! 🔊"})
 
 
 # ==========================================

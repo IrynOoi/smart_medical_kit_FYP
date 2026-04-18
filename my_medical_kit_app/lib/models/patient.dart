@@ -1,13 +1,12 @@
-//patient.dart
 // lib/models/patient.dart
 
 import 'user.dart';
 
 class Patient {
-  final int patientId;      // same as user_id
+  final int patientId; // same as user_id
   final int? caregiverId;
   final String? medicalNotes;
-  final User user;          // embedded user data
+  final User user; // embedded user data
 
   Patient({
     required this.patientId,

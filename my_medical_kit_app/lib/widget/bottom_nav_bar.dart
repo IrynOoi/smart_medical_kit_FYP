@@ -1,4 +1,5 @@
 //bottom_nav_bar.dart
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient_dashboard_page.dart';
 import 'package:my_medical_kit_app/screens/caregiver_dashboard_page.dart';
@@ -7,8 +8,7 @@ import 'package:my_medical_kit_app/screens/caregiver_medication_history_page.dar
 import 'package:my_medical_kit_app/screens/profile_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_medical_kit_app/screens/ai_analytics_page.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
-import 'package:my_medical_kit_app/screens/inventory_management_page.dart'; // 🌟 Importing the newly created full page
+import 'package:my_medical_kit_app/screens/inventory_management_page.dart';
 
 class ComingSoonPage extends StatelessWidget {
   final String title;
@@ -71,7 +71,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
   // Role and ID loaded from SharedPreferences (saved during login)
   String _role = 'patient';
-  int _userId = 0; // 🌟 ADDED: Store the user's ID
+  int _userId = 0;
   bool _sessionLoaded = false;
 
   @override
@@ -85,7 +85,6 @@ class _BottomNavBarState extends State<BottomNavBar> {
     setState(() {
       _role = prefs.getString('role') ?? 'patient';
 
-      // 🌟 ADDED: Fetch the correct ID based on the user's role
       if (_role == 'patient') {
         _userId = prefs.getInt('patient_id') ?? 1;
       } else {
@@ -99,12 +98,12 @@ class _BottomNavBarState extends State<BottomNavBar> {
   // Pages change based on role
   List<Widget> get _pages {
     final homePage = _role == 'caregiver'
-        ? const CaregiverDashboardPage() // caregiver sees their own dashboard
-        : const PatientDashboardPage(); // patient sees patient dashboard
+        ? const CaregiverDashboardPage()
+        : const PatientDashboardPage();
 
     return [
       homePage, // 0: Home (Dashboard)
-      AiAnalyticsPage(caregiverId: _userId), // 🌟 1: AI Predict (LINKED!)
+      AiAnalyticsPage(caregiverId: _userId), // 1: AI Predict
       const ComingSoonPage(title: 'Medication Assistant'), // 2: FAB (Chat)
       const MedicationHistoryScreen(), // 3: History
       const ProfilePage(), // 4: Profile
@@ -113,7 +112,6 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading while reading SharedPreferences
     if (!_sessionLoaded) {
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6FB),
@@ -125,7 +123,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
       canPop: selectedIndex == 0,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          setState(() => selectedIndex = 0); // go Home tab
+          setState(() => selectedIndex = 0);
         }
       },
       child: Scaffold(
@@ -136,9 +134,10 @@ class _BottomNavBarState extends State<BottomNavBar> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          onPressed: () => _showDeviceInventoryBottomSheet(context),
+          onPressed: () =>
+              _navigateToInventoryPage(), // ✅ CHANGED: Direct navigation
           child: const Icon(
-            Icons.phonelink_setup_rounded, // Better icon for Device Management
+            Icons.inventory_rounded, // Changed icon to inventory
             color: Colors.white,
             size: 28,
           ),
@@ -198,248 +197,14 @@ class _BottomNavBarState extends State<BottomNavBar> {
   }
 
   // ==========================================
-  // DEVICE & INVENTORY BOTTOM SHEET
+  // DIRECT NAVIGATION TO INVENTORY PAGE (NO POPUP)
   // ==========================================
-  void _showDeviceInventoryBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 50,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              if (_role == 'patient') _buildPatientDeviceSheet()
-              else _buildCaregiverDeviceSheet(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // ───────────────────────────────────────────
-  // PATIENT VIEW: "My IoT Kit"
-  // ───────────────────────────────────────────
-  Widget _buildPatientDeviceSheet() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'My IoT Kit (DISP-10001)',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textDark,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Manage your smart kit and reminders.',
-          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildDeviceStatCard(Icons.battery_4_bar_rounded, 'Battery', '85%', Colors.green),
-            _buildDeviceStatCard(Icons.wifi_rounded, 'Network', 'Online', Colors.blue),
-            _buildDeviceStatCard(Icons.sync_rounded, 'Last Sync', 'Just now', Colors.orange),
-          ],
-        ),
-        const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () {
-            Navigator.pop(context);
-            _showMockSnackBar('Buzzer test activated on DISP-10001! 🔊');
-          },
-          icon: const Icon(Icons.notifications_active_rounded),
-          label: const Text('Test Device Buzzer / LED'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryPurple,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextButton.icon(
-          onPressed: () {
-            Navigator.pop(context);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => InventoryManagementPage(
-                  role: _role,
-                  userId: _userId,
-                ),
-              ),
-            );
-          },
-          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          label: const Text('Open Full Device Page'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.primaryPurple,
-            minimumSize: const Size(double.infinity, 50),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ───────────────────────────────────────────
-  // CAREGIVER VIEW: "Device & Inventory"
-  // ───────────────────────────────────────────
-  Widget _buildCaregiverDeviceSheet() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Device & Inventory',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textDark,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Manage connected patient kits and restock medications.',
-          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.orange.withOpacity(0.5)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Low Stock Alert (DISP-10001)',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'John Doe\'s Amlodipine is running out (2 left).',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () {
-            Navigator.pop(context);
-            _showMockSnackBar('Quick Restock successful! SQL `add_inventory_refill` executed.');
-          },
-          icon: const Icon(Icons.medication_rounded),
-          label: const Text('Quick Restock (快捷补药)'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4CAF82),
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextButton.icon(
-          onPressed: () {
-            Navigator.pop(context);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => InventoryManagementPage(
-                  role: _role,
-                  userId: _userId,
-                ),
-              ),
-            );
-          },
-          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          label: const Text('Open Full Inventory Page'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.primaryPurple,
-            minimumSize: const Size(double.infinity, 50),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDeviceStatCard(IconData icon, String label, String value, Color color) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 28),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showMockSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.textDark,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+  void _navigateToInventoryPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            InventoryManagementPage(role: _role, userId: _userId),
       ),
     );
   }

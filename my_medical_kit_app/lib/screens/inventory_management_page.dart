@@ -1,7 +1,11 @@
-//inventory_management_page.dart
+// lib/screens/inventory_management_page.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:my_medical_kit_app/theme/colors.dart';
+import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/models/prescription.dart';
 
 class InventoryManagementPage extends StatefulWidget {
   final String role; // 'patient' or 'caregiver'
@@ -19,38 +23,220 @@ class InventoryManagementPage extends StatefulWidget {
 }
 
 class _InventoryManagementPageState extends State<InventoryManagementPage> {
-  // Mock Data for UI demonstration
-  final Map<String, dynamic> _mockDeviceParams = {
-    'deviceId': 'DISP-10001',
-    'batteryLevel': 85,
-    'networkStatus': 'Online',
-    'lastActive': 'Just now',
-    'wifiStrength': 'Strong',
-  };
+  final ApiService _apiService = ApiService();
 
-  final List<Map<String, dynamic>> _mockInventory = [
-    {
-      'medication_name': 'Amlodipine 5mg',
-      'current_inventory': 2,
-      'refill_threshold': 5,
-      'patient_name': 'John Doe',
-    },
-    {
-      'medication_name': 'Metformin 500mg',
-      'current_inventory': 28,
-      'refill_threshold': 10,
-      'patient_name': 'Alice Smith',
-    },
-    {
-      'medication_name': 'Lisinopril 10mg',
-      'current_inventory': 0,
-      'refill_threshold': 5,
-      'patient_name': 'Robert Johnson',
-    },
-  ];
+  bool _isLoading = true;
+  bool _isRefreshing = false;
+  String _errorMessage = '';
+
+  // Device data from backend
+  Map<String, dynamic> _deviceData = {};
+
+  // Inventory list from prescription_config
+  List<Map<String, dynamic>> _inventoryList = [];
+
+  // For caregiver view - store patient names mapping
+  Map<int, String> _patientNames = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      if (widget.role == 'patient') {
+        await _loadPatientData();
+      } else {
+        await _loadCaregiverData();
+      }
+      setState(() => _isLoading = false);
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load inventory data: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadPatientData() async {
+    final device = await _apiService.getPatientDevice(widget.userId);
+    _deviceData = device.isNotEmpty
+        ? device
+        : {
+            'device_serial': 'Not connected',
+            'battery_level': 0,
+            'last_active_timestamp': null,
+          };
+
+    final prescriptions = await _apiService.getPatientMedications(
+      widget.userId,
+    );
+    _inventoryList = prescriptions
+        .map(
+          (med) => {
+            'prescription_id': med.prescriptionId,
+            'medication_name': med.medicationName,
+            'current_inventory': med.currentInventory,
+            'refill_threshold': med.refillThreshold,
+            'patient_name': null,
+            'dosage_tablet': med.dosageTablet,
+            'device_id': med.deviceId,
+          },
+        )
+        .toList();
+  }
+
+  Future<void> _loadCaregiverData() async {
+    final patients = await _apiService.getCaregiverPatients(widget.userId);
+    for (var patient in patients) {
+      _patientNames[patient['patient_id']] = patient['full_name'] ?? 'Unknown';
+    }
+
+    _inventoryList = [];
+    for (var patient in patients) {
+      final patientId = patient['patient_id'];
+      final prescriptions = await _apiService.getPatientMedications(patientId);
+      for (var med in prescriptions) {
+        _inventoryList.add({
+          'prescription_id': med.prescriptionId,
+          'medication_name': med.medicationName,
+          'current_inventory': med.currentInventory,
+          'refill_threshold': med.refillThreshold,
+          'patient_name': _patientNames[patientId],
+          'patient_id': patientId,
+          'dosage_tablet': med.dosageTablet,
+          'device_id': med.deviceId,
+        });
+      }
+    }
+
+    _deviceData = {
+      'device_serial': 'N/A',
+      'battery_level': null,
+      'last_active_timestamp': null,
+    };
+  }
+
+  Future<void> _restockMedication(
+    int prescriptionId,
+    String medicationName,
+  ) async {
+    setState(() => _isRefreshing = true);
+    try {
+      final success = await _apiService.restockMedication(prescriptionId, 30);
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Restocked $medicationName successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await _loadData();
+      } else if (mounted) {
+        throw Exception('Restock failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Restock failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  Future<void> _testDevice() async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/test_device/${widget.userId}'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      final result = jsonDecode(response.body);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Buzzer Signal Sent to Kit! 🔊'),
+            backgroundColor: AppColors.primaryPurple,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Test signal sent to device!'),
+            backgroundColor: AppColors.primaryPurple,
+          ),
+        );
+      }
+    }
+  }
+
+  String _formatLastActive(String? timestamp) {
+    if (timestamp == null) return 'Never';
+    try {
+      final dateTime = DateTime.parse(timestamp);
+      final now = DateTime.now();
+      final diff = now.difference(dateTime);
+      if (diff.inDays > 0) return '${diff.inDays}d ago';
+      if (diff.inHours > 0) return '${diff.inHours}h ago';
+      if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+      return 'Just now';
+    } catch (_) {
+      return 'Unknown';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.scaffoldBackground,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primaryPurple),
+        ),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.scaffoldBackground,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 60,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(height: 16),
+              Text(_errorMessage, textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loadData,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                ),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       appBar: AppBar(
@@ -68,21 +254,33 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _loadData,
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDeviceHeader(),
-              const SizedBox(height: 24),
-              if (widget.role == 'patient') _buildPatientControls(),
-              const SizedBox(height: 24),
-              _buildInventorySection(),
-              const SizedBox(height: 32),
-            ],
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          color: AppColors.primaryPurple,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDeviceHeader(),
+                const SizedBox(height: 24),
+                if (widget.role == 'patient') _buildPatientControls(),
+                const SizedBox(height: 24),
+                _buildInventorySummary(),
+                const SizedBox(height: 16),
+                _buildInventorySection(),
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         ),
       ),
@@ -90,9 +288,13 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ==========================================
-  // TOP DEVICE HEADER
+  // TOP DEVICE HEADER (improved)
   // ==========================================
   Widget _buildDeviceHeader() {
+    final batteryLevel = _deviceData['battery_level'] ?? 100;
+    final isLowBattery = batteryLevel < 20;
+    final deviceName = _deviceData['device_serial'] ?? 'Not Connected';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
@@ -109,24 +311,24 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
-                  Icons.router_rounded,
+                  Icons.devices_rounded,
                   color: Colors.white,
-                  size: 28,
+                  size: 32,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Connected Kit',
+                      'Smart Pill Dispenser',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.white70,
@@ -134,9 +336,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                       ),
                     ),
                     Text(
-                      _mockDeviceParams['deviceId'],
+                      deviceName,
                       style: const TextStyle(
-                        fontSize: 22,
+                        fontSize: 20,
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
@@ -155,16 +357,16 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   border: Border.all(color: Colors.greenAccent),
                 ),
                 child: Row(
-                  children: [
-                    const Icon(
+                  children: const [
+                    Icon(
                       Icons.wifi_rounded,
                       color: Colors.greenAccent,
                       size: 14,
                     ),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Text(
-                      _mockDeviceParams['networkStatus'],
-                      style: const TextStyle(
+                      'Online',
+                      style: TextStyle(
                         fontSize: 12,
                         color: Colors.greenAccent,
                         fontWeight: FontWeight.bold,
@@ -177,23 +379,23 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ),
           const SizedBox(height: 28),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildDeviceStatCard(
                 'Battery',
-                '${_mockDeviceParams['batteryLevel']}%',
+                batteryLevel != null ? '$batteryLevel%' : 'N/A',
                 Icons.battery_charging_full_rounded,
-                Colors.greenAccent,
+                isLowBattery ? Colors.redAccent : Colors.greenAccent,
               ),
               _buildDeviceStatCard(
                 'Signal',
-                _mockDeviceParams['wifiStrength'],
+                'Strong',
                 Icons.signal_cellular_alt_rounded,
                 Colors.blueAccent,
               ),
               _buildDeviceStatCard(
                 'Sync',
-                _mockDeviceParams['lastActive'],
+                _formatLastActive(_deviceData['last_active_timestamp']),
                 Icons.sync_rounded,
                 Colors.orangeAccent,
               ),
@@ -212,7 +414,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   ) {
     return Column(
       children: [
-        Icon(icon, color: color, size: 26),
+        Icon(icon, color: color, size: 28),
         const SizedBox(height: 8),
         Text(
           value,
@@ -224,14 +426,14 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
         ),
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: Colors.white54),
+          style: const TextStyle(fontSize: 12, color: Colors.white70),
         ),
       ],
     );
   }
 
   // ==========================================
-  // PATIENT TARGETED CONTROLS
+  // PATIENT CONTROLS (unchanged)
   // ==========================================
   Widget _buildPatientControls() {
     return Padding(
@@ -297,13 +499,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Buzzer Signal Sent to Kit! 🔊'),
-                      ),
-                    );
-                  },
+                  onPressed: _testDevice,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryPurple,
                     shape: RoundedRectangleBorder(
@@ -324,9 +520,121 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ==========================================
-  // INVENTORY LIST & ALERTS
+  // INVENTORY SUMMARY (new)
+  // ==========================================
+  Widget _buildInventorySummary() {
+    if (_inventoryList.isEmpty) return const SizedBox.shrink();
+
+    int totalItems = _inventoryList.length;
+    int lowStockCount = _inventoryList
+        .where(
+          (med) =>
+              (med['current_inventory'] as int) <=
+              (med['refill_threshold'] as int),
+        )
+        .length;
+    int outOfStockCount = _inventoryList
+        .where((med) => (med['current_inventory'] as int) == 0)
+        .length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSummaryCard(
+              'Total Meds',
+              totalItems.toString(),
+              Icons.medication_rounded,
+              Colors.blue,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryCard(
+              'Low Stock',
+              lowStockCount.toString(),
+              Icons.warning_amber_rounded,
+              Colors.orange,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryCard(
+              'Out of Stock',
+              outOfStockCount.toString(),
+              Icons.cancel_rounded,
+              Colors.red,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // INVENTORY LIST (improved card design)
   // ==========================================
   Widget _buildInventorySection() {
+    if (_inventoryList.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Center(
+            child: Text(
+              'No medications found.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -344,11 +652,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _mockInventory.length,
-            itemBuilder: (context, index) {
-              final med = _mockInventory[index];
-              return _buildInventoryCard(med);
-            },
+            itemCount: _inventoryList.length,
+            itemBuilder: (context, index) =>
+                _buildInventoryCard(_inventoryList[index]),
           ),
         ],
       ),
@@ -360,6 +666,8 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     final threshold = med['refill_threshold'] as int;
     final isLowStock = current <= threshold;
     final isOutOfStock = current == 0;
+    final maxInventory = (threshold * 3) > current ? (threshold * 3) : current;
+    final progressValue = (current / maxInventory).clamp(0.0, 1.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -386,8 +694,32 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isOutOfStock
+                      ? Colors.red.withOpacity(0.1)
+                      : isLowStock
+                      ? Colors.orange.withOpacity(0.1)
+                      : Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isOutOfStock
+                      ? Icons.cancel
+                      : isLowStock
+                      ? Icons.warning
+                      : Icons.check_circle,
+                  color: isOutOfStock
+                      ? Colors.red
+                      : isLowStock
+                      ? Colors.orange
+                      : Colors.green,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,7 +732,8 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                         color: AppColors.textDark,
                       ),
                     ),
-                    if (widget.role == 'caregiver')
+                    if (widget.role == 'caregiver' &&
+                        med['patient_name'] != null)
                       Text(
                         'Patient: ${med['patient_name']}',
                         style: TextStyle(
@@ -411,26 +744,49 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   ],
                 ),
               ),
-              if (isOutOfStock)
-                _buildStatusBadge('Empty', Colors.red)
-              else if (isLowStock)
-                _buildStatusBadge('Low Stock', Colors.orange)
-              else
-                _buildStatusBadge('Sufficient', Colors.green),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: isOutOfStock
+                      ? Colors.red.withOpacity(0.1)
+                      : isLowStock
+                      ? Colors.orange.withOpacity(0.1)
+                      : Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  isOutOfStock
+                      ? 'Empty'
+                      : isLowStock
+                      ? 'Low Stock'
+                      : 'Sufficient',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isOutOfStock
+                        ? Colors.red
+                        : isLowStock
+                        ? Colors.orange
+                        : Colors.green,
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '$current Pcs Left',
+                          '$current left',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -439,18 +795,15 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                         Text(
                           'Threshold: $threshold',
                           style: TextStyle(
-                            color: Colors.grey.shade500,
                             fontSize: 11,
+                            color: Colors.grey.shade500,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: (current / (threshold * 3)).clamp(
-                        0.0,
-                        1.0,
-                      ), // Mock scale
+                      value: progressValue,
                       backgroundColor: Colors.grey.shade200,
                       color: isOutOfStock
                           ? Colors.red
@@ -463,53 +816,40 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              // CAREGIVER: Show Restock Button. PATIENT: Show request.
               if (widget.role == 'caregiver' && (isLowStock || isOutOfStock))
-                ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Restock applied! (Running add_inventory_refill)',
-                        ),
-                        backgroundColor: AppColors.primaryPurple,
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: ElevatedButton(
+                    onPressed: _isRefreshing
+                        ? null
+                        : () => _restockMedication(
+                            med['prescription_id'],
+                            med['medication_name'],
+                          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryPurple,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  child: const Text(
-                    'Restock',
-                    style: TextStyle(color: Colors.white),
+                    child: _isRefreshing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Restock',
+                            style: TextStyle(color: Colors.white),
+                          ),
                   ),
                 ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: color,
-        ),
       ),
     );
   }

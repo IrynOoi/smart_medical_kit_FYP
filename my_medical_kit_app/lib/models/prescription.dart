@@ -33,16 +33,26 @@ class Prescription {
   bool get isOutOfStock => currentInventory <= 0;
 
   factory Prescription.fromJson(Map<String, dynamic> json) {
+    double parseDosage(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is double) return value;
+      if (value is int) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return Prescription(
       prescriptionId: json['prescription_id'],
       patientId: json['patient_id'],
       medicationName: json['medication_name'],
-      dosageTablet: json['dosage_tablet'].toDouble(),
+      dosageTablet: parseDosage(json['dosage_tablet']),
       dispenseSchedule: json['dispense_schedule'],
       currentInventory: json['current_inventory'] ?? 0,
       refillThreshold: json['refill_threshold'] ?? 5,
       startDate: DateTime.parse(json['start_date']),
-      endDate: json['end_date'] != null ? DateTime.parse(json['end_date']) : null,
+      endDate: json['end_date'] != null
+          ? DateTime.parse(json['end_date'])
+          : null,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
       deviceId: json['device_id'],

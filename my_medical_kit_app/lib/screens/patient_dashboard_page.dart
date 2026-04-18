@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:my_medical_kit_app/models/patient.dart';
-import 'package:my_medical_kit_app/models/medication.dart';
+import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:my_medical_kit_app/models/ai_prediction.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
@@ -29,7 +29,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
   // Data from PostgreSQL
   Patient? _patient;
-  List<Medication> _medications = [];
+  List<Prescription> _medications = [];
   List<AdherenceLog> _recentLogs = [];
   AIPrediction? _aiPrediction;
   Map<String, dynamic> _adherenceStats = {};
@@ -85,7 +85,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
       setState(() {
         _patient = results[0] as Patient?;
-        _medications = results[1] as List<Medication>;
+        _medications = results[1] as List<Prescription>;
         _recentLogs = logs;
         _aiPrediction = results[3] as AIPrediction?;
         _adherenceStats = results[4] as Map<String, dynamic>;
@@ -104,7 +104,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   }
 
   // ✅ FIXED: Compute max inventory from actual data, not hardcoded multiplier
-  int _getMaxInventory(Medication med) {
+  int _getMaxInventory(Prescription med) {
     // Use refill_threshold * 2 as max, or fallback to current inventory if higher
     final calculatedMax = med.refillThreshold * 2;
     if (med.currentInventory > calculatedMax) {
@@ -155,7 +155,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     return (_taken / total) * 100;
   }
 
-  Medication? get _nextDose =>
+  Prescription? get _nextDose =>
       _medications.where((m) => m.currentInventory > 0).isNotEmpty
       ? _medications.where((m) => m.currentInventory > 0).first
       : null;
@@ -796,7 +796,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     );
   }
 
-  Widget _buildInventoryTile(Medication med) {
+  Widget _buildInventoryTile(Prescription med) {
     final isLow = med.isLowStock;
     // ✅ FIXED: Use dynamic max inventory based on actual data
     final maxInventory = _getMaxInventory(med);

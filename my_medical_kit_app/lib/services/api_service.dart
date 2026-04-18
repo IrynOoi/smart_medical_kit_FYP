@@ -2,7 +2,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/patient.dart';
-import '../models/medication.dart';
+import '../models/prescription.dart';
 import '../models/adherence_log.dart';
 import '../models/notification.dart';
 import '../models/ai_prediction.dart';
@@ -77,16 +77,23 @@ class ApiService {
     }
   }
 
-  Future<List<Medication>> getPatientMedications(int patientId) async {
+  Future<List<Prescription>> getPatientMedications(int patientId) async {
     try {
+      print('🔵 API: getPatientMedications called for patientId: $patientId');
       final response = await http.get(
         Uri.parse('$baseUrl/patient/$patientId/prescriptions'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
       );
+      print('🔵 API Response status: ${response.statusCode}');
+      print('🔵 API Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
+        print('🔵 Decoded response: $jsonResponse');
         if (jsonResponse['success']) {
           final List<dynamic> data = jsonResponse['data'];
-          return data.map((json) => Medication.fromJson(json)).toList();
+          print('🔵 Found ${data.length} prescriptions');
+          return data.map((json) => Prescription.fromJson(json)).toList();
         }
       }
       return [];
@@ -366,6 +373,10 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/caregiver/$caregiverId/analytics_overview'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
       );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
@@ -373,8 +384,9 @@ class ApiService {
           return jsonResponse['data'];
         }
       }
+      // Return empty data - the backend will provide the real average
       return {
-        'overall_adherence_prediction': 85.0,
+        'overall_adherence_prediction': 0.0, // Will be replaced by backend data
         'high_risk_patients': 0,
         'medium_risk_patients': 0,
         'total_analyzed': 0,
@@ -382,7 +394,7 @@ class ApiService {
     } catch (e) {
       print('Error getting analytics overview: $e');
       return {
-        'overall_adherence_prediction': 85.0,
+        'overall_adherence_prediction': 0.0,
         'high_risk_patients': 0,
         'medium_risk_patients': 0,
         'total_analyzed': 0,
@@ -390,10 +402,52 @@ class ApiService {
     }
   }
 
+  // ==========================================
+  // 🤖 PREDICTION ENDPOINT (single patient)
+  // ==========================================
+
+  Future<Map<String, dynamic>> predictAndSaveForPatient({
+    required int patientId,
+    int age = 60,
+    String dayOfWeek = 'Monday',
+    String timeOfDay = 'Morning',
+    List<int> history = const [1, 1, 1],
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/predict_and_save'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'age': age,
+          'day_of_week': dayOfWeek,
+          'time_of_day': timeOfDay,
+          'history': history,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      if (jsonResponse['success']) {
+        return jsonResponse['data']; // contains prediction_score, risk_level
+      }
+      return {'error': jsonResponse['error'] ?? 'Unknown error'};
+    } catch (e) {
+      print('Error calling predict_and_save: $e');
+      return {'error': e.toString()};
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/caregiver/$caregiverId/at_risk_patients'),
+        // 👇 Add these headers!
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
       );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
@@ -405,6 +459,101 @@ class ApiService {
     } catch (e) {
       print('Error getting at-risk patients: $e');
       return [];
+    }
+  }
+
+  // Add to api_service.dart
+
+  // ==========================================
+  // 🤖 AI PREDICTION ENDPOINTS
+  // ==========================================
+
+  Future<bool> predictAndSave({
+    required int patientId,
+    required int age,
+    required String dayOfWeek,
+    required String timeOfDay,
+    required List<int> history,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/predict_and_save'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'age': age,
+          'day_of_week': dayOfWeek,
+          'time_of_day': timeOfDay,
+          'history': history,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error predicting for patient: $e');
+      return false;
+    }
+  }
+
+  Future<bool> runBatchPrediction() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/run_ai_analytics_job'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error running batch prediction: $e');
+      return false;
+    }
+  }
+
+  // Add this to your api_service.dart
+
+  Future<Map<String, dynamic>> getPatientDevice(int patientId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/iot_device/patient/$patientId'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return jsonResponse['data'];
+        }
+      }
+      return {};
+    } catch (e) {
+      print('Error getting device: $e');
+      return {};
+    }
+  }
+
+  Future<bool> restockMedication(int prescriptionId, int quantity) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/restock_medication'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'prescription_id': prescriptionId,
+          'quantity': quantity,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error restocking: $e');
+      return false;
     }
   }
 }
