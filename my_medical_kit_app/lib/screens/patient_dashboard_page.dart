@@ -2,6 +2,7 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:my_medical_kit_app/screens/smart_reminder_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:my_medical_kit_app/models/patient.dart';
@@ -38,10 +39,23 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   // Weekly data: [Mon, Tue, Wed, Thu, Fri, Sat, Sun] taken count
   List<double> _weeklyTaken = [0, 0, 0, 0, 0, 0, 0];
 
+  // Dynamic Graph State
+  String _selectedPeriod = 'Week'; // Options: 'Day', 'Week', 'Month'
+  List<double> _graphData = [0, 0, 0, 0, 0, 0, 0];
+  List<String> _graphLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
   @override
   void initState() {
     super.initState();
     _loadPatientId();
+  }
+
+  String _formatFullTime(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final ampm = h >= 12 ? 'PM' : 'AM';
+    final hr12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+    return '$hr12:$m $ampm';
   }
 
   // ✅ FIXED: Load patient ID from stored session
@@ -51,17 +65,95 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       final savedPatientId = prefs.getInt('patient_id');
       if (savedPatientId != null && savedPatientId > 0) {
         _currentPatientId = savedPatientId;
+        await _loadAll();
       } else {
-        // Fallback: try to get from API or show error
-        _currentPatientId = 1; // Only as last resort, show login screen instead
+        // No valid session – go to login
+        _redirectToLogin();
       }
-      await _loadAll();
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Please login again';
-        _isLoading = false;
-      });
+      _redirectToLogin();
     }
+  }
+
+  void _updateChartPeriod(String period) {
+    setState(() {
+      _selectedPeriod = period;
+      final now = DateTime.now();
+      Map<String, double> groupedData = {};
+
+      if (period == 'Day') {
+        final todaysLogs = _recentLogs.where((log) {
+          if (log.scheduledTime == null) return false;
+          return log.scheduledTime!.day == now.day &&
+              log.scheduledTime!.month == now.month &&
+              log.scheduledTime!.year == now.year;
+        }).toList();
+
+        todaysLogs.sort((a, b) => a.scheduledTime!.compareTo(b.scheduledTime!));
+
+        if (todaysLogs.isEmpty) {
+          groupedData = {'8am': 0.0, '12pm': 0.0, '4pm': 0.0, '8pm': 0.0};
+        } else {
+          for (var log in todaysLogs) {
+            String timeLabel = _formatFullTime(log.scheduledTime!);
+            groupedData.putIfAbsent(timeLabel, () => 0.0);
+            if (log.isTaken) {
+              groupedData[timeLabel] = groupedData[timeLabel]! + 1.0;
+            }
+          }
+          if (groupedData.length == 1) {
+            String onlyKey = groupedData.keys.first;
+            double val = groupedData[onlyKey]!;
+            groupedData = {'12am': 0.0, onlyKey: val, '11pm': 0.0};
+          }
+        }
+      } else if (period == 'Week') {
+        // ✅ 补全 Week 逻辑
+        const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        for (int i = 6; i >= 0; i--) {
+          final day = now.subtract(Duration(days: i));
+          groupedData[weekDays[day.weekday - 1]] = 0.0;
+        }
+        final weekLogs = _recentLogs.where((log) {
+          if (log.scheduledTime == null) return false;
+          return now.difference(log.scheduledTime!).inDays < 7;
+        });
+        for (var log in weekLogs) {
+          if (log.isTaken) {
+            String dayLabel = weekDays[log.scheduledTime!.weekday - 1];
+            if (groupedData.containsKey(dayLabel)) {
+              groupedData[dayLabel] = groupedData[dayLabel]! + 1.0;
+            }
+          }
+        }
+      } else if (period == 'Month') {
+        groupedData = {'Wk 1': 0.0, 'Wk 2': 0.0, 'Wk 3': 0.0, 'Wk 4': 0.0};
+        final monthLogs = _recentLogs.where((log) {
+          if (log.scheduledTime == null) return false;
+          return now.difference(log.scheduledTime!).inDays < 28;
+        });
+        for (var log in monthLogs) {
+          if (log.isTaken) {
+            int daysAgo = now.difference(log.scheduledTime!).inDays;
+            if (daysAgo < 7)
+              groupedData['Wk 4'] = groupedData['Wk 4']! + 1.0;
+            else if (daysAgo < 14)
+              groupedData['Wk 3'] = groupedData['Wk 3']! + 1.0;
+            else if (daysAgo < 21)
+              groupedData['Wk 2'] = groupedData['Wk 2']! + 1.0;
+            else if (daysAgo < 28)
+              groupedData['Wk 1'] = groupedData['Wk 1']! + 1.0;
+          }
+        }
+      }
+
+      _graphLabels = groupedData.keys.toList();
+      _graphData = groupedData.values.toList();
+    });
+  }
+
+  void _redirectToLogin() {
+    Navigator.pushReplacementNamed(context, '/login');
   }
 
   Future<void> _loadAll() async {
@@ -71,6 +163,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       _isLoading = true;
       _errorMessage = '';
     });
+    print('Caregiver name: ${_patient?.caregiver?.user.fullName}');
     try {
       final results = await Future.wait([
         _apiService.getPatient(_currentPatientId),
@@ -93,6 +186,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         _weeklyTaken = _computeWeekly(logs);
         _isLoading = false;
       });
+      _updateChartPeriod(_selectedPeriod); // ← ADD THIS LINE
     } catch (e, stack) {
       debugPrint('❌ ERROR: $e');
       debugPrint('❌ STACK: $stack');
@@ -275,15 +369,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       const SizedBox(height: 16),
                       _buildDonutCard(),
                       const SizedBox(height: 18),
-                      _buildWeeklyLineChart(),
+                      _buildAdherenceChart(),
                       const SizedBox(height: 18),
                       _buildAIPredictionBanner(),
                       const SizedBox(height: 18),
-                      _buildNextDoseCard(),
-                      const SizedBox(height: 18),
-                      _buildInventoryRow(),
-                      const SizedBox(height: 18),
-                      _buildRecentLogs(),
+                      _buildCaregiverCard(), // ← ADD THIS LINE
+
                       const SizedBox(height: 30),
                     ],
                   ),
@@ -302,7 +393,20 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   }
 
   String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month - 1];
   }
 
@@ -311,7 +415,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   // ──────────────────────────────────────────
   Widget _buildHeader() {
     final topPadding = MediaQuery.of(context).padding.top;
-    final patientName = _patient?.fullName.split(' ').first ?? 'Patient';
+    final patientName = _patient?.user.fullName ?? 'Patient';
 
     return Container(
       width: double.infinity,
@@ -357,26 +461,17 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               ),
               Row(
                 children: [
+                  // ✅ NEW: Reminder icon (opens SmartReminderPage)
                   GestureDetector(
-                    onTap: () {},
-                    child: Stack(
-                      children: [
-                        _buildIconBox(Icons.notifications_outlined),
-                        if (_unreadNotifications > 0)
-                          Positioned(
-                            right: 6,
-                            top: 6,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Colors.redAccent,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SmartReminderPage(),
+                        ),
+                      );
+                    },
+                    child: _buildIconBox(Icons.alarm_rounded),
                   ),
                 ],
               ),
@@ -425,9 +520,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   radius: 28,
                   backgroundColor: Colors.white,
                   child: Text(
-                    patientName.isNotEmpty
-                        ? patientName[0].toUpperCase()
-                        : 'P',
+                    patientName.isNotEmpty ? patientName[0].toUpperCase() : 'P',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -594,8 +687,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   // ──────────────────────────────────────────
   // WEEKLY LINE CHART
   // ──────────────────────────────────────────
-  Widget _buildWeeklyLineChart() {
-    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  Widget _buildAdherenceChart() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -603,29 +695,48 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Weekly Doses Taken',
+              'Adherence Trends',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),
             ),
+            // Dynamic Segmented Control
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 4,
-              ),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(
-                'This Week',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.primaryPurple,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Row(
+                children: ['Day', 'Week', 'Month'].map((period) {
+                  final isSelected = _selectedPeriod == period;
+                  return GestureDetector(
+                    onTap: () => _updateChartPeriod(period),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppColors.primaryPurple
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        period,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? Colors.white
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
           ],
@@ -640,19 +751,26 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 child: CustomPaint(
                   size: const Size(double.infinity, 110),
                   painter: _LinePainter(
-                    data: _weeklyTaken,
+                    data: _graphData.isEmpty
+                        ? [0]
+                        : _graphData, // Prevent empty data crash
                     lineColor: AppColors.primaryPurple,
                   ),
                 ),
               ),
               const SizedBox(height: 6),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: weekDays
+                mainAxisAlignment: _graphLabels.length == 1
+                    ? MainAxisAlignment.center
+                    : MainAxisAlignment.spaceBetween,
+                children: _graphLabels
                     .map(
                       (d) => Text(
                         d,
-                        style: const TextStyle(fontSize: 14, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                     )
                     .toList(),
@@ -790,6 +908,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       );
     }
 
+    final deviceId = dose.deviceId;
+    final canTake = deviceId != null && deviceId > 0;
+
     return _card(
       child: Row(
         children: [
@@ -828,83 +949,263 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               ],
             ),
           ),
-          ElevatedButton(
-            onPressed: () =>
-                _markTaken(dose.prescriptionId, dose.deviceId ?? 1),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white,
+          if (canTake)
+            ElevatedButton(
+              onPressed: () => _markTaken(dose.prescriptionId, deviceId!),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Take',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            )
+          else
+            Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
               ),
-              elevation: 0,
+              child: const Text(
+                'No device',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
-            child: const Text(
-              'Take',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  // ──────────────────────────────────────────
-  // INVENTORY ROW - FIXED: No hardcoded multiplier
-  // ──────────────────────────────────────────
-  Widget _buildInventoryRow() {
-    final lowStock = _medications.where((m) => m.isLowStock).toList();
-    final allMeds = _medications.take(4).toList();
+  Widget _buildCaregiverCard() {
+    final caregiver = _patient?.caregiver;
+    if (caregiver == null) return const SizedBox.shrink();
 
-    if (allMeds.isEmpty) return const SizedBox.shrink();
+    final name = caregiver.user.fullName;
+    final phone = caregiver.user.phoneNo ?? 'N/A';
+    final email = caregiver.user.email ?? 'N/A';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Inventory Status',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            if (lowStock.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+        const Text(
+          'My Caregiver',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _card(
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.teal.shade50,
                 child: Text(
-                  '${lowStock.length} low stock',
+                  name.isNotEmpty ? name[0].toUpperCase() : 'C',
                   style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.primaryPurple,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal,
                   ),
                 ),
               ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 2.4,
-          children: allMeds.map((med) => _buildInventoryTile(med)).toList(),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.phone, size: 14, color: Colors.teal),
+                        const SizedBox(width: 4),
+                        Text(
+                          phone,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(Icons.email, size: 14, color: Colors.teal),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            email,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  // // ──────────────────────────────────────────
+  // // INVENTORY ROW - FIXED: No hardcoded multiplier
+  // // ──────────────────────────────────────────
+  // Widget _buildSmartCaregiverSection() {
+  //   final allMeds = _medications.take(4).toList();
+  //   if (allMeds.isEmpty) return const SizedBox.shrink();
+
+  //   final caregiverName = _patient?.caregiver?.user.fullName ?? 'Unassigned';
+
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       Row(
+  //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //         children: [
+  //           const Text(
+  //             'Smart Kit Status',
+  //             style: TextStyle(
+  //               fontSize: 18,
+  //               fontWeight: FontWeight.bold,
+  //               color: Colors.black87,
+  //             ),
+  //           ),
+  //           // 照顾者标签
+  //           Container(
+  //             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+  //             decoration: BoxDecoration(
+  //               color: Colors.teal.withOpacity(0.1),
+  //               borderRadius: BorderRadius.circular(20),
+  //               border: Border.all(color: Colors.teal.withOpacity(0.3)),
+  //             ),
+  //             child: Row(
+  //               children: [
+  //                 const Icon(
+  //                   Icons.support_agent_rounded,
+  //                   size: 14,
+  //                   color: Colors.teal,
+  //                 ),
+  //                 const SizedBox(width: 4),
+  //                 Text(
+  //                   'Caregiver: $caregiverName',
+  //                   style: const TextStyle(
+  //                     fontSize: 13,
+  //                     color: Colors.teal,
+  //                     fontWeight: FontWeight.w600,
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //       const SizedBox(height: 10),
+  //       GridView.count(
+  //         crossAxisCount: 2,
+  //         shrinkWrap: true,
+  //         physics: const NeverScrollableScrollPhysics(),
+  //         mainAxisSpacing: 10,
+  //         crossAxisSpacing: 10,
+  //         childAspectRatio: 2.2,
+  //         children: allMeds
+  //             .map((med) => _buildSmartInventoryTile(med))
+  //             .toList(),
+  //       ),
+  //     ],
+  //   );
+  // }
+
+  Widget _buildSmartInventoryTile(Prescription med) {
+    final isLow = med.isLowStock;
+    final maxInventory = _getMaxInventory(med);
+    final pct = (med.currentInventory / maxInventory).clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isLow ? Colors.red.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isLow
+              ? Colors.red.shade200
+              : AppColors.premiumLight.withOpacity(0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  med.medicationName,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isLow ? Colors.red.shade900 : Colors.black87,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isLow)
+                const Icon(Icons.warning_rounded, size: 14, color: Colors.red),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 5,
+              backgroundColor: isLow
+                  ? Colors.red.shade100
+                  : Colors.grey.shade200,
+              color: isLow ? Colors.redAccent : AppColors.primaryPurple,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Emphasizes "tablets" dynamically avoiding hardcoded strings
+          Text(
+            isLow
+                ? 'Alert: Only ${med.currentInventory} tablets left'
+                : '${med.currentInventory} tablets remaining',
+            style: TextStyle(
+              fontSize: 11,
+              color: isLow ? Colors.red.shade700 : Colors.grey.shade600,
+              fontWeight: isLow ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -965,10 +1266,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           const SizedBox(height: 3),
           Text(
             '${med.currentInventory} left',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.premiumDark,
-            ),
+            style: TextStyle(fontSize: 13, color: AppColors.premiumDark),
           ),
         ],
       ),
@@ -976,121 +1274,147 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   }
 
   // ──────────────────────────────────────────
-  // RECENT LOGS
+  // PRESCRIPTION SCHEDULE (assigned by caregiver)
   // ──────────────────────────────────────────
-  Widget _buildRecentLogs() {
-    final displayLogs = _recentLogs.take(5).toList();
-    if (displayLogs.isEmpty) return const SizedBox.shrink();
+  Widget _buildPrescriptionSchedule() {
+    if (_medications.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Recent History',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            TextButton(
-              onPressed: () {},
-              child: Text(
-                'See all',
-                style: TextStyle(color: AppColors.primaryPurple, fontSize: 15),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _card(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: displayLogs.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final log = entry.value;
-              final isTaken = log.isTaken;
-              final isMissed = log.isMissed;
-              final statusColor = AppColors.primaryPurple;
-              final statusLabel = isTaken
-                  ? 'Taken'
-                  : isMissed
-                  ? 'Missed'
-                  : 'Pending';
-
-              return Column(
-                children: [
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isTaken
-                            ? Icons.check_circle_rounded
-                            : isMissed
-                            ? Icons.cancel_rounded
-                            : Icons.schedule_rounded,
-                        color: statusColor,
-                        size: 18,
-                      ),
-                    ),
-                    title: Text(
-                      log.medicationName ?? 'Medication',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    subtitle: Text(
-                      _formatTime(log.scheduledTime!),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (idx < displayLogs.length - 1)
-                    Divider(
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
-                      color: Colors.grey.shade100,
-                    ),
-                ],
-              );
-            }).toList(),
+        const Text(
+          'My Medication Schedule',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
           ),
         ),
+        const SizedBox(height: 12),
+        ..._medications.map((med) => _buildScheduleCard(med)),
       ],
     );
+  }
+
+  Widget _buildScheduleCard(Prescription med) {
+    final scheduleText = _parseCronSchedule(med.dispenseSchedule);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.premiumLight.withOpacity(0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.premiumDark.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryPurple.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              Icons.schedule,
+              color: AppColors.primaryPurple,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  med.medicationName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  scheduleText,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+                if (med.dosageTablet > 0)
+                  Text(
+                    'Dosage: ${med.dosageTablet.toStringAsFixed(0)} tablet(s)',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Convert cron‑style schedule (e.g. "0 8 * * *") to human‑readable text.
+  String _parseCronSchedule(String cron) {
+    // Example patterns:
+    // "0 8 * * *"       -> Daily at 08:00
+    // "0 8,20 * * *"    -> Daily at 08:00 and 20:00
+    // "0 8 * * 1,3,5"   -> Mon, Wed, Fri at 08:00 (not implemented fully, but can be extended)
+    final parts = cron.split(' ');
+    if (parts.length < 5) return cron;
+
+    final minute = parts[0];
+    final hourPart = parts[1];
+    final dayOfMonth = parts[2];
+    final month = parts[3];
+    final dayOfWeek = parts[4];
+
+    // Build time string
+    String timeStr = '';
+    if (hourPart.contains(',')) {
+      final hours = hourPart
+          .split(',')
+          .map((h) => '${h.padLeft(2, '0')}:${minute.padLeft(2, '0')}')
+          .join(', ');
+      timeStr = hours;
+    } else {
+      timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
+    }
+
+    // Build frequency
+    if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
+      if (hourPart.contains(',')) {
+        return 'Daily at $timeStr';
+      } else {
+        return 'Daily at $timeStr';
+      }
+    } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
+      // e.g. "0 8 * * 1,3,5" -> Mon, Wed, Fri at 08:00
+      final days = dayOfWeek.split(',');
+      final dayNames = {
+        '0': 'Sun',
+        '1': 'Mon',
+        '2': 'Tue',
+        '3': 'Wed',
+        '4': 'Thu',
+        '5': 'Fri',
+        '6': 'Sat',
+        '7': 'Sun',
+      };
+      final readableDays = days.map((d) => dayNames[d] ?? d).join(', ');
+      return '$readableDays at $timeStr';
+    }
+
+    // Fallback
+    return cron;
   }
 
   Widget _card({required Widget child, EdgeInsets? padding}) {
@@ -1164,8 +1488,21 @@ class _DonutPainter extends CustomPainter {
         ..strokeWidth = stroke,
     );
 
-    // If there is no data, we stop here (leaving the clean grey circle)
-    if (total == 0) return;
+    // If there is no data, draw a full purple ring to signify 100% adherence / no missed doses
+    if (total == 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        0,
+        2 * pi,
+        false,
+        Paint()
+          ..color = AppColors.primaryPurple.withOpacity(0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round,
+      );
+      return;
+    }
 
     final segments = [
       {'v': taken, 'c': AppColors.primaryPurple},
@@ -1198,19 +1535,6 @@ class _DonutPainter extends CustomPainter {
       final mid = start + sweep / 2;
       final lx = center.dx + radius * cos(mid);
       final ly = center.dy + radius * sin(mid);
-      final pct = '${(v / total * 100).toStringAsFixed(0)}%';
-      final tp = TextPainter(
-        text: TextSpan(
-          text: pct,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(lx - tp.width / 2, ly - tp.height / 2));
 
       start += sweep;
     }
@@ -1221,18 +1545,27 @@ class _DonutPainter extends CustomPainter {
 }
 
 // LINE CHART PAINTER (UI only)
+// 放在 patient_dashboard_page.dart 文件底部，与 _DonutPainter 并列
 class _LinePainter extends CustomPainter {
   final List<double> data;
   final Color lineColor;
+
   _LinePainter({required this.data, required this.lineColor});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
-    final maxV = data.reduce(max).clamp(1.0, double.infinity);
 
+    // 处理全零数据的情况（避免除以零）
+    final maxValue = data.reduce((a, b) => a > b ? a : b);
+    final maxV = maxValue > 0 ? maxValue : 1.0;
+
+    // 计算所有数据点的坐标
     final points = List.generate(data.length, (i) {
-      final x = i * size.width / (data.length - 1);
+      final x = data.length == 1
+          ? size.width /
+                2 // 单点居中
+          : i * size.width / (data.length - 1);
       final y =
           size.height -
           (data[i] / maxV) * size.height * 0.8 -
@@ -1240,66 +1573,75 @@ class _LinePainter extends CustomPainter {
       return Offset(x, y);
     });
 
-    final fill = Path()..moveTo(points.first.dx, size.height);
-    for (int i = 0; i < points.length - 1; i++) {
-      final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
-      final cp2 = Offset(
-        (points[i].dx + points[i + 1].dx) / 2,
-        points[i + 1].dy,
+    // 绘制背景填充（贝塞尔曲线平滑）
+    if (data.length > 1) {
+      final fillPath = Path()..moveTo(points.first.dx, size.height);
+      for (int i = 0; i < points.length - 1; i++) {
+        final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
+        final cp2 = Offset(
+          (points[i].dx + points[i + 1].dx) / 2,
+          points[i + 1].dy,
+        );
+        fillPath.cubicTo(
+          cp1.dx,
+          cp1.dy,
+          cp2.dx,
+          cp2.dy,
+          points[i + 1].dx,
+          points[i + 1].dy,
+        );
+      }
+      fillPath
+        ..lineTo(points.last.dx, size.height)
+        ..close();
+
+      canvas.drawPath(
+        fillPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [lineColor.withOpacity(0.25), lineColor.withOpacity(0.0)],
+          ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
       );
-      fill.cubicTo(
-        cp1.dx,
-        cp1.dy,
-        cp2.dx,
-        cp2.dy,
-        points[i + 1].dx,
-        points[i + 1].dy,
+
+      // 绘制折线（贝塞尔曲线）
+      final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+      for (int i = 0; i < points.length - 1; i++) {
+        final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
+        final cp2 = Offset(
+          (points[i].dx + points[i + 1].dx) / 2,
+          points[i + 1].dy,
+        );
+        linePath.cubicTo(
+          cp1.dx,
+          cp1.dy,
+          cp2.dx,
+          cp2.dy,
+          points[i + 1].dx,
+          points[i + 1].dy,
+        );
+      }
+      canvas.drawPath(
+        linePath,
+        Paint()
+          ..color = lineColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round,
       );
     }
-    fill
-      ..lineTo(points.last.dx, size.height)
-      ..close();
 
-    canvas.drawPath(
-      fill,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [lineColor.withOpacity(0.25), lineColor.withOpacity(0.0)],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
-    );
-
-    final line = Path()..moveTo(points.first.dx, points.first.dy);
-    for (int i = 0; i < points.length - 1; i++) {
-      final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
-      final cp2 = Offset(
-        (points[i].dx + points[i + 1].dx) / 2,
-        points[i + 1].dy,
-      );
-      line.cubicTo(
-        cp1.dx,
-        cp1.dy,
-        cp2.dx,
-        cp2.dy,
-        points[i + 1].dx,
-        points[i + 1].dy,
-      );
-    }
-    canvas.drawPath(
-      line,
-      Paint()
-        ..color = lineColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round,
-    );
-
+    // 绘制数据点（无论单点还是多点都会绘制）
     for (int i = 0; i < points.length; i++) {
+      // 白色外圈
       canvas.drawCircle(points[i], 6, Paint()..color = Colors.white);
+      // 彩色内圈
       canvas.drawCircle(points[i], 4, Paint()..color = lineColor);
+
+      // 在数据点上方显示数值（仅当数值大于0时显示）
       if (data[i] > 0) {
-        final tp = TextPainter(
+        final textPainter = TextPainter(
           text: TextSpan(
             text: data[i].toInt().toString(),
             style: TextStyle(
@@ -1310,14 +1652,14 @@ class _LinePainter extends CustomPainter {
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        tp.paint(
+        textPainter.paint(
           canvas,
-          Offset(points[i].dx - tp.width / 2, points[i].dy - 20),
+          Offset(points[i].dx - textPainter.width / 2, points[i].dy - 20),
         );
       }
     }
   }
 
   @override
-  bool shouldRepaint(_LinePainter o) => false;
+  bool shouldRepaint(_LinePainter oldDelegate) => true;
 }

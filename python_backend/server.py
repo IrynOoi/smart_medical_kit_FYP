@@ -23,6 +23,7 @@ class CustomJSONProvider(DefaultJSONProvider):
 app = Flask(__name__)
 app.json = CustomJSONProvider(app)
 CORS(app)
+from psycopg2.pool import ThreadedConnectionPool # 改用线程安全的连接池
 
 # ==========================================
 # 💾 Database Configuration
@@ -34,10 +35,9 @@ DB_CONFIG = {
     'password': '123456',
     'port': 5433
 }
-db_pool = pool.SimpleConnectionPool(
-    1, 10,
-    **DB_CONFIG
-)
+
+# 使用 ThreadedConnectionPool，最大连接数稍微调大一点以防高并发
+db_pool = ThreadedConnectionPool(1, 20, **DB_CONFIG)
 
 @contextmanager
 def get_db_connection():
@@ -45,10 +45,13 @@ def get_db_connection():
     try:
         conn = db_pool.getconn()
         yield conn
+    except Exception as e:
+        if conn:
+            conn.rollback() # 【关键修复】如果发生错误，必须回滚清洗这个连接，防止“毒化”！
+        raise e
     finally:
         if conn:
             db_pool.putconn(conn)
-
 def init_db():
     """Test database connection"""
     try:
@@ -106,12 +109,22 @@ def get_all_recent_logs(caregiver_id):
 # 🔐 AUTHENTICATION ENDPOINTS
 # ==========================================
 
+# 1. 在你的路由代码上方加入这个清洗函数
+def clean_string(s):
+    """清除 IoT 硬件传来的不可见字符 0x00"""
+    if isinstance(s, str):
+        return s.replace('\x00', '').replace('\u0000', '')
+    return s
+
+# 2. 修改你的 /login 接口
 @app.route('/login', methods=['POST'])
 def login():
     try:
         data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
+        
+        # 【关键修复】清洗前端或硬件传来的字符串
+        email = clean_string(data.get('email'))
+        password = clean_string(data.get('password'))
 
         if not email or not password:
             return jsonify({"success": False, "message": "Email and password are required"}), 400
@@ -195,24 +208,69 @@ def get_patient(patient_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT u.user_id as patient_id, u.email, u.full_name, u.phone_no, u.address, 
-                       u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at,u.profile_photo,
-                       p.caregiver_id, p.medical_notes
-                FROM users u
-                JOIN patient p ON u.user_id = p.patient_id
-                WHERE u.user_id = %s AND u.role = 'patient'
+                SELECT 
+                    p.patient_id, p.caregiver_id, p.medical_notes,
+                    u.user_id, u.email, u.full_name, u.phone_no, u.address,
+                    u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at, u.profile_photo,
+                    c.caregiver_id AS cg_id, cu.full_name AS cg_full_name, cu.email AS cg_email,
+                    cu.phone_no AS cg_phone_no, cu.address AS cg_address, cu.gender AS cg_gender,
+                    cu.date_of_birth AS cg_date_of_birth, cu.is_active AS cg_is_active,
+                    cu.created_at AS cg_created_at, cu.updated_at AS cg_updated_at, cu.profile_photo AS cg_profile_photo
+                FROM patient p
+                JOIN users u ON p.patient_id = u.user_id
+                LEFT JOIN caregiver c ON p.caregiver_id = c.caregiver_id
+                LEFT JOIN users cu ON c.caregiver_id = cu.user_id
+                WHERE p.patient_id = %s AND u.role = 'patient'
             ''', (patient_id,))
-            patient = cursor.fetchone()
+            row = cursor.fetchone()
             cursor.close()
 
-        if patient:
-            return jsonify({"success": True, "data": patient})
+        if row:
+            patient_data = {
+                "patient_id": row["patient_id"],
+                "caregiver_id": row["caregiver_id"],
+                "medical_notes": row["medical_notes"],
+                "user": {
+                    "user_id": row["user_id"],
+                    "email": row["email"],
+                    "full_name": row["full_name"],
+                    "phone_no": row["phone_no"],
+                    "address": row["address"],
+                    "gender": row["gender"],
+                    "date_of_birth": row["date_of_birth"],
+                    "is_active": row["is_active"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "profile_photo": row["profile_photo"]
+                }
+            }
+            # 构建照顾者信息（如果存在）
+            if row["cg_id"] is not None:
+                patient_data["caregiver"] = {
+                    "caregiver_id": row["cg_id"],
+                    "user": {
+                        "user_id": row["cg_id"],
+                        "email": row["cg_email"],
+                        "full_name": row["cg_full_name"],
+                        "phone_no": row["cg_phone_no"],
+                        "address": row["cg_address"],
+                        "gender": row["cg_gender"],
+                        "date_of_birth": row["cg_date_of_birth"],
+                        "is_active": row["cg_is_active"],
+                        "created_at": row["cg_created_at"],
+                        "updated_at": row["cg_updated_at"],
+                        "profile_photo": row["cg_profile_photo"]
+                    }
+                }
+            else:
+                patient_data["caregiver"] = None
+
+            return jsonify({"success": True, "data": patient_data})
         else:
             return jsonify({"success": False, "error": "Patient not found"}), 404
     except Exception as e:
         print(f"Get patient error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/patient/<int:patient_id>/prescriptions', methods=['GET'])
 def get_patient_prescriptions(patient_id):

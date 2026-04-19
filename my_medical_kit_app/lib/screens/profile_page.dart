@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:my_medical_kit_app/screens/landing_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -58,12 +59,20 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  DateTime? _parseDateSafely(dynamic dateString) {
+    if (dateString == null || dateString.toString().isEmpty) return null;
+    try {
+      return DateTime.parse(dateString.toString());
+    } catch (e) {
+      debugPrint('❌ Date parsing error: $e');
+      return null;
+    }
+  }
+
   // ------------------------------------------------------------
   // LOAD USER DATA (with refresh support)
   // ------------------------------------------------------------
-  // ------------------------------------------------------------
-  // LOAD USER DATA (with refresh support)
-  // ------------------------------------------------------------
+
   Future<void> _loadUserData({bool isRefresh = false}) async {
     if (!isRefresh) {
       setState(() {
@@ -85,15 +94,15 @@ class _ProfilePageState extends State<ProfilePage> {
         final patient = await _apiService.getPatient(_userId);
         if (patient != null) {
           _userData = {
-            'name': patient.fullName,
-            'email': patient.email,
-            'phone': patient.phoneNo ?? 'Not provided',
-            'address': patient.address ?? 'Not provided',
-            'gender': patient.gender?.toString().split('.').last ?? 'Male',
-            'dob': patient.dateOfBirth,
+            'name': patient.user.fullName,
+            'email': patient.user.email,
+            'phone': patient.user.phoneNo ?? 'Not provided',
+            'address': patient.user.address ?? 'Not provided',
+            'gender': patient.user.gender?.toString().split('.').last ?? 'Male',
+            'dob': patient.user.dateOfBirth,
             'notes': patient.medicalNotes ?? 'No medical notes',
-            'is_active': patient.isActive,
-            'profile_photo': patient.profilePhoto,
+            'is_active': patient.user.isActive,
+            'profile_photo': patient.user.profilePhoto,
           };
           debugPrint('🔵 Patient data loaded: ${_userData['name']}');
         } else {
@@ -171,9 +180,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // ------------------------------------------------------------
-  // UPDATE PROFILE (including photo)
-  // ------------------------------------------------------------
   // ------------------------------------------------------------
   // UPDATE PROFILE (including photo)
   // ------------------------------------------------------------
@@ -312,20 +318,19 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // 1. Clear the local session data
     await prefs.clear();
 
     if (!mounted) return;
 
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-  }
-
-  DateTime? _parseDateSafely(dynamic dateString) {
-    if (dateString == null || dateString.toString().isEmpty) return null;
-    try {
-      return DateTime.parse(dateString.toString());
-    } catch (e) {
-      return null;
-    }
+    // 2. Navigate to LandingPage and remove all previous screens from the stack
+    // This ensures the user cannot press "back" to return to the profile
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LandingPage()),
+      (route) => false,
+    );
   }
 
   void _useEmptyDataFallback() {
@@ -801,6 +806,18 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildAvatarSection(String name, String role) {
     final existingPhotoUrl = _userData['profile_photo']?.toString();
 
+    // ✅ Build full URL if relative
+    String? fullPhotoUrl;
+    if (existingPhotoUrl != null && existingPhotoUrl.isNotEmpty) {
+      if (existingPhotoUrl.startsWith('http')) {
+        fullPhotoUrl = existingPhotoUrl;
+      } else {
+        // Prepend base URL from ApiService
+        fullPhotoUrl =
+            '${ApiService.baseUrl}${existingPhotoUrl.startsWith('/') ? '' : '/'}$existingPhotoUrl';
+      }
+    }
+
     return Column(
       children: [
         Container(
@@ -825,12 +842,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   backgroundColor: AppColors.primaryPurple,
                   backgroundImage: _selectedImage != null
                       ? FileImage(_selectedImage!) as ImageProvider
-                      : (existingPhotoUrl != null && existingPhotoUrl.isNotEmpty
-                            ? NetworkImage(existingPhotoUrl)
+                      : (fullPhotoUrl != null
+                            ? NetworkImage(fullPhotoUrl)
                             : null),
-                  child:
-                      _selectedImage == null &&
-                          (existingPhotoUrl == null || existingPhotoUrl.isEmpty)
+                  child: _selectedImage == null && fullPhotoUrl == null
                       ? const Icon(
                           Icons.person_rounded,
                           size: 60,

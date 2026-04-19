@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient_dashboard_page.dart';
 import 'package:my_medical_kit_app/screens/caregiver_dashboard_page.dart';
+import 'package:my_medical_kit_app/screens/patient_history_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/screens/caregiver_medication_history_page.dart';
 import 'package:my_medical_kit_app/screens/profile_page.dart';
@@ -101,12 +102,20 @@ class _BottomNavBarState extends State<BottomNavBar> {
         ? const CaregiverDashboardPage()
         : const PatientDashboardPage();
 
+    Widget historyPage;
+    if (_role == 'patient') {
+      historyPage = const PatientHistoryPage();
+    } else {
+      // 照顾者的历史页面，可以复用或单独写
+      historyPage = const MedicationHistoryScreen(); // 或者你的照顾者历史页
+    }
+
     return [
-      homePage, // 0
-      AiAnalyticsPage(caregiverId: _userId), // 1
-      InventoryManagementPage(role: _role, userId: _userId), // 2 ✅ NEW
-      const MedicationHistoryScreen(), // 3
-      const ProfilePage(), // 4
+      homePage,
+      AiAnalyticsPage(caregiverId: _userId),
+      InventoryManagementPage(role: _role, userId: _userId),
+      historyPage,
+      const ProfilePage(),
     ];
   }
 

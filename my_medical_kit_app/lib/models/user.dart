@@ -33,11 +33,11 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      userId: json['user_id'],
-      email: json['email'],
-      password: json['password'],
-      role: json['role'],
-      fullName: json['full_name'],
+      userId: json['user_id'] ?? 0,
+      email: json['email'] ?? '',
+      password: json['password'] ?? '',
+      role: json['role'] ?? '',
+      fullName: json['full_name'] ?? 'Unknown User',
       phoneNo: json['phone_no'],
       address: json['address'],
       gender: json['gender'],
@@ -46,8 +46,12 @@ class User {
           : null,
       profilePhoto: json['profile_photo'],
       isActive: json['is_active'] == 1 || json['is_active'] == true,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null 
+          ? DateTime.parse(json['updated_at']) 
+          : DateTime.now(),
     );
   }
 

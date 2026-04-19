@@ -66,6 +66,9 @@ class ApiService {
       final response = await http.get(Uri.parse('$baseUrl/patient/$patientId'));
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
+        print(
+          'Caregiver data: ${jsonResponse['data']['caregiver']}',
+        ); // 👈 添加这行
         if (jsonResponse['success']) {
           return Patient.fromJson(jsonResponse['data']);
         }
