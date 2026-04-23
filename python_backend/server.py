@@ -14,10 +14,14 @@ import datetime
 import os
 from contextlib import contextmanager
 
+import decimal
+
 class CustomJSONProvider(DefaultJSONProvider):
     def default(self, obj):
         if isinstance(obj, (datetime.datetime, datetime.date)):
             return obj.isoformat()
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
         return super().default(obj)
 
 app = Flask(__name__)
@@ -369,26 +373,20 @@ def get_notifications(patient_id):
 
 @app.route('/patient/<int:patient_id>/ai_prediction', methods=['GET'])
 def get_ai_prediction(patient_id):
+    """
+    Always compute a fresh prediction using the LSTM model,
+    overwrite the database, and return the result.
+    """
     try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute('''
-                SELECT ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
-                FROM ai_adherence_prediction WHERE patient_id = %s
-                ORDER BY predicted_at DESC LIMIT 1
-            ''', (patient_id,))
-            prediction = cursor.fetchone()
-            cursor.close()
-
-        if prediction:
-            return jsonify({"success": True, "data": prediction})
-        else:
-            return jsonify({"success": True, "data": {"prediction_score": 85.5, "risk_level": "LOW"}})
+        new_pred = compute_prediction_for_patient(patient_id)
+        return jsonify({
+            "success": True,
+            "message": "New prediction generated and saved",
+            "data": new_pred
+        })
     except Exception as e:
         print(f"Get AI prediction error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-
 @app.route('/caregiver/<int:caregiver_id>/overview_stats', methods=['GET'])
 def get_caregiver_overview(caregiver_id):
     try:
@@ -583,6 +581,98 @@ def get_caregiver_alerts(caregiver_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+
+def compute_prediction_for_patient(patient_id):
+    """
+    Compute LSTM prediction using the .h5 model, store in DB (overwrite if exists).
+    Returns the record (including features_used with raw forget probability).
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        # 1. Get patient age from date_of_birth
+        cursor.execute('''
+            SELECT EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth)) AS age
+            FROM users WHERE user_id = %s
+        ''', (patient_id,))
+        age_row = cursor.fetchone()
+        age = int(age_row['age']) if age_row and age_row['age'] else 65
+
+        # 2. Get last 3 adherence statuses (TAKEN=1, MISSED=0)
+        cursor.execute('''
+            SELECT al.status
+            FROM adherence_logs al
+            JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+            WHERE pc.patient_id = %s AND al.status IN ('TAKEN', 'MISSED')
+            ORDER BY al.scheduled_time DESC LIMIT 3
+        ''', (patient_id,))
+        history_rows = cursor.fetchall()
+        history_vals = [1.0 if r['status'] == 'TAKEN' else 0.0 for r in history_rows]
+        while len(history_vals) < 3:
+            history_vals.insert(0, 1.0)  # assume taken for missing history
+
+        # 3. Current day & time
+        now = datetime.datetime.now()
+        day_of_week = now.strftime('%A')
+        hour = now.hour
+        time_of_day = 'Morning' if 5 <= hour < 12 else 'Afternoon' if 12 <= hour < 18 else 'Evening'
+
+        # 4. Encode features for LSTM
+        days_map = {'Monday':0, 'Tuesday':1, 'Wednesday':2, 'Thursday':3, 'Friday':4, 'Saturday':5, 'Sunday':6}
+        times_map = {'Morning':0, 'Afternoon':1, 'Evening':2}
+        day_val = days_map[day_of_week]
+        time_val = times_map[time_of_day]
+
+        # 5. Run LSTM model (NO FALLBACK – raise error if model missing)
+        if model is None:
+            raise RuntimeError("LSTM model not loaded. Please ensure smart_pill_lstm_model.h5 exists.")
+
+        # Prepare input: sequence of 3 time steps, each with [age/100, day/6, time/2, adherence(0/1)]
+        input_data = []
+        for past in history_vals[-3:]:
+            feature_row = [age/100.0, day_val/6.0, time_val/2.0, float(past)]
+            input_data.append(feature_row)
+        input_array = np.array([input_data])
+        forget_prob = float(model.predict(input_array)[0][0])   # probability of forgetting
+
+        # 6. Convert to "adherence score" (high = good) and risk level
+        adherence_score = round((1 - forget_prob) * 100, 2)
+        # Adjust risk thresholds (customise as needed)
+        if forget_prob > 0.8:
+            risk_level = "HIGH"
+        elif forget_prob > 0.5:
+            risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
+
+        # Log the calculation for debugging
+        print(f"\n🔮 LSTM Prediction for patient {patient_id}:")
+        print(f"   Inputs: age={age}, day={day_of_week}({day_val}), time={time_of_day}({time_val}), history={history_vals}")
+        print(f"   Raw forget probability = {forget_prob:.4f}")
+        print(f"   Adherence score = {adherence_score}%, Risk = {risk_level}")
+
+        features_used = {
+            "age": age,
+            "day_of_week": day_of_week,
+            "time_of_day": time_of_day,
+            "recent_history": history_vals,
+            "forget_probability_raw": forget_prob
+        }
+
+        # 7. Insert or overwrite using ON CONFLICT (requires unique constraint on patient_id)
+        cursor.execute('''
+            INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, features_used)
+            VALUES (%s, %s, %s, %s::jsonb)
+            ON CONFLICT (patient_id) DO UPDATE SET
+                prediction_score = EXCLUDED.prediction_score,
+                risk_level = EXCLUDED.risk_level,
+                features_used = EXCLUDED.features_used,
+                predicted_at = CURRENT_TIMESTAMP
+            RETURNING ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
+        ''', (patient_id, adherence_score, risk_level, json.dumps(features_used)))
+        new_pred = cursor.fetchone()
+        conn.commit()
+        return new_pred
 
 @app.route('/caregiver/<int:caregiver_id>/patients', methods=['GET'])
 def get_caregiver_patients(caregiver_id):
@@ -869,88 +959,21 @@ def get_prescription_details(prescription_id):
 
 @app.route('/predict_and_save', methods=['POST'])
 def predict_and_save():
-    """
-    Runs the LSTM model and saves the result to the ai_adherence_prediction table
-    so it can be displayed on the AI Prediction Page.
-    """
     try:
         data = request.get_json()
-        
-        # 1. Extract data from the request
         patient_id = data.get('patient_id')
-        age = data.get('age', 60)
-        day_str = data.get('day_of_week', 'Monday')
-        time_str = data.get('time_of_day', 'Morning')
-        history = data.get('history', [1, 1, 1])
-
         if not patient_id:
-            return jsonify({"success": False, "message": "patient_id is required"}), 400
-
-        # Map strings to numerical inputs for the model
-        day = days_map.get(day_str, 0)
-        time = times_map.get(time_str, 0)
-
-        # 2. Run the LSTM Model
-        if model is None:
-            forget_prob = 0.35 # Fallback if model isn't loaded
-        else:
-            input_data = []
-            for past_status in history[-3:]:
-                feature_row = [age / 100.0, day / 6.0, time / 2.0, float(past_status)]
-                input_data.append(feature_row)
-            
-            # Pad if history is less than 3
-            while len(input_data) < 3:
-                input_data.insert(0, [age / 100.0, day / 6.0, time / 2.0, 1.0])
-                
-            input_array = np.array([input_data])
-            prediction = model.predict(input_array)
-            forget_prob = float(prediction[0][0])
-
-        # 3. Format results for the Database
-        # Convert probability (e.g., 0.855) to a percentage score (e.g., 85.50) to match your sample data
-        prediction_score = round((1 - forget_prob) * 100, 2) if forget_prob < 1 else round(forget_prob * 100, 2) 
+            return jsonify({"success": False, "message": "patient_id required"}), 400
         
-        # Determine risk level based on your ENUM ('LOW', 'MEDIUM', 'HIGH')
-        warning_level = "HIGH" if forget_prob > 0.6 else "MEDIUM" if forget_prob > 0.3 else "LOW"
-
-        # Pack features into a JSON string for the jsonb column
-        features_used = json.dumps({
-            "age": age,
-            "recent_history": history,
-            "day_of_week": day_str,
-            "time_of_day": time_str
-        })
-
-        # 4. Save to PostgreSQL
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO ai_adherence_prediction 
-                (patient_id, prediction_score, risk_level, features_used)
-                VALUES (%s, %s, %s, %s)
-                RETURNING ad_id
-            ''', (patient_id, prediction_score, warning_level, features_used))
-            
-            new_ad_id = cursor.fetchone()[0]
-            conn.commit()
-            cursor.close()
-
-        # 5. Return success to the frontend
+        # Use the helper – it will compute and store a fresh prediction
+        new_pred = compute_prediction_for_patient(patient_id)
         return jsonify({
-            "success": True, 
-            "message": "Prediction generated and saved successfully!",
-            "data": {
-                "ad_id": new_ad_id,
-                "prediction_score": prediction_score,
-                "risk_level": warning_level
-            }
+            "success": True,
+            "message": "Prediction generated and saved",
+            "data": new_pred
         })
-
     except Exception as e:
-        print(f"Prediction error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/run_ai_analytics_job', methods=['POST'])
 def run_ai_analytics_job():

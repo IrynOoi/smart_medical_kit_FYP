@@ -8,8 +8,9 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/screens/caregiver_medication_history_page.dart';
 import 'package:my_medical_kit_app/screens/profile_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_medical_kit_app/screens/ai_analytics_page.dart';
+import 'package:my_medical_kit_app/screens/ai_analytics_page_caregiver.dart';
 import 'package:my_medical_kit_app/screens/inventory_management_page.dart';
+import 'package:my_medical_kit_app/screens/ai_prediction_patient.dart'; // Adjust path if necessary
 
 class ComingSoonPage extends StatelessWidget {
   final String title;
@@ -97,6 +98,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
   }
 
   // Pages change based on role
+  // Pages change based on role
   List<Widget> get _pages {
     final homePage = _role == 'caregiver'
         ? const CaregiverDashboardPage()
@@ -106,16 +108,26 @@ class _BottomNavBarState extends State<BottomNavBar> {
     if (_role == 'patient') {
       historyPage = const PatientHistoryPage();
     } else {
-      // 照顾者的历史页面，可以复用或单独写
-      historyPage = const MedicationHistoryScreen(); // 或者你的照顾者历史页
+      historyPage = const MedicationHistoryScreen();
+    }
+
+    // Add this new logic block for the AI page
+    Widget aiPage;
+    if (_role == 'patient') {
+      aiPage = const AIPredictionPatientPage();
+    } else {
+      aiPage = AiAnalyticsPage(caregiverId: _userId);
     }
 
     return [
-      homePage,
-      AiAnalyticsPage(caregiverId: _userId),
-      InventoryManagementPage(role: _role, userId: _userId),
-      historyPage,
-      const ProfilePage(),
+      homePage, // Index 0: Home
+      aiPage, // Index 1: AI Predict (now dynamic)
+      InventoryManagementPage(
+        role: _role,
+        userId: _userId,
+      ), // Index 2: Inventory
+      historyPage, // Index 3: History
+      const ProfilePage(), // Index 4: Profile
     ];
   }
 

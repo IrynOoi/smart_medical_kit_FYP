@@ -238,7 +238,13 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/patient/$patientId/ai_prediction'),
+        // ADD THESE HEADERS TO BYPASS NGROK'S WARNING PAGE
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+          'Content-Type': 'application/json',
+        },
       );
+
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         if (jsonResponse['success']) {
@@ -256,6 +262,8 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/patient/$patientId/adherence_stats'),
+        // ADD HEADERS HERE TOO
+        headers: {'ngrok-skip-browser-warning': 'true'},
       );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
