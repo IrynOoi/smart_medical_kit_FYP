@@ -1,6 +1,7 @@
 # server.py
 #backend codes
 import json 
+import joblib # <--- Add this impor
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
@@ -67,20 +68,22 @@ def init_db():
     except Exception as e:
         print(f"Failed to connect to PostgreSQL: {e}")
 
+
 # ==========================================
-# LSTM Model Setup
+# HYBRID AI Model Setup (LSTM + Random Forest)
 # ==========================================
-print("Loading LSTM model...")
-model = None
+print("Loading Hybrid AI Models...")
+lstm_model = None
+rf_model = None
 try:
-    if os.path.exists('smart_pill_lstm_model.h5'):
-        model = tf.keras.models.load_model('smart_pill_lstm_model.h5')
-        print("LSTM model loaded successfully!")
+    if os.path.exists('smart_pill_lstm_model.h5') and os.path.exists('smart_pill_rf_model.pkl'):
+        lstm_model = tf.keras.models.load_model('smart_pill_lstm_model.h5')
+        rf_model = joblib.load('smart_pill_rf_model.pkl')
+        print("✅ Hybrid AI Models (LSTM & Random Forest) loaded successfully!")
     else:
-        print("Model file not found. Prediction API will use mock logic.")
+        print("⚠️ Model files not found. Prediction API will use mock logic.")
 except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
+    print(f"Error loading models: {e}")
 
 days_map = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
 times_map = {'Morning': 0, 'Afternoon': 1, 'Evening': 2}
@@ -584,8 +587,7 @@ def get_caregiver_alerts(caregiver_id):
 
 def compute_prediction_for_patient(patient_id):
     """
-    Compute LSTM prediction using the .h5 model, store in DB (overwrite if exists).
-    Returns the record (including features_used with raw forget probability).
+    Compute HYBRID prediction using LSTM and Random Forest, store in DB.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -617,49 +619,55 @@ def compute_prediction_for_patient(patient_id):
         hour = now.hour
         time_of_day = 'Morning' if 5 <= hour < 12 else 'Afternoon' if 12 <= hour < 18 else 'Evening'
 
-        # 4. Encode features for LSTM
         days_map = {'Monday':0, 'Tuesday':1, 'Wednesday':2, 'Thursday':3, 'Friday':4, 'Saturday':5, 'Sunday':6}
         times_map = {'Morning':0, 'Afternoon':1, 'Evening':2}
         day_val = days_map[day_of_week]
         time_val = times_map[time_of_day]
 
-        # 5. Run LSTM model (NO FALLBACK – raise error if model missing)
-        if model is None:
-            raise RuntimeError("LSTM model not loaded. Please ensure smart_pill_lstm_model.h5 exists.")
+        # 4. Run Hybrid Models
+        if lstm_model is None or rf_model is None:
+            forget_prob = 0.35 # Fallback
+        else:
+            # --- Model 1: LSTM (3D Sequence) ---
+            lstm_input_data = []
+            for past in history_vals[-3:]:
+                lstm_input_data.append([age/100.0, day_val/6.0, time_val/2.0, float(past)])
+            lstm_input_array = np.array([lstm_input_data])
+            lstm_forget_prob = float(lstm_model.predict(lstm_input_array, verbose=0)[0][0])
 
-        # Prepare input: sequence of 3 time steps, each with [age/100, day/6, time/2, adherence(0/1)]
-        input_data = []
-        for past in history_vals[-3:]:
-            feature_row = [age/100.0, day_val/6.0, time_val/2.0, float(past)]
-            input_data.append(feature_row)
-        input_array = np.array([input_data])
-        forget_prob = float(model.predict(input_array)[0][0])   # probability of forgetting
+            # --- Model 2: Random Forest (2D Tabular) ---
+            missed_count = history_vals.count(0.0)
+            rf_input_array = np.array([[age, day_val, time_val, missed_count]])
+            # [0][1] gets the probability of class 1 (forgot medication)
+            rf_forget_prob = float(rf_model.predict_proba(rf_input_array)[0][1])
 
-        # 6. Convert to "adherence score" (high = good) and risk level
+            # --- Hybrid Meta-Model (50/50 Average) ---
+            forget_prob = (lstm_forget_prob * 0.50) + (rf_forget_prob * 0.50)
+
+            print(f"\n🔮 Hybrid AI Prediction for patient {patient_id}:")
+            print(f"   LSTM voted: {lstm_forget_prob*100:.1f}% risk")
+            print(f"   RF voted:   {rf_forget_prob*100:.1f}% risk")
+            print(f"   Final Risk: {forget_prob*100:.1f}%")
+
+        # 5. Convert to adherence score and risk level
         adherence_score = round((1 - forget_prob) * 100, 2)
-        # Adjust risk thresholds (customise as needed)
-        if forget_prob > 0.8:
+        if forget_prob > 0.6:
             risk_level = "HIGH"
-        elif forget_prob > 0.5:
+        elif forget_prob > 0.3:
             risk_level = "MEDIUM"
         else:
             risk_level = "LOW"
-
-        # Log the calculation for debugging
-        print(f"\n🔮 LSTM Prediction for patient {patient_id}:")
-        print(f"   Inputs: age={age}, day={day_of_week}({day_val}), time={time_of_day}({time_val}), history={history_vals}")
-        print(f"   Raw forget probability = {forget_prob:.4f}")
-        print(f"   Adherence score = {adherence_score}%, Risk = {risk_level}")
 
         features_used = {
             "age": age,
             "day_of_week": day_of_week,
             "time_of_day": time_of_day,
             "recent_history": history_vals,
-            "forget_probability_raw": forget_prob
+            "forget_probability_raw": forget_prob,
+            "ai_type": "Hybrid (LSTM + RF)"
         }
 
-        # 7. Insert or overwrite using ON CONFLICT (requires unique constraint on patient_id)
+        # 6. Save to database
         cursor.execute('''
             INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, features_used)
             VALUES (%s, %s, %s, %s::jsonb)
@@ -670,6 +678,7 @@ def compute_prediction_for_patient(patient_id):
                 predicted_at = CURRENT_TIMESTAMP
             RETURNING ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
         ''', (patient_id, adherence_score, risk_level, json.dumps(features_used)))
+        
         new_pred = cursor.fetchone()
         conn.commit()
         return new_pred
@@ -1031,17 +1040,25 @@ def run_ai_analytics_job():
                 day_val = days_map_local.get(current_day, 0)
                 time_val = times_map_local.get(time_category, 0)
                 
-                # Run Model Prediction
-                if model is None:
+                # Run Hybrid Model Prediction
+                if lstm_model is None or rf_model is None:
                     forget_prob = 0.35 # Fallback mock
                 else:
-                    input_data = []
+                    # LSTM
+                    lstm_input_data = []
                     for past_status in history_vals[-3:]:
                         feature_row = [age / 100.0, day_val / 6.0, time_val / 2.0, float(past_status)]
-                        input_data.append(feature_row)
-                    input_array = np.array([input_data])
-                    prediction = model.predict(input_array)
-                    forget_prob = float(prediction[0][0])
+                        lstm_input_data.append(feature_row)
+                    lstm_input_array = np.array([lstm_input_data])
+                    lstm_prob = float(lstm_model.predict(lstm_input_array, verbose=0)[0][0])
+
+                    # Random Forest
+                    missed_count = history_vals.count(0.0)
+                    rf_input_array = np.array([[age, day_val, time_val, missed_count]])
+                    rf_prob = float(rf_model.predict_proba(rf_input_array)[0][1])
+
+                    # Average
+                    forget_prob = (lstm_prob * 0.5) + (rf_prob * 0.5)
                 
                 # Calculate Prediction Score (higher score = higher probability of missing/forgetting)
                 # You might invert this if prediction_score means "Health score". Assuming forget_prob is "risk".

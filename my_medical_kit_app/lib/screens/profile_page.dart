@@ -206,9 +206,8 @@ class _ProfilePageState extends State<ProfilePage> {
             "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
       }
 
-      if (_userRole == 'patient') {
-        request.fields['medical_notes'] = _notesController.text;
-      }
+      // We explicitly skip sending 'medical_notes' for the patient role
+      // since the field is now read-only and should not be modified here.
 
       // Image file
       if (_selectedImage != null) {
@@ -475,7 +474,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           // Scrollable Body
-          // Scrollable Body
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => _loadUserData(isRefresh: true),
@@ -513,7 +511,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ------------------------------------------------------------
-  // UI BUILDERS (unchanged from original except where noted)
+  // UI BUILDERS
   // ------------------------------------------------------------
   Widget _buildViewMode(
     String fullName,
@@ -733,8 +731,16 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: TextFormField(
                     controller: _notesController,
                     maxLines: 3,
+                    readOnly:
+                        true, // Prevents the patient from editing the notes
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                    ), // Visual cue that it's disabled
                     decoration: InputDecoration(
-                      labelText: 'Medical Notes',
+                      labelText: 'Medical Notes (View Only)',
+                      filled: true,
+                      fillColor:
+                          Colors.grey.shade100, // Visual cue that it's disabled
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),

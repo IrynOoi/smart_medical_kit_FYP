@@ -1,5 +1,7 @@
 // lib/screens/patient_dashboard_page.dart
 
+// lib/screens/patient_dashboard_page.dart
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/smart_reminder_page.dart';
@@ -8,7 +10,6 @@ import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:my_medical_kit_app/models/patient.dart';
 import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
-import 'package:my_medical_kit_app/models/ai_prediction.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,7 +33,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   Patient? _patient;
   List<Prescription> _medications = [];
   List<AdherenceLog> _recentLogs = [];
-  AIPrediction? _aiPrediction;
   Map<String, dynamic> _adherenceStats = {};
   List<NotificationModel> _notifications = [];
 
@@ -108,7 +108,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           }
         }
       } else if (period == 'Week') {
-        // ✅ 补全 Week 逻辑
         const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         for (int i = 6; i >= 0; i--) {
           final day = now.subtract(Duration(days: i));
@@ -169,7 +168,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         _apiService.getPatient(_currentPatientId),
         _apiService.getPatientMedications(_currentPatientId),
         _apiService.getAdherenceLogs(_currentPatientId, limit: 30),
-        _apiService.getAIPrediction(_currentPatientId),
         _apiService.getAdherenceStats(_currentPatientId),
         _apiService.getNotifications(_currentPatientId),
       ]);
@@ -180,13 +178,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         _patient = results[0] as Patient?;
         _medications = results[1] as List<Prescription>;
         _recentLogs = logs;
-        _aiPrediction = results[3] as AIPrediction?;
-        _adherenceStats = results[4] as Map<String, dynamic>;
-        _notifications = results[5] as List<NotificationModel>;
+        _adherenceStats = results[3] as Map<String, dynamic>;
+        _notifications = results[4] as List<NotificationModel>;
         _weeklyTaken = _computeWeekly(logs);
         _isLoading = false;
       });
-      _updateChartPeriod(_selectedPeriod); // ← ADD THIS LINE
+      _updateChartPeriod(_selectedPeriod);
     } catch (e, stack) {
       debugPrint('❌ ERROR: $e');
       debugPrint('❌ STACK: $stack');
@@ -371,10 +368,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       const SizedBox(height: 18),
                       _buildAdherenceChart(),
                       const SizedBox(height: 18),
-                      _buildAIPredictionBanner(),
-                      const SizedBox(height: 18),
-                      _buildCaregiverCard(), // ← ADD THIS LINE
-
+                      _buildCaregiverCard(),
                       const SizedBox(height: 30),
                     ],
                   ),
@@ -417,6 +411,17 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     final topPadding = MediaQuery.of(context).padding.top;
     final patientName = _patient?.user.fullName ?? 'Patient';
 
+    // Build profile photo URL from patient data
+    final String? rawPhotoPath = _patient?.user.profilePhoto;
+    String? fullPhotoUrl;
+    if (rawPhotoPath != null && rawPhotoPath.isNotEmpty) {
+      if (rawPhotoPath.startsWith('http')) {
+        fullPhotoUrl = rawPhotoPath;
+      } else {
+        fullPhotoUrl =
+            '${ApiService.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
+      }
+    }
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(24, topPadding + 16, 24, 32),
@@ -517,16 +522,16 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   ],
                 ),
                 child: CircleAvatar(
-                  radius: 28,
-                  backgroundColor: Colors.white,
-                  child: Text(
-                    patientName.isNotEmpty ? patientName[0].toUpperCase() : 'P',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
+                  radius: 24, // Or whatever size you are using
+                  backgroundColor: AppColors.primaryPurple,
+                  // Use NetworkImage if the URL exists
+                  backgroundImage: fullPhotoUrl != null
+                      ? NetworkImage(fullPhotoUrl)
+                      : null,
+                  // Show a default icon if the URL is null
+                  child: fullPhotoUrl == null
+                      ? const Icon(Icons.person_rounded, color: Colors.white)
+                      : null,
                 ),
               ),
             ],
@@ -783,101 +788,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   }
 
   // ──────────────────────────────────────────
-  // AI PREDICTION BANNER
-  // ──────────────────────────────────────────
-  Widget _buildAIPredictionBanner() {
-    if (_aiPrediction == null) return const SizedBox.shrink();
-
-    final risk = _aiPrediction!.riskLevel
-        .toString()
-        .split('.')
-        .last
-        .toUpperCase();
-    final score = _aiPrediction!.predictionScore;
-    final riskColor = AppColors.primaryPurple;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.deepPurple.shade400, Colors.indigo.shade300],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.psychology_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'AI Health Prediction',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                Text(
-                  risk == 'HIGH'
-                      ? 'High risk — extra reminder sent!'
-                      : risk == 'MEDIUM'
-                      ? 'Moderate risk — stay on track'
-                      : 'You\'re doing great! Low risk.',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${score.toStringAsFixed(0)}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: riskColor.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  risk,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ──────────────────────────────────────────
   // NEXT DOSE CARD
   // ──────────────────────────────────────────
   Widget _buildNextDoseCard() {
@@ -994,6 +904,18 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     final phone = caregiver.user.phoneNo ?? 'N/A';
     final email = caregiver.user.email ?? 'N/A';
 
+    // ✅ FIXED: Safely construct the full URL for the Caregiver Profile Photo
+    final String? rawPhotoPath = caregiver.user.profilePhoto;
+    String? fullPhotoUrl;
+    if (rawPhotoPath != null && rawPhotoPath.isNotEmpty) {
+      if (rawPhotoPath.startsWith('http')) {
+        fullPhotoUrl = rawPhotoPath;
+      } else {
+        fullPhotoUrl =
+            '${ApiService.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1012,14 +934,20 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.teal.shade50,
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
+                // ✅ NEW: Apply the fetched and formatted Network Image
+                backgroundImage: fullPhotoUrl != null
+                    ? NetworkImage(fullPhotoUrl)
+                    : null,
+                child: fullPhotoUrl == null
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1036,7 +964,11 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.phone, size: 14, color: Colors.teal),
+                        Icon(
+                          Icons.phone,
+                          size: 14,
+                          color: AppColors.primaryPurple,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           phone,
@@ -1050,7 +982,11 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        const Icon(Icons.email, size: 14, color: Colors.teal),
+                        Icon(
+                          Icons.email,
+                          size: 14,
+                          color: AppColors.primaryPurple,
+                        ),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
@@ -1073,74 +1009,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       ],
     );
   }
-
-  // // ──────────────────────────────────────────
-  // // INVENTORY ROW - FIXED: No hardcoded multiplier
-  // // ──────────────────────────────────────────
-  // Widget _buildSmartCaregiverSection() {
-  //   final allMeds = _medications.take(4).toList();
-  //   if (allMeds.isEmpty) return const SizedBox.shrink();
-
-  //   final caregiverName = _patient?.caregiver?.user.fullName ?? 'Unassigned';
-
-  //   return Column(
-  //     crossAxisAlignment: CrossAxisAlignment.start,
-  //     children: [
-  //       Row(
-  //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  //         children: [
-  //           const Text(
-  //             'Smart Kit Status',
-  //             style: TextStyle(
-  //               fontSize: 18,
-  //               fontWeight: FontWeight.bold,
-  //               color: Colors.black87,
-  //             ),
-  //           ),
-  //           // 照顾者标签
-  //           Container(
-  //             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-  //             decoration: BoxDecoration(
-  //               color: Colors.teal.withOpacity(0.1),
-  //               borderRadius: BorderRadius.circular(20),
-  //               border: Border.all(color: Colors.teal.withOpacity(0.3)),
-  //             ),
-  //             child: Row(
-  //               children: [
-  //                 const Icon(
-  //                   Icons.support_agent_rounded,
-  //                   size: 14,
-  //                   color: Colors.teal,
-  //                 ),
-  //                 const SizedBox(width: 4),
-  //                 Text(
-  //                   'Caregiver: $caregiverName',
-  //                   style: const TextStyle(
-  //                     fontSize: 13,
-  //                     color: Colors.teal,
-  //                     fontWeight: FontWeight.w600,
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //         ],
-  //       ),
-  //       const SizedBox(height: 10),
-  //       GridView.count(
-  //         crossAxisCount: 2,
-  //         shrinkWrap: true,
-  //         physics: const NeverScrollableScrollPhysics(),
-  //         mainAxisSpacing: 10,
-  //         crossAxisSpacing: 10,
-  //         childAspectRatio: 2.2,
-  //         children: allMeds
-  //             .map((med) => _buildSmartInventoryTile(med))
-  //             .toList(),
-  //       ),
-  //     ],
-  //   );
-  // }
 
   Widget _buildSmartInventoryTile(Prescription med) {
     final isLow = med.isLowStock;
@@ -1364,10 +1232,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
   /// Convert cron‑style schedule (e.g. "0 8 * * *") to human‑readable text.
   String _parseCronSchedule(String cron) {
-    // Example patterns:
-    // "0 8 * * *"       -> Daily at 08:00
-    // "0 8,20 * * *"    -> Daily at 08:00 and 20:00
-    // "0 8 * * 1,3,5"   -> Mon, Wed, Fri at 08:00 (not implemented fully, but can be extended)
     final parts = cron.split(' ');
     if (parts.length < 5) return cron;
 
@@ -1397,7 +1261,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         return 'Daily at $timeStr';
       }
     } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
-      // e.g. "0 8 * * 1,3,5" -> Mon, Wed, Fri at 08:00
       final days = dayOfWeek.split(',');
       final dayNames = {
         '0': 'Sun',
@@ -1459,8 +1322,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   }
 }
 
-// DONUT CHART PAINTER (UI only - acceptable to hardcode colors)
-// DONUT CHART PAINTER (UI only - acceptable to hardcode colors)
+// DONUT CHART PAINTER
 class _DonutPainter extends CustomPainter {
   final double taken, missed, pending;
   _DonutPainter({
@@ -1488,7 +1350,7 @@ class _DonutPainter extends CustomPainter {
         ..strokeWidth = stroke,
     );
 
-    // If there is no data, draw a full purple ring to signify 100% adherence / no missed doses
+    // If there is no data, draw a full purple ring
     if (total == 0) {
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
@@ -1514,7 +1376,7 @@ class _DonutPainter extends CustomPainter {
     for (final seg in segments) {
       final v = seg['v'] as double;
 
-      // Skip drawing empty segments to prevent overlapping 0% text
+      // Skip drawing empty segments
       if (v == 0) continue;
 
       final c = seg['c'] as Color;
@@ -1532,10 +1394,6 @@ class _DonutPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
 
-      final mid = start + sweep / 2;
-      final lx = center.dx + radius * cos(mid);
-      final ly = center.dy + radius * sin(mid);
-
       start += sweep;
     }
   }
@@ -1544,8 +1402,7 @@ class _DonutPainter extends CustomPainter {
   bool shouldRepaint(_DonutPainter o) => false;
 }
 
-// LINE CHART PAINTER (UI only)
-// 放在 patient_dashboard_page.dart 文件底部，与 _DonutPainter 并列
+// LINE CHART PAINTER
 class _LinePainter extends CustomPainter {
   final List<double> data;
   final Color lineColor;
@@ -1556,15 +1413,12 @@ class _LinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
 
-    // 处理全零数据的情况（避免除以零）
     final maxValue = data.reduce((a, b) => a > b ? a : b);
     final maxV = maxValue > 0 ? maxValue : 1.0;
 
-    // 计算所有数据点的坐标
     final points = List.generate(data.length, (i) {
       final x = data.length == 1
-          ? size.width /
-                2 // 单点居中
+          ? size.width / 2
           : i * size.width / (data.length - 1);
       final y =
           size.height -
@@ -1573,7 +1427,6 @@ class _LinePainter extends CustomPainter {
       return Offset(x, y);
     });
 
-    // 绘制背景填充（贝塞尔曲线平滑）
     if (data.length > 1) {
       final fillPath = Path()..moveTo(points.first.dx, size.height);
       for (int i = 0; i < points.length - 1; i++) {
@@ -1605,7 +1458,6 @@ class _LinePainter extends CustomPainter {
           ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
       );
 
-      // 绘制折线（贝塞尔曲线）
       final linePath = Path()..moveTo(points.first.dx, points.first.dy);
       for (int i = 0; i < points.length - 1; i++) {
         final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
@@ -1632,14 +1484,10 @@ class _LinePainter extends CustomPainter {
       );
     }
 
-    // 绘制数据点（无论单点还是多点都会绘制）
     for (int i = 0; i < points.length; i++) {
-      // 白色外圈
       canvas.drawCircle(points[i], 6, Paint()..color = Colors.white);
-      // 彩色内圈
       canvas.drawCircle(points[i], 4, Paint()..color = lineColor);
 
-      // 在数据点上方显示数值（仅当数值大于0时显示）
       if (data[i] > 0) {
         final textPainter = TextPainter(
           text: TextSpan(
