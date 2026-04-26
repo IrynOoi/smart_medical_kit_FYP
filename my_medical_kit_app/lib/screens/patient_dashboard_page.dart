@@ -1,5 +1,4 @@
 // lib/screens/patient_dashboard_page.dart
-
 // lib/screens/patient_dashboard_page.dart
 
 import 'dart:math';
@@ -466,7 +465,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               ),
               Row(
                 children: [
-                  // ✅ NEW: Reminder icon (opens SmartReminderPage)
                   GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -522,13 +520,11 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   ],
                 ),
                 child: CircleAvatar(
-                  radius: 24, // Or whatever size you are using
+                  radius: 24,
                   backgroundColor: AppColors.primaryPurple,
-                  // Use NetworkImage if the URL exists
                   backgroundImage: fullPhotoUrl != null
                       ? NetworkImage(fullPhotoUrl)
                       : null,
-                  // Show a default icon if the URL is null
                   child: fullPhotoUrl == null
                       ? const Icon(Icons.person_rounded, color: Colors.white)
                       : null,
@@ -654,8 +650,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 color: AppColors.premiumDark,
               ),
               const SizedBox(width: 4),
+              // ✅ FIXED: Changed to "dose streak" instead of "day streak"
               Text(
-                '$_streak day streak',
+                '$_streak dose streak',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -707,7 +704,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 color: Colors.black87,
               ),
             ),
-            // Dynamic Segmented Control
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade200,
@@ -756,9 +752,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 child: CustomPaint(
                   size: const Size(double.infinity, 110),
                   painter: _LinePainter(
-                    data: _graphData.isEmpty
-                        ? [0]
-                        : _graphData, // Prevent empty data crash
+                    data: _graphData.isEmpty ? [0] : _graphData,
                     lineColor: AppColors.primaryPurple,
                   ),
                 ),
@@ -904,7 +898,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     final phone = caregiver.user.phoneNo ?? 'N/A';
     final email = caregiver.user.email ?? 'N/A';
 
-    // ✅ FIXED: Safely construct the full URL for the Caregiver Profile Photo
     final String? rawPhotoPath = caregiver.user.profilePhoto;
     String? fullPhotoUrl;
     if (rawPhotoPath != null && rawPhotoPath.isNotEmpty) {
@@ -934,7 +927,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.teal.shade50,
-                // ✅ NEW: Apply the fetched and formatted Network Image
                 backgroundImage: fullPhotoUrl != null
                     ? NetworkImage(fullPhotoUrl)
                     : null,
@@ -964,11 +956,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(
-                          Icons.phone,
-                          size: 14,
-                          color: AppColors.primaryPurple,
-                        ),
+                        const Icon(Icons.phone, size: 14, color: Colors.teal),
                         const SizedBox(width: 4),
                         Text(
                           phone,
@@ -982,11 +970,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(
-                          Icons.email,
-                          size: 14,
-                          color: AppColors.primaryPurple,
-                        ),
+                        const Icon(Icons.email, size: 14, color: Colors.teal),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
@@ -1061,7 +1045,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             ),
           ),
           const SizedBox(height: 4),
-          // Emphasizes "tablets" dynamically avoiding hardcoded strings
           Text(
             isLow
                 ? 'Alert: Only ${med.currentInventory} tablets left'
@@ -1079,7 +1062,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
   Widget _buildInventoryTile(Prescription med) {
     final isLow = med.isLowStock;
-    // ✅ FIXED: Use dynamic max inventory based on actual data
     final maxInventory = _getMaxInventory(med);
     final pct = (med.currentInventory / maxInventory).clamp(0.0, 1.0);
 
@@ -1241,7 +1223,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     final month = parts[3];
     final dayOfWeek = parts[4];
 
-    // Build time string
     String timeStr = '';
     if (hourPart.contains(',')) {
       final hours = hourPart
@@ -1253,7 +1234,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
     }
 
-    // Build frequency
     if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
       if (hourPart.contains(',')) {
         return 'Daily at $timeStr';
@@ -1276,7 +1256,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
       return '$readableDays at $timeStr';
     }
 
-    // Fallback
     return cron;
   }
 
@@ -1338,7 +1317,6 @@ class _DonutPainter extends CustomPainter {
     final radius = size.width / 2 - 20;
     const stroke = 30.0;
 
-    // 🌟 FIX: Always draw a light grey background circle first!
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       0,
@@ -1350,7 +1328,6 @@ class _DonutPainter extends CustomPainter {
         ..strokeWidth = stroke,
     );
 
-    // If there is no data, draw a full purple ring
     if (total == 0) {
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
@@ -1376,7 +1353,6 @@ class _DonutPainter extends CustomPainter {
     for (final seg in segments) {
       final v = seg['v'] as double;
 
-      // Skip drawing empty segments
       if (v == 0) continue;
 
       final c = seg['c'] as Color;

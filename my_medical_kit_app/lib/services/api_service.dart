@@ -57,6 +57,25 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> resetPassword(
+    String email,
+    String newPassword,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/reset_password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'email': email, 'new_password': newPassword}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   // ==========================================
   // 👤 PATIENT ENDPOINTS
   // ==========================================

@@ -244,7 +244,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                 Icon(Icons.psychology_rounded, size: 16, color: Colors.white),
                 SizedBox(width: 8),
                 Text(
-                  'Powered by LSTM Model',
+                  'Powered by LSTM Model and Random Forest Model',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.white,

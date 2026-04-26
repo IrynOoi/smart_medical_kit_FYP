@@ -13,6 +13,10 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
 import datetime
 import os
+import secrets
+from datetime import timedelta 
+
+
 from contextlib import contextmanager
 
 import decimal
@@ -205,6 +209,45 @@ def register():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+
+@app.route('/reset_password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json()
+        
+        # Clean strings to prevent hidden characters from IoT devices
+        email = clean_string(data.get('email'))
+        new_password = clean_string(data.get('new_password'))
+
+        if not email or not new_password:
+            return jsonify({"success": False, "message": "Email and new password are required"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # First, check if the email exists
+            cursor.execute('SELECT user_id FROM users WHERE email = %s', (email,))
+            user = cursor.fetchone()
+
+            if not user:
+                cursor.close()
+                return jsonify({"success": False, "message": "Email not found"}), 404
+
+            # Update to the new password
+            cursor.execute('''
+                UPDATE users 
+                SET password = %s, updated_at = CURRENT_TIMESTAMP 
+                WHERE email = %s
+            ''', (new_password, email))
+            
+            conn.commit()
+            cursor.close()
+
+        return jsonify({"success": True, "message": "Password reset successfully!"})
+        
+    except Exception as e:
+        print(f"Reset password error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 # ==========================================
 # 👤 PATIENT ENDPOINTS
 # ==========================================
@@ -298,6 +341,12 @@ def get_patient_prescriptions(patient_id):
     except Exception as e:
         print(f"Get prescriptions error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+
+
+
 
 
 @app.route('/patient/<int:patient_id>/adherence_stats', methods=['GET'])

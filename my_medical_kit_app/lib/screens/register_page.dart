@@ -146,7 +146,7 @@ class _RegisterPageState extends State<RegisterPage> {
         decoration: const BoxDecoration(gradient: AppColors.mainGradient),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -303,10 +303,26 @@ class _RegisterPageState extends State<RegisterPage> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: _selectedGender,
-                                decoration: _inputDecoration(
-                                  'Gender',
-                                  Icons.wc_outlined,
+                                value: _selectedGender,
+                                decoration: InputDecoration(
+                                  prefixIcon: Icon(
+                                    Icons.wc_outlined,
+                                    color: AppColors.primaryPurple,
+                                  ),
+                                  labelText: 'Gender',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ), // 👈 reduce horizontal padding
                                 ),
                                 items: ['Male', 'Female', 'Other']
                                     .map(
@@ -341,16 +357,15 @@ class _RegisterPageState extends State<RegisterPage> {
                           Icons.location_on_outlined,
                         ),
 
-                        if (_selectedRole == 'Patient') ...[
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            _medicalNotesController,
-                            'Medical Notes',
-                            Icons.note_alt_outlined,
-                            maxLines: 2,
-                          ),
-                        ],
-
+                        // if (_selectedRole == 'Patient') ...[
+                        //   const SizedBox(height: 16),
+                        //   _buildTextField(
+                        //     _medicalNotesController,
+                        //     'Medical Notes',
+                        //     Icons.note_alt_outlined,
+                        //     maxLines: 2,
+                        //   ),
+                        // ],
                         const SizedBox(height: 32),
 
                         ElevatedButton(

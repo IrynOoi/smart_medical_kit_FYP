@@ -1,11 +1,12 @@
 // lib/screens/login_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/widget/bottom_nav_bar.dart';
 import 'package:my_medical_kit_app/screens/register_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_medical_kit_app/services/api_service.dart'; // 🌟 1. 导入你的 ApiService
+import 'package:my_medical_kit_app/services/api_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,8 +18,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
-  // 🌟 2. 使用 ApiService，不再把旧的 IP 写死在这里！
   final ApiService _apiService = ApiService();
 
   bool _isPasswordVisible = false;
@@ -33,7 +32,6 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
 
-      // 🌟 3. 直接通过 ApiService 登录，它会自动去抓你设好的 Ngrok 网址
       final result = await _apiService.login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
@@ -46,8 +44,7 @@ class _LoginPageState extends State<LoginPage> {
         final prefs = await SharedPreferences.getInstance();
         final user = result['user'];
 
-        // Save role + ID so BottomNavBar knows which dashboard to show
-        await prefs.setString('role', user['role']); // 'patient' or 'caregiver'
+        await prefs.setString('role', user['role']);
         await prefs.setString('user_name', user['name']);
 
         if (user['role'] == 'patient') {
@@ -58,10 +55,9 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
-        // 🌟 CHANGED: Show a Pop-Up Dialog instead of a bottom SnackBar
         await showDialog(
           context: context,
-          barrierDismissible: false, // User must tap continue
+          barrierDismissible: false,
           builder: (context) => AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -79,7 +75,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context), // Close dialog
+                onPressed: () => Navigator.pop(context),
                 child: const Text(
                   'Continue',
                   style: TextStyle(
@@ -95,7 +91,6 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
-        // Navigate to BottomNavBar after they click "Continue"
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const BottomNavBar()),
@@ -162,7 +157,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 60),
-                // Login Card
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -228,7 +222,6 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Forgot Password Link
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
@@ -282,9 +275,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   child: RichText(
-                    text: TextSpan(
+                    text: const TextSpan(
                       text: "Don't have an account? ",
-                      style: const TextStyle(color: Colors.white70),
+                      style: TextStyle(color: Colors.white70),
                       children: [
                         TextSpan(
                           text: 'Register here',
@@ -308,7 +301,10 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // ==========================================
-// 🌟 NEW: Forgot Password Page UI
+// 🌟 FULLY FUNCTIONAL: Forgot Password Page UI
+// ==========================================
+// ==========================================
+// 🌟 FULLY FUNCTIONAL & STYLED: Forgot Password Page UI
 // ==========================================
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -319,14 +315,43 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  final ApiService _apiService = ApiService();
+
   bool _isLoading = false;
+  bool _isPasswordVisible = false;
+  bool _isConfirmVisible = false;
 
   void _handleResetPassword() async {
     final email = _emailController.text.trim();
+    final newPassword = _newPasswordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
 
-    if (email.isEmpty) {
+    if (email.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email address')),
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
+    if (newPassword != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Passwords do not match'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password must be at least 6 characters'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -334,37 +359,61 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     setState(() => _isLoading = true);
 
     try {
-      // 🔥 Replace with your real API later
-      await Future.delayed(const Duration(seconds: 2));
+      final result = await _apiService.resetPassword(email, newPassword);
 
       if (!mounted) return;
-
       setState(() => _isLoading = false);
 
-      // ✅ Show confirmation dialog instead of simple snackbar
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Reset Password'),
-          content: Text(
-            'A password reset request has been made for:\n\n$email\n\nPlease proceed to reset your password.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context); // close dialog
-                Navigator.pop(context); // back to login
-              },
-              child: const Text('OK'),
+      if (result['success'] == true) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-          ],
-        ),
-      );
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+                SizedBox(width: 10),
+                Text('Success'),
+              ],
+            ),
+            content: Text(result['message'] ?? 'Password reset successfully!'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // close dialog
+                  Navigator.pop(context); // back to login
+                },
+                child: const Text(
+                  'Back to Login',
+                  style: TextStyle(
+                    color: AppColors.primaryPurple,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message'] ??
+                  result['error'] ??
+                  'Failed to reset password',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
       );
     }
   }
@@ -372,13 +421,16 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   @override
   void dispose() {
     _emailController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
+      // ✅ FIX: Use a solid white background for the Scaffold so it doesn't show black
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           'Reset Password',
@@ -388,88 +440,169 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              const Text(
-                'Forgot your password?',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
+      // ✅ FIX: Wrap the body in a Container to apply the translucent purple safely
+      body: Container(
+        height: double.infinity,
+        color: AppColors.premiumLight.withOpacity(0.15),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 10),
+                const Text(
+                  'Create New Password',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Enter your registered email address below, and we will send you a link to reset your password.',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey.shade600,
-                  height: 1.5,
+                const SizedBox(height: 12),
+                Text(
+                  'Enter your registered email and choose a new password.',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey.shade600,
+                    height: 1.5,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 40),
+                const SizedBox(height: 40),
 
-              // Email Input Field
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: 'Email Address',
-                  prefixIcon: const Icon(
-                    Icons.email_outlined,
-                    color: AppColors.primaryPurple,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(
+                // Email
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Registered Email Address',
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
                       color: AppColors.primaryPurple,
-                      width: 2,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(
+                        color: AppColors.primaryPurple,
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
-              // Submit Button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleResetPassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                  minimumSize: const Size(double.infinity, 55),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                // New Password
+                TextFormField(
+                  controller: _newPasswordController,
+                  obscureText: !_isPasswordVisible,
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    prefixIcon: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: AppColors.primaryPurple,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(
+                        color: AppColors.primaryPurple,
+                        width: 2,
+                      ),
+                    ),
                   ),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        'Send Reset Link',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                const SizedBox(height: 20),
+
+                // Confirm Password
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: !_isConfirmVisible,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm New Password',
+                    prefixIcon: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: AppColors.primaryPurple,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isConfirmVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.grey,
                       ),
-              ),
-            ],
+                      onPressed: () => setState(
+                        () => _isConfirmVisible = !_isConfirmVisible,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(
+                        color: AppColors.primaryPurple,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Submit Button
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleResetPassword,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPurple,
+                    minimumSize: const Size(double.infinity, 55),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Reset Password',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
