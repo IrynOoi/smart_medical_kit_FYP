@@ -2,8 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/login_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-
-// import 'login_page.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'register_page.dart';
 
 class LandingPage extends StatelessWidget {
@@ -18,7 +17,6 @@ class LandingPage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Hero section with animation-like feel
             TweenAnimationBuilder(
               tween: Tween<double>(begin: 0, end: 1),
               duration: const Duration(seconds: 1),
@@ -33,33 +31,24 @@ class LandingPage extends StatelessWidget {
               },
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(25),
-                    decoration: BoxDecoration(
-                      // color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
+                  // Extra padding on all sides gives the SVG
+                  // room to render without being clipped
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      top: 10,
+                      left: 10,
+                      right: 10,
+                      bottom: 20, // ← key: stops bottom of circle being cut
                     ),
-                    child: ClipRRect(
-                      // ← 加这个
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.asset(
-                        'assets/images/medical-smart-kit-logo.png',
-                        width: 150,
-                        height: 150,
-                        fit: BoxFit.contain,
-                      ),
+                    child: SvgPicture.asset(
+                      'assets/images/medical-smart-kit-logo (1).svg',
+                      width: 200,
+                      height: 200,
+                      fit: BoxFit.contain,
                     ),
                   ),
-                  const SizedBox(height: 32),
                   const Text(
-                    'Smart Medical Kit',
+                    'MedSmart',
                     style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
@@ -76,7 +65,7 @@ class LandingPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Advanced Health Monitoring & Care',
+                    'Advanced Pill Monitoring',
                     style: TextStyle(
                       fontSize: 18,
                       color: Colors.white.withValues(alpha: 0.9),
@@ -98,8 +87,6 @@ class LandingPage extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => const LoginPage(),
-
-                          // builder: (context) => const BottomNavBar(),
                         ),
                       );
                     },
@@ -147,6 +134,7 @@ class LandingPage extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 100),
                 ],
               ),
             ),

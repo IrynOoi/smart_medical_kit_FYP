@@ -1,6 +1,4 @@
 // lib/screens/patient_dashboard_page.dart
-// lib/screens/patient_dashboard_page.dart
-
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/smart_reminder_page.dart';
@@ -11,6 +9,7 @@ import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class PatientDashboardPage extends StatefulWidget {
   const PatientDashboardPage({super.key});
@@ -421,6 +420,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             '${ApiService.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
       }
     }
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(24, topPadding + 16, 24, 32),
@@ -437,46 +437,37 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.medical_information_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'MedSmart',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
+              // Logo + MedSmart text
+              const Text(
+                'MedSmart',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 1.2,
+                ),
               ),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SmartReminderPage(),
-                        ),
-                      );
-                    },
-                    child: _buildIconBox(Icons.alarm_rounded),
+              // Reminder icon (PNG)
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SmartReminderPage(),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Image.asset(
+                    'assets/icon/reminder.png',
+                    // 🚀 FIXED: Scaled up to 40x40. This enlarges the icon
+                    // and naturally makes the PNG's outlines look thicker on screen.
+                    height: 40,
+                    width: 40,
+                    color: Colors.white,
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -650,7 +641,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 color: AppColors.premiumDark,
               ),
               const SizedBox(width: 4),
-              // ✅ FIXED: Changed to "dose streak" instead of "day streak"
               Text(
                 '$_streak dose streak',
                 style: TextStyle(
