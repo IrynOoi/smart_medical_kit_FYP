@@ -161,15 +161,16 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context, true);
-              }
-            },
+            onPressed: _testDevice,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
+              foregroundColor: Colors.white, // ✅ explicit white text
+              minimumSize: const Size(70, 40), // ✅ ensures button has size
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: const Text('Restock'),
+            child: const Text('Test'),
           ),
         ],
       ),
@@ -574,11 +575,18 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                   onPressed: _testDevice,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryPurple,
+                    // ✅ FIXED: Explicitly set foreground color to white
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text('Test'),
+                  child: const Text(
+                    'Test',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold, // Make it pop a bit more
+                    ),
+                  ),
                 ),
               ],
             ),

@@ -1,4 +1,5 @@
 // screens/ai_prediction_patient.dart
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
@@ -49,6 +50,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     }
   }
 
+  // This loads data from PostgreSQL (does not run AI model)
   Future<void> _loadPrediction() async {
     setState(() => _isLoading = true);
     try {
@@ -66,6 +68,35 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error loading prediction: $e')));
+      }
+    }
+  }
+
+  // 🌟 NEW: This triggers the Python Backend to run the Hybrid AI Model
+  Future<void> _recalculatePrediction() async {
+    setState(() => _isLoading = true);
+    try {
+      final newPrediction = await _apiService.recalculatePrediction(_patientId);
+      setState(() {
+        _prediction = newPrediction;
+        _isLoading = false;
+      });
+
+      if (mounted && newPrediction != null) {
+        _animationController.forward(from: 0.0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Successfully re-calculated AI prediction!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error re-predicting: $e')));
       }
     }
   }
@@ -144,6 +175,29 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                         _buildRiskInsightCard(),
                         const SizedBox(height: 24),
                         _buildFactorsCard(),
+                        const SizedBox(height: 32),
+
+                        // 🌟 NEW: Predict Again Button
+                        ElevatedButton.icon(
+                          onPressed: _recalculatePrediction,
+                          icon: const Icon(Icons.online_prediction_rounded),
+                          label: const Text(
+                            'Predict Again',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 55),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 4,
+                          ),
+                        ),
                         const SizedBox(height: 40),
                       ],
                     ],
@@ -154,14 +208,6 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
           ),
         ),
       ),
-      floatingActionButton: _isLoading
-          ? null
-          : FloatingActionButton(
-              onPressed: _loadPrediction,
-              backgroundColor: AppColors.primaryPurple,
-              elevation: 4,
-              child: const Icon(Icons.refresh_rounded, color: Colors.white),
-            ),
     );
   }
 
@@ -238,17 +284,19 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
               color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(24),
             ),
+            // 🌟 FIXED: Overflows by removing mainAxisSize: min and using Expanded
             child: const Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.psychology_rounded, size: 16, color: Colors.white),
                 SizedBox(width: 8),
-                Text(
-                  'Powered by LSTM Model and Random Forest Model',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
+                Expanded(
+                  child: Text(
+                    'Powered by LSTM Model and Random Forest Model',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -308,10 +356,11 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
               ),
               const SizedBox(height: 32),
               ElevatedButton.icon(
-                onPressed: _loadPrediction,
-                icon: const Icon(Icons.refresh_rounded, size: 20),
+                onPressed:
+                    _recalculatePrediction, // 🌟 Updated to trigger calculation
+                icon: const Icon(Icons.online_prediction_rounded, size: 20),
                 label: const Text(
-                  'Refresh Data',
+                  'Run Initial Prediction',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -406,14 +455,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
           children: [
             Icon(Icons.psychology, color: AppColors.primaryPurple),
             SizedBox(width: 8),
-            Expanded(
-              // <--- ADD THIS EXPANDED WIDGET
-              child: Text(
-                'How is this calculated?',
-                softWrap:
-                    true, // Allows the text to drop to a second line if needed
-              ),
-            ),
+            Expanded(child: Text('How is this calculated?', softWrap: true)),
           ],
         ),
         content: SingleChildScrollView(
@@ -476,7 +518,6 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
 
   Widget _buildMainScoreCard() {
     final adherenceScore = _prediction!.predictionScore;
-    // ADD THIS: Calculate the forget probability for the UI
     final chanceOfMissing = 100.0 - adherenceScore;
     final riskColor = _getRiskColor();
 
@@ -499,7 +540,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                'Adherence Probability', // or keep 'Forget Probability' if you prefer
+                'Adherence Probability',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey,
@@ -528,7 +569,6 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                     width: 180,
                     height: 180,
                     child: CircularProgressIndicator(
-                      // CHANGE THIS to use chanceOfMissing
                       value:
                           (chanceOfMissing / 100) * _animationController.value,
                       strokeWidth: 16,
@@ -540,16 +580,14 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                   Column(
                     children: [
                       Text(
-                        // CHANGE THIS to use chanceOfMissing
                         '${(chanceOfMissing * _animationController.value).toStringAsFixed(2)}%',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 42,
                           fontWeight: FontWeight.bold,
                           color: AppColors.premiumDark,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // CHANGE THIS: Show "Chance of Missing"
                       const Text(
                         'Chance of\nMissing Next Dose',
                         textAlign: TextAlign.center,
@@ -660,7 +698,8 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
             style: const TextStyle(
               fontSize: 15,
               height: 1.6,
-              color: AppColors.textLight,
+              color: AppColors
+                  .textLight, // Might want to ensure this isn't white on white. AppColors.textDark is safer.
             ),
           ),
         ],

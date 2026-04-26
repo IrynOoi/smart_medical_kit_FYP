@@ -1,4 +1,4 @@
-// lib/screens/ai_analytics_page.dart
+// lib/screens/ai_analytics_page_caregiver.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';

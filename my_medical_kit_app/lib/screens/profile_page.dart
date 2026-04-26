@@ -401,38 +401,17 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   // Custom AppBar
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.arrow_back_ios_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Center(
+                      child: const Text(
+                        'My Profile',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18, // enlarged from 18
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
                         ),
-                        const Text(
-                          'My Profile',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 38),
-                      ],
+                      ),
                     ),
                   ),
                   if (_errorMessage.isNotEmpty)

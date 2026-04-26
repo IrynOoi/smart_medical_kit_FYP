@@ -72,10 +72,37 @@ class ApiService {
       );
       return jsonDecode(response.body);
     } catch (e) {
+      print("❌ [API] Reset password error: $e");
       return {'success': false, 'error': e.toString()};
     }
   }
 
+  // ==========================================
+  // 🤖 TRIGGER FRESH HYBRID AI CALCULATION
+  // ==========================================
+  Future<AIPrediction?> recalculatePrediction(int patientId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/predict_and_save'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'patient_id': patientId}),
+      );
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return AIPrediction.fromJson(jsonResponse['data']);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error recalculating prediction: $e');
+      return null;
+    }
+  }
   // ==========================================
   // 👤 PATIENT ENDPOINTS
   // ==========================================

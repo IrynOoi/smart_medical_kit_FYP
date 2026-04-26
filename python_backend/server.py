@@ -426,19 +426,39 @@ def get_notifications(patient_id):
 @app.route('/patient/<int:patient_id>/ai_prediction', methods=['GET'])
 def get_ai_prediction(patient_id):
     """
-    Always compute a fresh prediction using the LSTM model,
-    overwrite the database, and return the result.
+    Fetch the LATEST existing prediction from PostgreSQL without recalculating.
     """
     try:
-        new_pred = compute_prediction_for_patient(patient_id)
-        return jsonify({
-            "success": True,
-            "message": "New prediction generated and saved",
-            "data": new_pred
-        })
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
+                FROM ai_adherence_prediction
+                WHERE patient_id = %s
+                ORDER BY predicted_at DESC LIMIT 1
+            ''', (patient_id,))
+            prediction = cursor.fetchone()
+            cursor.close()
+            
+        if prediction:
+            return jsonify({
+                "success": True,
+                "data": prediction
+            })
+        else:
+            return jsonify({
+                "success": False, 
+                "error": "No prediction found in database for this patient"
+            }), 404
+            
     except Exception as e:
         print(f"Get AI prediction error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+
+
 @app.route('/caregiver/<int:caregiver_id>/overview_stats', methods=['GET'])
 def get_caregiver_overview(caregiver_id):
     try:
