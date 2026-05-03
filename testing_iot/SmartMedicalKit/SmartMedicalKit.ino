@@ -2,7 +2,8 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include "dispenser_motor.h" 
-#include "buzzer_control.h" // ⚠️ Added new buzzer header
+#include "buzzer_control.h" 
+#include "display_control.h" // ⚠️ Added new display header
 #include "secrets.h"
 
 const char* ssid = SECRET_SSID; 
@@ -16,7 +17,8 @@ void setup() {
   // Setup Hardware
   pinMode(ledPin, OUTPUT);
   setupStepper(); 
-  setupBuzzer(); // ⚠️ Initialize separated buzzer
+  setupBuzzer(); 
+  setupDisplay(); // ⚠️ Initialize screen
 
   // Setup WiFi
   WiFi.begin(ssid, password);
@@ -42,10 +44,15 @@ void setup() {
     server.send(200, "text/plain", "LED IS OFF");
   });
 
-  // --- Buzzer Routes (Separated) ---
+  // --- Buzzer Routes ---
   server.on("/buzzer/on", handleBuzzerOn);
   server.on("/buzzer/off", handleBuzzerOff);
 
+// --- Display Routes ---
+  server.on("/display/hello", handleDisplayHello);
+  server.on("/display/clear", handleDisplayClear);
+  server.on("/display/sv", handleDisplaySV); // ⚠️ ADD THIS LINE
+  
   // --- Motor 1 Routes ---
   server.on("/stepper/forward", handleMotorForward);
   server.on("/stepper/backward", handleMotorBackward);

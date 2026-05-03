@@ -1,8 +1,9 @@
 //main.dart
 import 'package:flutter/material.dart';
 import 'led_control_screen.dart';
-import 'buzzer_control_screen.dart'; // ⚠️ Added import
+import 'buzzer_control_screen.dart';
 import 'stepper_control_screen.dart';
+import 'display_control_screen.dart'; // ⚠️ Added import
 
 void main() => runApp(const MyApp());
 
@@ -50,7 +51,7 @@ class MainMenu extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Button to go to Buzzer Screen (NEW)
+            // Button to go to Buzzer Screen
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.push(
@@ -79,6 +80,24 @@ class MainMenu extends StatelessWidget {
               icon: const Icon(Icons.settings),
               label: const Text('Open Motor Controls'),
               style: ElevatedButton.styleFrom(minimumSize: const Size(250, 50)),
+            ),
+            const SizedBox(height: 20),
+
+            // Button to go to OLED Screen (NEW)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const DisplayControlScreen()),
+                );
+              },
+              icon: const Icon(Icons.screenshot),
+              label: const Text('Open Display Controls'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(250, 50),
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),
