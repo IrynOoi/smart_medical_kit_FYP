@@ -338,6 +338,25 @@ class ApiService {
   // 👤 CAREGIVER ENDPOINTS
   // ==========================================
 
+  Future<Map<String, dynamic>> getCaregiverProfile(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'error': 'Failed to load profile'};
+    } catch (e) {
+      print('Error getting caregiver profile: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   Future<Map<String, dynamic>> getCaregiverOverview(int caregiverId) async {
     try {
       final response = await http.get(
@@ -611,6 +630,55 @@ class ApiService {
     } catch (e) {
       print('Error restocking: $e');
       return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> updatePatient(
+    int patientId,
+    Map<String, dynamic> formData, {
+    String? photoPath,
+  }) async {
+    try {
+      var request = http.MultipartRequest(
+        'PUT',
+        Uri.parse('$baseUrl/update_patient/$patientId'),
+      );
+      // Add text fields
+      formData.forEach((key, value) {
+        if (value != null) request.fields[key] = value.toString();
+      });
+      // Add photo if provided
+      if (photoPath != null && photoPath.isNotEmpty) {
+        var file = await http.MultipartFile.fromPath(
+          'profile_photo',
+          photoPath,
+        );
+        request.files.add(file);
+      }
+      request.headers['ngrok-skip-browser-warning'] = 'true';
+      var response = await request.send();
+      var responseBody = await response.stream.bytesToString();
+      return jsonDecode(responseBody);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> addPatient(
+    Map<String, dynamic> patientData,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/register'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode(patientData),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
     }
   }
 }

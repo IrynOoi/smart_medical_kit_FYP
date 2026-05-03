@@ -9,7 +9,6 @@ import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class PatientDashboardPage extends StatefulWidget {
   const PatientDashboardPage({super.key});
@@ -132,9 +131,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         for (var log in monthLogs) {
           if (log.isTaken) {
             int daysAgo = now.difference(log.scheduledTime!).inDays;
-            if (daysAgo < 7)
+            if (daysAgo < 7) {
               groupedData['Wk 4'] = groupedData['Wk 4']! + 1.0;
-            else if (daysAgo < 14)
+            } else if (daysAgo < 14)
               groupedData['Wk 3'] = groupedData['Wk 3']! + 1.0;
             else if (daysAgo < 21)
               groupedData['Wk 2'] = groupedData['Wk 2']! + 1.0;
@@ -224,11 +223,19 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
   int get _streak {
     int streak = 0;
+    final now = DateTime.now();
+
     for (final log in _recentLogs) {
       if (log.isTaken) {
         streak++;
       } else if (log.isMissed) {
         break;
+      } else if (log.status == 'PENDING' && log.scheduledTime != null) {
+        // If it's a pending dose from the past, the streak is broken
+        if (log.scheduledTime!.isBefore(now)) {
+          break;
+        }
+        // If it's a pending dose for the future (e.g., tonight), just ignore it and keep going
       }
     }
     return streak;
@@ -551,17 +558,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     );
   }
 
-  Widget _buildIconBox(IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, size: 20, color: Colors.white),
-    );
-  }
-
   // ──────────────────────────────────────────
   // DONUT CHART CARD
   // ──────────────────────────────────────────
@@ -845,7 +841,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           ),
           if (canTake)
             ElevatedButton(
-              onPressed: () => _markTaken(dose.prescriptionId, deviceId!),
+            onPressed: () => _markTaken(dose.prescriptionId, deviceId),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryPurple,
                 foregroundColor: Colors.white,
@@ -886,7 +882,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
     final name = caregiver.user.fullName;
     final phone = caregiver.user.phoneNo ?? 'N/A';
-    final email = caregiver.user.email ?? 'N/A';
+    final email = caregiver.user.email;
 
     final String? rawPhotoPath = caregiver.user.profilePhoto;
     String? fullPhotoUrl;
@@ -984,160 +980,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     );
   }
 
-  Widget _buildSmartInventoryTile(Prescription med) {
-    final isLow = med.isLowStock;
-    final maxInventory = _getMaxInventory(med);
-    final pct = (med.currentInventory / maxInventory).clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isLow ? Colors.red.shade50 : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isLow
-              ? Colors.red.shade200
-              : AppColors.premiumLight.withOpacity(0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  med.medicationName,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isLow ? Colors.red.shade900 : Colors.black87,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isLow)
-                const Icon(Icons.warning_rounded, size: 14, color: Colors.red),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 5,
-              backgroundColor: isLow
-                  ? Colors.red.shade100
-                  : Colors.grey.shade200,
-              color: isLow ? Colors.redAccent : AppColors.primaryPurple,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            isLow
-                ? 'Alert: Only ${med.currentInventory} tablets left'
-                : '${med.currentInventory} tablets remaining',
-            style: TextStyle(
-              fontSize: 11,
-              color: isLow ? Colors.red.shade700 : Colors.grey.shade600,
-              fontWeight: isLow ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInventoryTile(Prescription med) {
-    final isLow = med.isLowStock;
-    final maxInventory = _getMaxInventory(med);
-    final pct = (med.currentInventory / maxInventory).clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  med.medicationName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isLow)
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 13,
-                  color: AppColors.primaryPurple,
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 5,
-              backgroundColor: Colors.grey.shade200,
-              color: AppColors.primaryPurple,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            '${med.currentInventory} left',
-            style: TextStyle(fontSize: 13, color: AppColors.premiumDark),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ──────────────────────────────────────────
   // PRESCRIPTION SCHEDULE (assigned by caregiver)
   // ──────────────────────────────────────────
-  Widget _buildPrescriptionSchedule() {
-    if (_medications.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'My Medication Schedule',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ..._medications.map((med) => _buildScheduleCard(med)),
-      ],
-    );
-  }
-
   Widget _buildScheduleCard(Prescription med) {
     final scheduleText = _parseCronSchedule(med.dispenseSchedule);
     return Container(
@@ -1277,17 +1122,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     if (h < 12) return 'Good Morning 🌤️';
     if (h < 17) return 'Good Afternoon ☀️';
     return 'Good Evening 🌙';
-  }
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inDays == 0) {
-      return 'Today ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays == 1) {
-      return 'Yesterday ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    }
-    return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }
 

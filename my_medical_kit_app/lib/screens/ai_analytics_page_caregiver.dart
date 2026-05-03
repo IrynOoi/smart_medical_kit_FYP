@@ -22,7 +22,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   Map<String, dynamic> _overview = {};
   List<Map<String, dynamic>> _riskPatients = [];
   List<Map<String, dynamic>> _allPatients = [];
-  Map<int, bool> _predictingPatients = {};
+  final Map<int, bool> _predictingPatients = {};
 
   @override
   void initState() {
@@ -174,7 +174,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
           }
 
           return AlertDialog(
-            title: Text('AI Prediction for $patientName'),
+            title: Text('Hybrid AI Prediction for $patientName'),
             content: Container(
               width: double.maxFinite,
               constraints: const BoxConstraints(maxWidth: 400),
@@ -186,7 +186,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                         CircularProgressIndicator(),
                         SizedBox(height: 16),
                         Text(
-                          'Running LSTM model...',
+                          'Running Hybrid AI (LSTM + Random Forest)...',
                           style: TextStyle(fontSize: 14),
                         ),
                         SizedBox(height: 20),
@@ -231,7 +231,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'This will run the LSTM model to predict:',
+                            'This will run the Hybrid AI model (LSTM + Random Forest) to predict:',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
@@ -419,7 +419,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
             score > 60
                 ? '⚠️ High risk of missing next dose. Send reminder!'
                 : score > 30
-                ? '📊 Moderate risk. Monitor patient carefully.'
+                ? '📊 Moderate risk. Monitor patient closely.'
                 : '✅ Patient adherence is stable.',
             style: TextStyle(fontSize: 12, color: riskColor),
             textAlign: TextAlign.center,
@@ -438,7 +438,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
           SizedBox(
             width: 60,
             child: Text(
-              label + ':',
+              '$label:',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
@@ -481,7 +481,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✅ AI prediction completed successfully!'),
+              content: Text('✅ Hybrid AI prediction completed successfully!'),
               backgroundColor: Colors.green,
               duration: Duration(seconds: 2),
             ),
@@ -702,7 +702,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildLSTMHeaderCard(),
+                _buildHybridAIHeaderCard(),
                 const SizedBox(height: 24),
                 _buildActionableInsights(),
                 const SizedBox(height: 24),
@@ -737,8 +737,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
             : const Icon(Icons.auto_awesome, size: 18),
         label: Text(
           _isRefreshing
-              ? 'Running AI Analytics...'
-              : 'Run AI Analytics for All Patients',
+              ? 'Running Hybrid AI Analytics...'
+              : 'Run Hybrid AI Analytics for All Patients',
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryPurple,
@@ -1004,7 +1004,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   }
 
   // HEADER CARD
-  Widget _buildLSTMHeaderCard() {
+  Widget _buildHybridAIHeaderCard() {
     final overallScore = _toDouble(
       _overview['overall_adherence_prediction'],
       defaultValue: 85.0,
@@ -1048,7 +1048,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'LSTM Model Status',
+                      'Hybrid AI Model (LSTM + Random Forest)',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.white70,
@@ -1416,7 +1416,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'LSTM Assessment:',
+                        'Hybrid AI Assessment:',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,

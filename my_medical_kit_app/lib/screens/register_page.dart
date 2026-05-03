@@ -303,7 +303,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: _selectedGender,
+                                initialValue: _selectedGender,
                                 decoration: InputDecoration(
                                   prefixIcon: Icon(
                                     Icons.wc_outlined,

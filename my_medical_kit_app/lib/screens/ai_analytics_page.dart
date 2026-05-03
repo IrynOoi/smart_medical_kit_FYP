@@ -22,7 +22,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   Map<String, dynamic> _overview = {};
   List<Map<String, dynamic>> _riskPatients = [];
   List<Map<String, dynamic>> _allPatients = [];
-  Map<int, bool> _predictingPatients = {};
+  final Map<int, bool> _predictingPatients = {};
 
   @override
   void initState() {
@@ -438,7 +438,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
           SizedBox(
             width: 60,
             child: Text(
-              label + ':',
+              '$label:',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),

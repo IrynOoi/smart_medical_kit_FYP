@@ -1,9 +1,18 @@
 // lib/screens/caregiver_dashboard_page.dart
 import 'dart:math';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+String _formatDosage(double dosage) {
+  if (dosage == dosage.toInt()) {
+    return '${dosage.toInt()} tablet${dosage.toInt() > 1 ? 's' : ''}';
+  }
+  return '${dosage.toStringAsFixed(2)} tablets';
+}
 
 class CaregiverDashboardPage extends StatefulWidget {
   const CaregiverDashboardPage({super.key});
@@ -14,6 +23,8 @@ class CaregiverDashboardPage extends StatefulWidget {
 
 class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   final ApiService _apiService = ApiService();
+
+  String _caregiverPhotoUrl = '';
 
   int _caregiverId = 0;
   String _caregiverName = '';
@@ -68,6 +79,13 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       }
       _caregiverId = savedId;
       _caregiverName = prefs.getString('user_name') ?? 'Caregiver';
+
+      final profile = await _apiService.getCaregiverProfile(_caregiverId);
+      if (profile['success'] == true) {
+        setState(() {
+          _caregiverPhotoUrl = profile['data']['profile_photo'] ?? '';
+        });
+      }
       await _loadDashboardData();
     } catch (e) {
       setState(() {
@@ -112,7 +130,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   //  Derived stats from PostgreSQL
   // ──────────────────────────────────────────────────────────────
   int get _totalPatients => _overviewStats['total_patients'] ?? 0;
-  int get _totalDoses => _overviewStats['total_doses'] ?? 0;
   int get _totalPrescriptions => _overviewStats['total_prescriptions'] ?? 0;
   int get _devicesOnline => _patients.length;
 
@@ -187,15 +204,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
-  void _navigateToDosesDetails() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _DosesDetailsPage(caregiverId: _caregiverId),
-      ),
-    );
-  }
-
   void _navigateToAlertsDetails() {
     Navigator.push(
       context,
@@ -225,8 +233,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
+      return Scaffold(
+        backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryPurple),
         ),
@@ -234,7 +242,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     }
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
-        backgroundColor: AppColors.scaffoldBackground,
+        backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -262,7 +270,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       );
     }
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -311,23 +319,11 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.medical_information_rounded,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
               const SizedBox(width: 10),
               const Text(
                 'MedSmart',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                   letterSpacing: 1.2,
@@ -377,16 +373,25 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                 child: CircleAvatar(
                   radius: 28,
                   backgroundColor: Colors.white,
-                  child: Text(
-                    _caregiverName.isNotEmpty
-                        ? _caregiverName[0].toUpperCase()
-                        : 'C',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
+                  backgroundImage: _caregiverPhotoUrl.isNotEmpty
+                      ? (_caregiverPhotoUrl.startsWith('http')
+                            ? NetworkImage(_caregiverPhotoUrl)
+                            : NetworkImage(
+                                '${ApiService.baseUrl}${_caregiverPhotoUrl.startsWith('/') ? '' : '/'}$_caregiverPhotoUrl',
+                              ))
+                      : null,
+                  child: _caregiverPhotoUrl.isEmpty
+                      ? Text(
+                          _caregiverName.isNotEmpty
+                              ? _caregiverName[0].toUpperCase()
+                              : 'C',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryPurple,
+                          ),
+                        )
+                      : null,
                 ),
               ),
             ],
@@ -761,34 +766,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
-
-          // Summary Stats moved below the card
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildSummaryStat(
-                'Pending',
-                _pendingAlerts.toString(),
-                AppColors.premiumLight,
-              ),
-              _buildSummaryStat(
-                'Missed',
-                _missedDoses.toString(),
-                AppColors.premiumDark.withOpacity(0.6),
-              ),
-              _buildSummaryStat(
-                'Stock',
-                _lowStockCount.toString(),
-                AppColors.premiumDark,
-              ),
-              _buildSummaryStat(
-                'Battery',
-                _lowBatteryCount.toString(),
-                AppColors.primaryPurple,
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -1015,6 +992,44 @@ class _AlertsDetailsPageState extends State<_AlertsDetailsPage> {
     }
   }
 
+  String _formatSchedule(String cron) {
+    final parts = cron.split(' ');
+    if (parts.length < 5) return cron;
+    final minute = parts[0];
+    final hourPart = parts[1];
+    final dayOfMonth = parts[2];
+    final month = parts[3];
+    final dayOfWeek = parts[4];
+    String timeStr = '';
+    if (hourPart.contains(',')) {
+      final hours = hourPart
+          .split(',')
+          .map((h) => '${h.padLeft(2, '0')}:${minute.padLeft(2, '0')}')
+          .join(', ');
+      timeStr = hours;
+    } else {
+      timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
+    }
+    if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
+      return 'Daily at $timeStr';
+    } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
+      final days = dayOfWeek.split(',');
+      final dayNames = {
+        '0': 'Sun',
+        '1': 'Mon',
+        '2': 'Tue',
+        '3': 'Wed',
+        '4': 'Thu',
+        '5': 'Fri',
+        '6': 'Sat',
+        '7': 'Sun',
+      };
+      final readableDays = days.map((d) => dayNames[d] ?? d).join(', ');
+      return '$readableDays at $timeStr';
+    }
+    return cron;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1027,7 +1042,7 @@ class _AlertsDetailsPageState extends State<_AlertsDetailsPage> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
       body: RefreshIndicator(
         onRefresh: _fetchAlerts,
         color: AppColors.primaryPurple,
@@ -1097,14 +1112,20 @@ class _AlertsDetailsPageState extends State<_AlertsDetailsPage> {
                         ),
                       ),
                       subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          '${act['medication_name'] ?? 'Medication'} • ${act['status']}',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Dosage: ${_formatDosage((act['dosage_tablet'] as num?)?.toDouble() ?? 0.0)}',
+                            ),
+                            Text(
+                              'Schedule: ${_formatSchedule(act['dispense_schedule'] ?? '')}',
+                            ),
+                            Text(
+                              'Inventory: ${act['current_inventory'] ?? 0} left',
+                            ),
+                          ],
                         ),
                       ),
                       trailing: Text(
@@ -1142,75 +1163,117 @@ class PatientDetailPage extends StatelessWidget {
     }
   }
 
+  Widget _buildProfilePhoto() {
+    final photoUrl = patient['profile_photo'];
+    if (photoUrl != null && photoUrl.toString().isNotEmpty) {
+      final imageUrl = photoUrl.toString().startsWith('http')
+          ? photoUrl.toString()
+          : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
+
+      debugPrint('Loading profile photo from: $imageUrl');
+
+      return CircleAvatar(
+        radius: 50,
+        backgroundColor: Colors.transparent, // ✅ Keeps background clear
+        backgroundImage: NetworkImage(imageUrl),
+        onBackgroundImageError: (_, __) {
+          debugPrint('Failed to load profile image: $imageUrl');
+        },
+        // ✅ No text child here so the letter doesn't block the face!
+      );
+    }
+
+    // Only show the letter if there is NO photo URL
+    return CircleAvatar(
+      radius: 50,
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
+      child: Text(
+        patient['full_name']?.substring(0, 1).toUpperCase() ?? '?',
+        style: const TextStyle(
+          fontSize: 36,
+          fontWeight: FontWeight.bold,
+          color: AppColors.primaryPurple,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // 🌟 FIX: Using the same solid background color used in your Prescriptions page!
+      // This is 100% solid, so it will NEVER turn black or grey.
+      backgroundColor: const Color(0xFFEFE8FA),
       appBar: AppBar(
         title: Text(patient['full_name'] ?? 'Patient Details'),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => EditPatientPage(patient: patient),
+                ),
+              );
+              if (result == true) {
+                // Refresh the page to show updated data? For simplicity, just pop and re-push or notify parent.
+                // Since we are in a nested navigation, we can't easily refresh, but we could pass a callback.
+                // For now, just show a snackbar and let user manually re-enter.
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Patient updated. Pull down to refresh list.',
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
       ),
-      backgroundColor: const Color(0xFFF4F6FB),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Personal Information Card
-            _buildInfoCard(
-              title: 'Personal Information',
-              icon: Icons.person,
-              children: [
-                _infoRow('Full Name', patient['full_name'] ?? '—'),
-                _infoRow('Email', patient['email'] ?? '—'),
-                _infoRow('Phone', patient['phone_no'] ?? '—'),
-                _infoRow('Address', patient['address'] ?? '—'),
-                _infoRow('Gender', patient['gender'] ?? '—'),
-                _infoRow(
-                  'Date of Birth',
-                  _formatDate(patient['date_of_birth']),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Medical Information Card
-            _buildInfoCard(
-              title: 'Medical Information',
-              icon: Icons.health_and_safety,
-              children: [
-                _infoRow(
-                  'Medical Notes',
-                  patient['medical_notes'] ?? 'No notes',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Device Information Card
-            _buildInfoCard(
-              title: 'Device Information',
-              icon: Icons.devices,
-              children: [
-                _infoRow(
-                  'Device Serial',
-                  patient['device_serial'] ?? 'Not paired',
-                ),
-                _infoRow(
-                  'Battery Level',
-                  patient['battery_level'] != null
-                      ? '${patient['battery_level']}%'
-                      : '—',
-                ),
-                _infoRow(
-                  'Last Active',
-                  patient['last_active_timestamp'] != null
-                      ? _formatDate(patient['last_active_timestamp'])
-                      : '—',
-                ),
-              ],
-            ),
-          ],
+      body: Container(
+        color: const Color(
+          0xFFEFE8FA,
+        ), // ← force light purple on the body itself
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Center(child: _buildProfilePhoto()),
+              const SizedBox(height: 16),
+              _buildInfoCard(
+                title: 'Personal Information',
+                icon: Icons.person,
+                children: [
+                  _infoRow('Full Name', patient['full_name'] ?? '—'),
+                  _infoRow('Email', patient['email'] ?? '—'),
+                  _infoRow('Phone', patient['phone_no'] ?? '—'),
+                  _infoRow('Address', patient['address'] ?? '—'),
+                  _infoRow('Gender', patient['gender'] ?? '—'),
+                  _infoRow(
+                    'Date of Birth',
+                    _formatDate(patient['date_of_birth']),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildInfoCard(
+                title: 'Medical Information',
+                icon: Icons.health_and_safety,
+                children: [
+                  _infoRow(
+                    'Medical Notes',
+                    patient['medical_notes'] ?? 'No notes',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -1222,6 +1285,7 @@ class PatientDetailPage extends StatelessWidget {
     required List<Widget> children,
   }) {
     return Card(
+      color: Colors.white, // Explicit solid white background for the card
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
@@ -1303,6 +1367,40 @@ class _PatientsListPageState extends State<_PatientsListPage> {
     _fetchPatients();
   }
 
+  Widget _buildPatientAvatar(Map<String, dynamic> patient) {
+    final photoUrl = patient['profile_photo'];
+    if (photoUrl != null && photoUrl.toString().isNotEmpty) {
+      final imageUrl = photoUrl.toString().startsWith('http')
+          ? photoUrl.toString()
+          : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}${photoUrl}';
+
+      debugPrint('Loading avatar from: $imageUrl');
+
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.transparent, // ✅ Keeps background clear
+        backgroundImage: NetworkImage(imageUrl),
+        onBackgroundImageError: (_, __) {
+          debugPrint('Failed to load image: $imageUrl');
+        },
+        // ✅ No text child here so the letter doesn't block the face!
+      );
+    }
+    // Only show the letter if there is NO photo URL
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
+      child: Text(
+        patient['full_name']?.substring(0, 1).toUpperCase() ?? '?',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          color: AppColors.primaryPurple,
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetchPatients() async {
     setState(() {
       _isLoading = true;
@@ -1312,13 +1410,11 @@ class _PatientsListPageState extends State<_PatientsListPage> {
       final patients = await _apiService.getCaregiverPatients(
         widget.caregiverId,
       );
-      print('📋 Patients API response: $patients'); // 👈 DEBUG
       setState(() {
         _patients = patients;
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error fetching patients: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -1326,7 +1422,6 @@ class _PatientsListPageState extends State<_PatientsListPage> {
     }
   }
 
-  // Helper to calculate age from date_of_birth
   String _getAge(String? dob) {
     if (dob == null || dob.isEmpty) return 'N/A';
     try {
@@ -1346,83 +1441,93 @@ class _PatientsListPageState extends State<_PatientsListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // 🌟 FIX: Solid background color so it never turns black
+      backgroundColor: const Color(0xFFEFE8FA),
       appBar: AppBar(
         title: const Text('Patients List'),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchPatients,
-        color: AppColors.primaryPurple,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _error.isNotEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Error: $_error',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _fetchPatients,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              )
-            : _patients.isEmpty
-            ? const Center(child: Text('No patients assigned.'))
-            : ListView.builder(
-                itemCount: _patients.length,
-                itemBuilder: (_, i) {
-                  final p = _patients[i];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      child: Text(p['full_name']?.substring(0, 1) ?? '?'),
-                    ),
-                    title: Text(p['full_name'] ?? 'Unknown'),
-                    subtitle: Text('Age: ${_getAge(p['date_of_birth'])}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PatientDetailPage(patient: p),
+      body: Container(
+        color: const Color(
+          0xFFEFE8FA,
+        ), // ← force light purple on the body itself
+        child: RefreshIndicator(
+          onRefresh: _fetchPatients,
+          color: AppColors.primaryPurple,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error.isNotEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Error: $_error',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fetchPatients,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : _patients.isEmpty
+              ? const Center(child: Text('No patients assigned.'))
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _patients.length,
+                  itemBuilder: (_, i) {
+                    final p = _patients[i];
+                    return Card(
+                      color: Colors.white,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ListTile(
+                        leading: _buildPatientAvatar(p),
+                        title: Text(
+                          p['full_name'] ?? 'Unknown',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                      );
-                    },
-                  );
-                },
-              ),
-      ),
-    );
-  }
-
-  void _showPatientDetails(Map<String, dynamic> patient) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(patient['full_name'] ?? 'Patient'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Medical Notes: ${patient['medical_notes'] ?? 'None'}'),
-            const SizedBox(height: 8),
-            Text('Battery: ${patient['battery_level'] ?? 'N/A'}%'),
-            const SizedBox(height: 8),
-            Text('Device: ${patient['device_serial'] ?? 'Not paired'}'),
-          ],
+                        subtitle: Text('Age: ${_getAge(p['date_of_birth'])}'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PatientDetailPage(patient: p),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      ),
+
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddPatientPage(caregiverId: widget.caregiverId),
+            ),
+          );
+          if (result == true) {
+            _fetchPatients(); // refresh list
+          }
+        },
+        icon: const Icon(Icons.person_add),
+        label: const Text('Add Patient'),
+        backgroundColor: AppColors.primaryPurple,
       ),
     );
   }
@@ -1478,53 +1583,76 @@ class _DevicesListPageState extends State<_DevicesListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // ✅ Same solid color blend applied here to prevent the black background issue!
+      backgroundColor: Color.alphaBlend(
+        AppColors.primaryPurple.withOpacity(0.10),
+        Colors.white,
+      ),
       appBar: AppBar(
         title: const Text('Devices'),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchDevices,
-        color: AppColors.primaryPurple,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _error.isNotEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Error: $_error',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _fetchDevices,
-                      child: const Text('Retry'),
-                    ),
-                  ],
+      body: Container(
+        constraints: const BoxConstraints.expand(),
+        color: Colors.transparent, // Handled by Scaffold background
+        child: RefreshIndicator(
+          onRefresh: _fetchDevices,
+          color: AppColors.primaryPurple,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error.isNotEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Error: $_error',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fetchDevices,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : _devices.isEmpty
+              ? const Center(child: Text('No devices registered.'))
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _devices.length,
+                  itemBuilder: (_, i) {
+                    final d = _devices[i];
+                    return Card(
+                      color: Colors.white,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.devices,
+                          color: (d['battery_level'] ?? 100) < 20
+                              ? Colors.red
+                              : Colors.green,
+                        ),
+                        title: Text(
+                          d['device_serial'] ?? 'Unknown',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          'Patient: ${d['full_name']} • Battery: ${d['battery_level'] ?? 'N/A'}%',
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              )
-            : _devices.isEmpty
-            ? const Center(child: Text('No devices registered.'))
-            : ListView.builder(
-                itemCount: _devices.length,
-                itemBuilder: (_, i) {
-                  final d = _devices[i];
-                  return ListTile(
-                    leading: Icon(
-                      Icons.devices,
-                      color: (d['battery_level'] ?? 100) < 20
-                          ? Colors.red
-                          : Colors.green,
-                    ),
-                    title: Text(d['device_serial'] ?? 'Unknown'),
-                    subtitle: Text(
-                      'Patient: ${d['full_name']} • Battery: ${d['battery_level'] ?? 'N/A'}%',
-                    ),
-                  );
-                },
-              ),
+        ),
       ),
     );
   }
@@ -1574,7 +1702,6 @@ class _AdherenceDetailsPageState extends State<_AdherenceDetailsPage> {
     final int missed = _stats['missed_count'] ?? 0;
     final int pending = _stats['pending_count'] ?? 0;
     final int score = _stats['adherence_score'] ?? 0;
-    final int total = taken + missed;
 
     return Scaffold(
       appBar: AppBar(
@@ -2448,7 +2575,7 @@ class _PrescriptionFormSheetState extends State<_PrescriptionFormSheet> {
   // 🌟 REPLACED: String _timeOfDay with a precise TimeOfDay object
   TimeOfDay? _selectedTime;
 
-  List<String> _selectedDays = [];
+  final List<String> _selectedDays = [];
 
   final List<String> _daysOfWeek = [
     'Mon',
@@ -2751,6 +2878,49 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
   bool _isLoading = true;
   String _error = '';
 
+  String _formatSchedule(String cron) {
+    final parts = cron.split(' ');
+    if (parts.length < 5) return cron;
+
+    final minute = parts[0];
+    final hourPart = parts[1];
+    final dayOfMonth = parts[2];
+    final month = parts[3];
+    final dayOfWeek = parts[4];
+
+    // Build time string
+    String timeStr = '';
+    if (hourPart.contains(',')) {
+      final hours = hourPart
+          .split(',')
+          .map((h) => '${h.padLeft(2, '0')}:${minute.padLeft(2, '0')}')
+          .join(', ');
+      timeStr = hours;
+    } else {
+      timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
+    }
+
+    // Frequency
+    if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
+      return 'Daily at $timeStr';
+    } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
+      final days = dayOfWeek.split(',');
+      final dayNames = {
+        '0': 'Sun',
+        '1': 'Mon',
+        '2': 'Tue',
+        '3': 'Wed',
+        '4': 'Thu',
+        '5': 'Fri',
+        '6': 'Sat',
+        '7': 'Sun',
+      };
+      final readableDays = days.map((d) => dayNames[d] ?? d).join(', ');
+      return '$readableDays at $timeStr';
+    }
+    return cron; // fallback
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2841,11 +3011,15 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Dosage: ${rx['dosage_tablet']}'),
                             Text(
-                              'Schedule: ${rx['dispense_schedule']}',
-                            ), // Note: CRON string, you might want to parse this later!
-                            Text('Inventory: ${rx['current_inventory']} left'),
+                              'Dosage: ${_formatDosage(rx['dosage_tablet'])}',
+                            ),
+                            Text(
+                              'Schedule: ${_formatSchedule(rx['dispense_schedule'])}',
+                            ),
+                            Text(
+                              'Inventory: ${rx['current_inventory'] ?? 0} left',
+                            ),
                           ],
                         ),
                       ),
@@ -2854,6 +3028,428 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                 },
               ),
             ),
+    );
+  }
+}
+
+class EditPatientPage extends StatefulWidget {
+  final Map<String, dynamic> patient;
+  const EditPatientPage({super.key, required this.patient});
+
+  @override
+  State<EditPatientPage> createState() => _EditPatientPageState();
+}
+
+class _EditPatientPageState extends State<EditPatientPage> {
+  final _formKey = GlobalKey<FormState>();
+  final ApiService _apiService = ApiService();
+
+  late TextEditingController _fullNameController;
+  late TextEditingController _emailController;
+  late TextEditingController _phoneController;
+  late TextEditingController _addressController;
+  late TextEditingController _genderController;
+  late TextEditingController _dobController;
+  late TextEditingController _medicalNotesController;
+
+  String? _selectedGender;
+  DateTime? _selectedDob;
+  String? _photoPath;
+  bool _isSaving = false;
+
+  final List<String> _genders = ['Male', 'Female', 'Other'];
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.patient;
+    _fullNameController = TextEditingController(text: p['full_name'] ?? '');
+    _emailController = TextEditingController(text: p['email'] ?? '');
+    _phoneController = TextEditingController(text: p['phone_no'] ?? '');
+    _addressController = TextEditingController(text: p['address'] ?? '');
+    _genderController = TextEditingController(text: p['gender'] ?? '');
+    _selectedGender = p['gender'];
+    if (p['date_of_birth'] != null && p['date_of_birth'].isNotEmpty) {
+      try {
+        _selectedDob = DateTime.parse(p['date_of_birth']);
+        _dobController = TextEditingController(
+          text: _formatDate(_selectedDob!),
+        );
+      } catch (_) {}
+    } else {
+      _dobController = TextEditingController();
+    }
+    _medicalNotesController = TextEditingController(
+      text: p['medical_notes'] ?? '',
+    );
+  }
+
+  String _formatDate(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          _selectedDob ??
+          DateTime.now().subtract(const Duration(days: 365 * 65)),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDob = picked;
+        _dobController.text = _formatDate(picked);
+      });
+    }
+  }
+
+  Future<void> _pickImage() async {
+    // You can use image_picker package; for simplicity we'll use a file picker
+    // Assume you have image_picker: ^1.0.4
+    // Add import: import 'package:image_picker/image_picker.dart';
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _photoPath = pickedFile.path;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
+
+    final formData = {
+      'full_name': _fullNameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'phone_no': _phoneController.text.trim(),
+      'address': _addressController.text.trim(),
+      'gender': _selectedGender,
+      'date_of_birth': _selectedDob != null ? _formatDate(_selectedDob!) : null,
+      'medical_notes': _medicalNotesController.text.trim(),
+    };
+
+    final result = await _apiService.updatePatient(
+      widget.patient['patient_id'],
+      formData,
+      photoPath: _photoPath,
+    );
+    if (mounted) {
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patient updated successfully')),
+        );
+        Navigator.pop(context, true); // return true to refresh list
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Update failed: ${result['error']}')),
+        );
+      }
+    }
+    setState(() => _isSaving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Patient'),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            onPressed: _save,
+            icon: const Icon(Icons.save),
+            tooltip: 'Save',
+          ),
+        ],
+      ),
+      body: Container(
+        color: const Color(0xFFEFE8FA),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Profile photo preview and change button
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: _photoPath != null
+                          ? FileImage(File(_photoPath!))
+                          : (widget.patient['profile_photo'] != null &&
+                                    widget.patient['profile_photo'].isNotEmpty
+                                ? NetworkImage(
+                                        _buildImageUrl(
+                                          widget.patient['profile_photo'],
+                                        ),
+                                      )
+                                      as ImageProvider
+                                : null),
+                      child:
+                          (_photoPath == null &&
+                              (widget.patient['profile_photo'] == null ||
+                                  widget.patient['profile_photo'].isEmpty))
+                          ? Text(
+                              widget.patient['full_name']
+                                      ?.substring(0, 1)
+                                      .toUpperCase() ??
+                                  '?',
+                              style: const TextStyle(fontSize: 36),
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.primaryPurple,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.camera_alt,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          onPressed: _pickImage,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _fullNameController,
+                decoration: const InputDecoration(labelText: 'Full Name'),
+                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _phoneController,
+                decoration: const InputDecoration(labelText: 'Phone'),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _addressController,
+                decoration: const InputDecoration(labelText: 'Address'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _selectedGender,
+                decoration: const InputDecoration(labelText: 'Gender'),
+                items: _genders
+                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedGender = val),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _dobController,
+                decoration: const InputDecoration(labelText: 'Date of Birth'),
+                readOnly: true,
+                onTap: _pickDate,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _medicalNotesController,
+                decoration: const InputDecoration(labelText: 'Medical Notes'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                ),
+                child: _isSaving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        'Save Changes',
+                        style: TextStyle(color: Colors.white),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _buildImageUrl(String url) {
+    return url.startsWith('http')
+        ? url
+        : '${ApiService.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
+  }
+}
+
+class AddPatientPage extends StatefulWidget {
+  final int caregiverId;
+  const AddPatientPage({super.key, required this.caregiverId});
+
+  @override
+  State<AddPatientPage> createState() => _AddPatientPageState();
+}
+
+class _AddPatientPageState extends State<AddPatientPage> {
+  final _formKey = GlobalKey<FormState>();
+  final ApiService _apiService = ApiService();
+
+  final _fullNameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  String? _selectedGender;
+  DateTime? _selectedDob;
+  final _medicalNotesCtrl = TextEditingController();
+  bool _isSaving = false;
+  final List<String> _genders = ['Male', 'Female', 'Other'];
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 30)),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _selectedDob = picked);
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
+
+    final data = {
+      'role': 'patient',
+      'email': _emailCtrl.text.trim(),
+      'password': _passwordCtrl.text.trim(),
+      'full_name': _fullNameCtrl.text.trim(),
+      'phone_no': _phoneCtrl.text.trim(),
+      'address': _addressCtrl.text.trim(),
+      'gender': _selectedGender,
+      'date_of_birth': _selectedDob != null
+          ? '${_selectedDob!.year}-${_selectedDob!.month.toString().padLeft(2, '0')}-${_selectedDob!.day.toString().padLeft(2, '0')}'
+          : null,
+      'medical_notes': _medicalNotesCtrl.text.trim(),
+      'caregiver_id': widget.caregiverId,
+    };
+
+    final res = await _apiService.addPatient(data);
+    if (mounted) {
+      if (res['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patient added successfully')),
+        );
+        Navigator.pop(context, true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${res['error'] ?? 'Unknown'}')),
+        );
+      }
+    }
+    setState(() => _isSaving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Add New Patient'),
+        backgroundColor: AppColors.primaryPurple,
+        foregroundColor: Colors.white,
+      ),
+      body: Container(
+        color: const Color(0xFFEFE8FA),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              TextFormField(
+                controller: _fullNameCtrl,
+                decoration: const InputDecoration(labelText: 'Full Name'),
+                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _passwordCtrl,
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Phone'),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _addressCtrl,
+                decoration: const InputDecoration(labelText: 'Address'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _selectedGender,
+                decoration: const InputDecoration(labelText: 'Gender'),
+                items: _genders
+                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedGender = val),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                decoration: const InputDecoration(labelText: 'Date of Birth'),
+                readOnly: true,
+                controller: TextEditingController(
+                  text: _selectedDob != null
+                      ? '${_selectedDob!.year}-${_selectedDob!.month}-${_selectedDob!.day}'
+                      : '',
+                ),
+                onTap: _pickDate,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _medicalNotesCtrl,
+                decoration: const InputDecoration(labelText: 'Medical Notes'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                ),
+                child: _isSaving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        'Create Patient',
+                        style: TextStyle(color: Colors.white),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

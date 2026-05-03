@@ -635,7 +635,8 @@ def get_caregiver_alerts(caregiver_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT al.adlog_id, u.full_name AS patient_name,
-                       pc.medication_name, al.scheduled_time, al.status
+                       pc.medication_name, al.scheduled_time, al.status,
+                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 JOIN patient p ON pc.patient_id = p.patient_id
@@ -661,7 +662,7 @@ def compute_prediction_for_patient(patient_id):
     with get_db_connection() as conn:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # 1. Get patient age from date_of_birth
+        # 1. Get patient age
         cursor.execute('''
             SELECT EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth)) AS age
             FROM users WHERE user_id = %s
@@ -669,7 +670,7 @@ def compute_prediction_for_patient(patient_id):
         age_row = cursor.fetchone()
         age = int(age_row['age']) if age_row and age_row['age'] else 65
 
-        # 2. Get last 3 adherence statuses (TAKEN=1, MISSED=0)
+        # 2. Get last 3 adherence statuses
         cursor.execute('''
             SELECT al.status
             FROM adherence_logs al
@@ -680,7 +681,7 @@ def compute_prediction_for_patient(patient_id):
         history_rows = cursor.fetchall()
         history_vals = [1.0 if r['status'] == 'TAKEN' else 0.0 for r in history_rows]
         while len(history_vals) < 3:
-            history_vals.insert(0, 1.0)  # assume taken for missing history
+            history_vals.insert(0, 1.0)
 
         # 3. Current day & time
         now = datetime.datetime.now()
@@ -695,22 +696,20 @@ def compute_prediction_for_patient(patient_id):
 
         # 4. Run Hybrid Models
         if lstm_model is None or rf_model is None:
-            forget_prob = 0.35 # Fallback
+            forget_prob = 0.35
         else:
-            # --- Model 1: LSTM (3D Sequence) ---
+            # LSTM
             lstm_input_data = []
             for past in history_vals[-3:]:
                 lstm_input_data.append([age/100.0, day_val/6.0, time_val/2.0, float(past)])
             lstm_input_array = np.array([lstm_input_data])
             lstm_forget_prob = float(lstm_model.predict(lstm_input_array, verbose=0)[0][0])
 
-            # --- Model 2: Random Forest (2D Tabular) ---
+            # Random Forest
             missed_count = history_vals.count(0.0)
             rf_input_array = np.array([[age, day_val, time_val, missed_count]])
-            # [0][1] gets the probability of class 1 (forgot medication)
             rf_forget_prob = float(rf_model.predict_proba(rf_input_array)[0][1])
 
-            # --- Hybrid Meta-Model (50/50 Average) ---
             forget_prob = (lstm_forget_prob * 0.50) + (rf_forget_prob * 0.50)
 
             print(f"\n🔮 Hybrid AI Prediction for patient {patient_id}:")
@@ -736,15 +735,15 @@ def compute_prediction_for_patient(patient_id):
             "ai_type": "Hybrid (LSTM + RF)"
         }
 
-        # 6. Save to database
+        # 6. Save to database (UPSERT)
         cursor.execute('''
-            INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, features_used)
-            VALUES (%s, %s, %s, %s::jsonb)
+            INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, predicted_at, features_used)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s::jsonb)
             ON CONFLICT (patient_id) DO UPDATE SET
                 prediction_score = EXCLUDED.prediction_score,
                 risk_level = EXCLUDED.risk_level,
-                features_used = EXCLUDED.features_used,
-                predicted_at = CURRENT_TIMESTAMP
+                predicted_at = EXCLUDED.predicted_at,
+                features_used = EXCLUDED.features_used
             RETURNING ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
         ''', (patient_id, adherence_score, risk_level, json.dumps(features_used)))
         
@@ -752,6 +751,7 @@ def compute_prediction_for_patient(patient_id):
         conn.commit()
         return new_pred
 
+        
 @app.route('/caregiver/<int:caregiver_id>/patients', methods=['GET'])
 def get_caregiver_patients(caregiver_id):
     """Get all patients under this caregiver"""
@@ -760,7 +760,7 @@ def get_caregiver_patients(caregiver_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT u.user_id as patient_id, u.full_name, u.date_of_birth, u.gender,
-                       u.phone_no, u.address, p.medical_notes,
+                       u.phone_no, u.address, p.medical_notes, u.profile_photo,   -- added profile_photo
                        d.battery_level, d.device_serial, d.last_active_timestamp
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
@@ -774,7 +774,6 @@ def get_caregiver_patients(caregiver_id):
     except Exception as e:
         print(f"Error in get_caregiver_patients: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/caregiver/<int:caregiver_id>', methods=['GET'])
 def get_caregiver_profile(caregiver_id):
@@ -1060,7 +1059,6 @@ def run_ai_analytics_job():
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 1. Get all active patients
             cursor.execute('''
                 SELECT p.patient_id, u.date_of_birth
                 FROM patient p
@@ -1074,20 +1072,16 @@ def run_ai_analytics_job():
             hour = datetime.datetime.now().hour
             time_category = 'Morning' if 5 <= hour < 12 else 'Afternoon' if 12 <= hour < 18 else 'Evening'
 
-            # Define static mappings for the model
             days_map_local = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
             times_map_local = {'Morning': 0, 'Afternoon': 1, 'Evening': 2}
             
             for pat in patients:
                 pid = pat['patient_id']
-                
-                # Calculate age roughly
                 dob = pat['date_of_birth']
-                age = 65 # Default fallback
+                age = 65
                 if dob:
                     age = (datetime.date.today() - dob).days // 365
                 
-                # Fetch recent adherence history for this patient (last 3 logs)
                 cursor.execute('''
                     SELECT status 
                     FROM adherence_logs al
@@ -1096,45 +1090,31 @@ def run_ai_analytics_job():
                     ORDER BY al.scheduled_time DESC LIMIT 3
                 ''', (pid,))
                 history_rows = cursor.fetchall()
-                
-                # Convert TAKEN to 1.0, MISSED to 0.0
-                history_vals = []
-                for r in history_rows:
-                    history_vals.append(1.0 if r['status'] == 'TAKEN' else 0.0)
-                
-                # Pad to 3 if not enough history
+                history_vals = [1.0 if r['status'] == 'TAKEN' else 0.0 for r in history_rows]
                 while len(history_vals) < 3:
                     history_vals.insert(0, 1.0)
                 
                 day_val = days_map_local.get(current_day, 0)
                 time_val = times_map_local.get(time_category, 0)
                 
-                # Run Hybrid Model Prediction
                 if lstm_model is None or rf_model is None:
-                    forget_prob = 0.35 # Fallback mock
+                    forget_prob = 0.35
                 else:
-                    # LSTM
                     lstm_input_data = []
                     for past_status in history_vals[-3:]:
                         feature_row = [age / 100.0, day_val / 6.0, time_val / 2.0, float(past_status)]
                         lstm_input_data.append(feature_row)
                     lstm_input_array = np.array([lstm_input_data])
                     lstm_prob = float(lstm_model.predict(lstm_input_array, verbose=0)[0][0])
-
-                    # Random Forest
+                    
                     missed_count = history_vals.count(0.0)
                     rf_input_array = np.array([[age, day_val, time_val, missed_count]])
                     rf_prob = float(rf_model.predict_proba(rf_input_array)[0][1])
-
-                    # Average
                     forget_prob = (lstm_prob * 0.5) + (rf_prob * 0.5)
                 
-                # Calculate Prediction Score (higher score = higher probability of missing/forgetting)
-                # You might invert this if prediction_score means "Health score". Assuming forget_prob is "risk".
                 prediction_score_val = forget_prob * 100.0
                 risk_level_val = "HIGH" if forget_prob > 0.6 else "MEDIUM" if forget_prob > 0.3 else "LOW"
                 
-                import json
                 features_used_json = json.dumps({
                     "age": age,
                     "day": current_day,
@@ -1143,10 +1123,15 @@ def run_ai_analytics_job():
                     "temporal_pattern": "Pattern extracted from LSTM"
                 })
                 
-                # Insert result into ai_adherence_prediction table
+                # ✅ FIX: Use ON CONFLICT to update existing records
                 cursor.execute('''
                     INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, predicted_at, features_used)
                     VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s::jsonb)
+                    ON CONFLICT (patient_id) DO UPDATE SET
+                        prediction_score = EXCLUDED.prediction_score,
+                        risk_level = EXCLUDED.risk_level,
+                        predicted_at = EXCLUDED.predicted_at,
+                        features_used = EXCLUDED.features_used
                 ''', (pid, round(prediction_score_val, 2), risk_level_val, features_used_json))
                 
                 inserted_count += 1
@@ -1214,7 +1199,7 @@ def health_check():
         db_status = "connected"
     except:
         db_status = "disconnected"
-    return jsonify({"status": "healthy", "database": db_status, "model": "loaded" if model else "not loaded"})
+    return jsonify({"status": "healthy", "database": db_status, "model": "loaded" if lstm_model else "not loaded"})
 
 @app.route('/caregiver/<int:caregiver_id>/analytics_overview', methods=['GET'])
 def get_analytics_overview(caregiver_id):

@@ -613,7 +613,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedGender,
+                        initialValue: _selectedGender,
                         decoration: InputDecoration(
                           labelText: 'Gender',
                           border: OutlineInputBorder(

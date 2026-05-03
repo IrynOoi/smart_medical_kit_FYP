@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
-import 'package:my_medical_kit_app/models/prescription.dart';
 
 class InventoryManagementPage extends StatefulWidget {
   final String role; // 'patient' or 'caregiver'
@@ -31,7 +30,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
 
   Map<String, dynamic> _deviceData = {};
   List<Map<String, dynamic>> _inventoryList = [];
-  Map<int, String> _patientNames = {};
+  final Map<int, String> _patientNames = {};
 
   // Constant for determining online/offline status
   static const int _onlineThresholdHours = 24;
@@ -147,8 +146,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
               border: OutlineInputBorder(),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty)
+              if (value == null || value.isEmpty) {
                 return 'Please enter a quantity';
+              }
               final qty = int.tryParse(value);
               if (qty == null || qty <= 0) return 'Enter a positive number';
               return null;

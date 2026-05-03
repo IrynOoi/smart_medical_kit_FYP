@@ -4,7 +4,6 @@ import 'theme/colors.dart';
 import 'screens/splash_screen.dart';
 import 'package:my_medical_kit_app/screens/landing_page.dart';
 import 'package:my_medical_kit_app/screens/login_page.dart';
-import 'package:my_medical_kit_app/screens/profile_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

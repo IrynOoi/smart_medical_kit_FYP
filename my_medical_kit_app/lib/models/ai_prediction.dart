@@ -1,5 +1,4 @@
 //ai_prediction.dart
-import 'package:flutter/material.dart';
 
 enum RiskLevel { low, medium, high }
 
