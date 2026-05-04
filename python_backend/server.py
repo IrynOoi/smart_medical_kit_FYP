@@ -758,9 +758,10 @@ def get_caregiver_patients(caregiver_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
+            # 👇 ADDED u.email to the SELECT query here
             cursor.execute('''
-                SELECT u.user_id as patient_id, u.full_name, u.date_of_birth, u.gender,
-                       u.phone_no, u.address, p.medical_notes, u.profile_photo,   -- added profile_photo
+                SELECT u.user_id as patient_id, u.email, u.full_name, u.date_of_birth, u.gender,
+                       u.phone_no, u.address, p.medical_notes, u.profile_photo,
                        d.battery_level, d.device_serial, d.last_active_timestamp
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
@@ -1288,8 +1289,29 @@ def get_at_risk_patients(caregiver_id):
         print(f"At-risk patients error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/patient/<int:patient_id>', methods=['DELETE'])
+def delete_patient(patient_id):
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Delete dependent records (adjust if your DB has CASCADE)
+            cursor.execute('DELETE FROM ai_adherence_prediction WHERE patient_id = %s', (patient_id,))
+            cursor.execute('DELETE FROM notifications WHERE patient_id = %s', (patient_id,))
+            cursor.execute('''
+                DELETE FROM adherence_logs 
+                WHERE prescription_id IN (SELECT prescription_id FROM prescription_config WHERE patient_id = %s)
+            ''', (patient_id,))
+            cursor.execute('DELETE FROM prescription_config WHERE patient_id = %s', (patient_id,))
+            cursor.execute('DELETE FROM iot_device WHERE patient_id = %s', (patient_id,))
+            cursor.execute('DELETE FROM patient WHERE patient_id = %s', (patient_id,))
+            cursor.execute('DELETE FROM users WHERE user_id = %s AND role = %s', (patient_id, 'patient'))
+            conn.commit()
+            cursor.close()
+        return jsonify({"success": True, "message": "Patient deleted successfully"})
+    except Exception as e:
+        print(f"Delete patient error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
-# Add to server.py
 
 @app.route('/iot_device/patient/<int:patient_id>', methods=['GET'])
 def get_patient_device(patient_id):

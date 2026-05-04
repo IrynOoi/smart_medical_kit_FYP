@@ -1148,10 +1148,24 @@ class _AlertsDetailsPageState extends State<_AlertsDetailsPage> {
 // ==========================================
 // Patient Detail Page – Full personal info
 // ==========================================
-class PatientDetailPage extends StatelessWidget {
+class PatientDetailPage extends StatefulWidget {
   final Map<String, dynamic> patient;
 
   const PatientDetailPage({super.key, required this.patient});
+
+  @override
+  State<PatientDetailPage> createState() => _PatientDetailPageState();
+}
+
+class _PatientDetailPageState extends State<PatientDetailPage> {
+  late Map<String, dynamic> patientData;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize state with the passed patient data
+    patientData = Map<String, dynamic>.from(widget.patient);
+  }
 
   String _formatDate(String? dateStr) {
     if (dateStr == null) return 'Not provided';
@@ -1164,31 +1178,27 @@ class PatientDetailPage extends StatelessWidget {
   }
 
   Widget _buildProfilePhoto() {
-    final photoUrl = patient['profile_photo'];
+    final photoUrl = patientData['profile_photo'];
     if (photoUrl != null && photoUrl.toString().isNotEmpty) {
       final imageUrl = photoUrl.toString().startsWith('http')
           ? photoUrl.toString()
           : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
 
-      debugPrint('Loading profile photo from: $imageUrl');
-
       return CircleAvatar(
         radius: 50,
-        backgroundColor: Colors.transparent, // ✅ Keeps background clear
+        backgroundColor: Colors.transparent,
         backgroundImage: NetworkImage(imageUrl),
         onBackgroundImageError: (_, __) {
           debugPrint('Failed to load profile image: $imageUrl');
         },
-        // ✅ No text child here so the letter doesn't block the face!
       );
     }
 
-    // Only show the letter if there is NO photo URL
     return CircleAvatar(
       radius: 50,
       backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
       child: Text(
-        patient['full_name']?.substring(0, 1).toUpperCase() ?? '?',
+        patientData['full_name']?.substring(0, 1).toUpperCase() ?? '?',
         style: const TextStyle(
           fontSize: 36,
           fontWeight: FontWeight.bold,
@@ -1201,11 +1211,9 @@ class PatientDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 🌟 FIX: Using the same solid background color used in your Prescriptions page!
-      // This is 100% solid, so it will NEVER turn black or grey.
       backgroundColor: const Color(0xFFEFE8FA),
       appBar: AppBar(
-        title: Text(patient['full_name'] ?? 'Patient Details'),
+        title: Text(patientData['full_name'] ?? 'Patient Details'),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -1213,32 +1221,26 @@ class PatientDetailPage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () async {
+              // Wait for the updated data from EditPatientPage
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => EditPatientPage(patient: patient),
+                  builder: (_) => EditPatientPage(patient: patientData),
                 ),
               );
-              if (result == true) {
-                // Refresh the page to show updated data? For simplicity, just pop and re-push or notify parent.
-                // Since we are in a nested navigation, we can't easily refresh, but we could pass a callback.
-                // For now, just show a snackbar and let user manually re-enter.
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Patient updated. Pull down to refresh list.',
-                    ),
-                  ),
-                );
+
+              // If we received updated data, update the UI immediately
+              if (result != null && result is Map<String, dynamic>) {
+                setState(() {
+                  patientData = result;
+                });
               }
             },
           ),
         ],
       ),
       body: Container(
-        color: const Color(
-          0xFFEFE8FA,
-        ), // ← force light purple on the body itself
+        color: const Color(0xFFEFE8FA),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1249,14 +1251,14 @@ class PatientDetailPage extends StatelessWidget {
                 title: 'Personal Information',
                 icon: Icons.person,
                 children: [
-                  _infoRow('Full Name', patient['full_name'] ?? '—'),
-                  _infoRow('Email', patient['email'] ?? '—'),
-                  _infoRow('Phone', patient['phone_no'] ?? '—'),
-                  _infoRow('Address', patient['address'] ?? '—'),
-                  _infoRow('Gender', patient['gender'] ?? '—'),
+                  _infoRow('Full Name', patientData['full_name'] ?? '—'),
+                  _infoRow('Email', patientData['email'] ?? '—'),
+                  _infoRow('Phone', patientData['phone_no'] ?? '—'),
+                  _infoRow('Address', patientData['address'] ?? '—'),
+                  _infoRow('Gender', patientData['gender'] ?? '—'),
                   _infoRow(
                     'Date of Birth',
-                    _formatDate(patient['date_of_birth']),
+                    _formatDate(patientData['date_of_birth']),
                   ),
                 ],
               ),
@@ -1267,7 +1269,7 @@ class PatientDetailPage extends StatelessWidget {
                 children: [
                   _infoRow(
                     'Medical Notes',
-                    patient['medical_notes'] ?? 'No notes',
+                    patientData['medical_notes'] ?? 'No notes',
                   ),
                 ],
               ),
@@ -1285,7 +1287,7 @@ class PatientDetailPage extends StatelessWidget {
     required List<Widget> children,
   }) {
     return Card(
-      color: Colors.white, // Explicit solid white background for the card
+      color: Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
@@ -1367,26 +1369,66 @@ class _PatientsListPageState extends State<_PatientsListPage> {
     _fetchPatients();
   }
 
+  Future<void> _confirmDelete(int patientId, String patientName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Patient'),
+        content: Text(
+          'Are you sure you want to permanently delete $patientName?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      // Show loading indicator (optional)
+      setState(() => _isLoading = true);
+      final success = await _apiService.deletePatient(patientId);
+      setState(() => _isLoading = false);
+
+      if (success) {
+        // Remove patient from local list
+        setState(() {
+          _patients.removeWhere((p) => p['patient_id'] == patientId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patient deleted successfully')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete patient'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildPatientAvatar(Map<String, dynamic> patient) {
     final photoUrl = patient['profile_photo'];
     if (photoUrl != null && photoUrl.toString().isNotEmpty) {
       final imageUrl = photoUrl.toString().startsWith('http')
           ? photoUrl.toString()
-          : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}${photoUrl}';
-
-      debugPrint('Loading avatar from: $imageUrl');
-
+          : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
       return CircleAvatar(
         radius: 24,
-        backgroundColor: Colors.transparent, // ✅ Keeps background clear
         backgroundImage: NetworkImage(imageUrl),
-        onBackgroundImageError: (_, __) {
-          debugPrint('Failed to load image: $imageUrl');
-        },
-        // ✅ No text child here so the letter doesn't block the face!
+        onBackgroundImageError: (_, __) =>
+            debugPrint('Failed to load image: $imageUrl'),
       );
     }
-    // Only show the letter if there is NO photo URL
     return CircleAvatar(
       radius: 24,
       backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
@@ -1429,11 +1471,10 @@ class _PatientsListPageState extends State<_PatientsListPage> {
       final today = DateTime.now();
       int age = today.year - birthDate.year;
       if (today.month < birthDate.month ||
-          (today.month == birthDate.month && today.day < birthDate.day)) {
+          (today.month == birthDate.month && today.day < birthDate.day))
         age--;
-      }
       return age.toString();
-    } catch (e) {
+    } catch (_) {
       return 'N/A';
     }
   }
@@ -1441,18 +1482,39 @@ class _PatientsListPageState extends State<_PatientsListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 🌟 FIX: Solid background color so it never turns black
       backgroundColor: const Color(0xFFEFE8FA),
       appBar: AppBar(
-        title: const Text('Patients List'),
+        title: const Text(
+          'Patients List',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        titleTextStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      AddPatientPage(caregiverId: widget.caregiverId),
+                ),
+              );
+              if (result == true) _fetchPatients();
+            },
+            tooltip: 'Add Patient',
+          ),
+        ],
       ),
       body: Container(
-        color: const Color(
-          0xFFEFE8FA,
-        ), // ← force light purple on the body itself
+        color: const Color(0xFFEFE8FA),
         child: RefreshIndicator(
           onRefresh: _fetchPatients,
           color: AppColors.primaryPurple,
@@ -1491,43 +1553,39 @@ class _PatientsListPageState extends State<_PatientsListPage> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ), // 👈 ADD THIS LINE
                         leading: _buildPatientAvatar(p),
                         title: Text(
                           p['full_name'] ?? 'Unknown',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text('Age: ${_getAge(p['date_of_birth'])}'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.push(
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
+                          onPressed: () =>
+                              _confirmDelete(p['patient_id'], p['full_name']),
+                          tooltip: 'Delete Patient',
+                        ),
+                        onTap: () async {
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => PatientDetailPage(patient: p),
                             ),
                           );
+                          _fetchPatients();
                         },
                       ),
                     );
                   },
                 ),
         ),
-      ),
-
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddPatientPage(caregiverId: widget.caregiverId),
-            ),
-          );
-          if (result == true) {
-            _fetchPatients(); // refresh list
-          }
-        },
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add Patient'),
-        backgroundColor: AppColors.primaryPurple,
       ),
     );
   }
@@ -2433,12 +2491,15 @@ class _CaregiverPrescriptionSetupPageState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Prescription Setup'),
+        title: const Text(
+          'Prescription Setup',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: const Color(0xFFEFE8FA), // light purple background
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error.isNotEmpty
@@ -2461,16 +2522,15 @@ class _CaregiverPrescriptionSetupPageState
               itemBuilder: (context, index) {
                 final p = _patients[index];
                 return Card(
+                  color: Colors.white, // ✅ ensures card is white
                   elevation: 2,
                   margin: const EdgeInsets.only(bottom: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  // 🌟 Wrap Padding with InkWell to make the whole card clickable
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
                     onTap: () {
-                      // 🌟 Navigate to the new View Prescriptions Page
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -2482,7 +2542,6 @@ class _CaregiverPrescriptionSetupPageState
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
-                          // 🌟 RESTORED: Circular Profile Avatar
                           CircleAvatar(
                             radius: 26,
                             backgroundColor: AppColors.primaryPurple
@@ -2498,7 +2557,6 @@ class _CaregiverPrescriptionSetupPageState
                             ),
                           ),
                           const SizedBox(width: 16),
-                          // 🌟 RESTORED: Patient Name and Device Info
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2860,7 +2918,7 @@ class _PrescriptionFormSheetState extends State<_PrescriptionFormSheet> {
 }
 
 // ==========================================
-// 🌟 View Existing Prescriptions Page
+// 🌟 View Existing Prescriptions Page (with Edit & Delete)
 // ==========================================
 class PatientPrescriptionsPage extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -2888,7 +2946,6 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     final month = parts[3];
     final dayOfWeek = parts[4];
 
-    // Build time string
     String timeStr = '';
     if (hourPart.contains(',')) {
       final hours = hourPart
@@ -2900,7 +2957,6 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
     }
 
-    // Frequency
     if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
       return 'Daily at $timeStr';
     } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
@@ -2918,7 +2974,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       final readableDays = days.map((d) => dayNames[d] ?? d).join(', ');
       return '$readableDays at $timeStr';
     }
-    return cron; // fallback
+    return cron;
   }
 
   @override
@@ -2933,7 +2989,6 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       _error = '';
     });
     try {
-      // 🌟 Calls your existing Flask GET endpoint!
       final prescriptions = await _apiService.getPatientPrescriptions(
         widget.patient['patient_id'],
       );
@@ -2949,15 +3004,76 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     }
   }
 
+  // ---- Edit Prescription ----
+  void _editPrescription(Map<String, dynamic> prescription) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _EditPrescriptionSheet(
+        prescription: prescription,
+        onUpdated: _fetchPrescriptions, // refresh after edit
+      ),
+    );
+  }
+
+  // ---- Delete Prescription ----
+  Future<void> _deletePrescription(Map<String, dynamic> prescription) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Prescription'),
+        content: Text(
+          'Are you sure you want to delete "${prescription['medication_name']}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    final success = await _apiService.deletePrescription(
+      prescription['prescription_id'],
+    );
+    setState(() => _isLoading = false);
+
+    if (success) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Prescription deleted')));
+      _fetchPrescriptions(); // refresh list
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to delete prescription'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.patient['full_name']}\'s Prescriptions'),
+        title: const Text(
+          'Prescription Detail',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
       ),
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: const Color(0xFFEFE8FA),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primaryPurple),
@@ -2985,6 +3101,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                 itemBuilder: (context, index) {
                   final rx = _prescriptions[index];
                   return Card(
+                    color: Colors.white,
                     elevation: 2,
                     margin: const EdgeInsets.only(bottom: 12),
                     shape: RoundedRectangleBorder(
@@ -3023,11 +3140,323 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                           ],
                         ),
                       ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              color: Colors.blue,
+                            ),
+                            onPressed: () => _editPrescription(rx),
+                            tooltip: 'Edit',
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
+                            onPressed: () => _deletePrescription(rx),
+                            tooltip: 'Delete',
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },
               ),
             ),
+    );
+  }
+}
+
+// ==========================================
+// 🌟 Bottom Sheet for Editing Prescription
+// ==========================================
+class _EditPrescriptionSheet extends StatefulWidget {
+  final Map<String, dynamic> prescription;
+  final VoidCallback onUpdated;
+
+  const _EditPrescriptionSheet({
+    required this.prescription,
+    required this.onUpdated,
+  });
+
+  @override
+  State<_EditPrescriptionSheet> createState() => _EditPrescriptionSheetState();
+}
+
+class _EditPrescriptionSheetState extends State<_EditPrescriptionSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final ApiService _apiService = ApiService();
+
+  late TextEditingController _medicationController;
+  late TextEditingController _dosageController;
+  late TimeOfDay _selectedTime;
+  late List<String> _selectedDays;
+
+  bool _isSaving = false;
+
+  final List<String> _daysOfWeek = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final rx = widget.prescription;
+    _medicationController = TextEditingController(
+      text: rx['medication_name'] ?? '',
+    );
+    _dosageController = TextEditingController(
+      text: rx['dosage_tablet']?.toString() ?? '',
+    );
+
+    // Parse cron schedule to time + days
+    final cron = rx['dispense_schedule'] ?? '';
+    final parts = cron.split(' ');
+    if (parts.length >= 2) {
+      final hour = int.parse(parts[1]);
+      final minute = int.parse(parts[0]);
+      _selectedTime = TimeOfDay(hour: hour, minute: minute);
+    } else {
+      _selectedTime = TimeOfDay.now();
+    }
+
+    // Parse days (if present)
+    _selectedDays = [];
+    if (parts.length >= 5 && parts[4] != '*') {
+      final dayNumbers = parts[4].split(',');
+      final dayMap = {
+        '1': 'Mon',
+        '2': 'Tue',
+        '3': 'Wed',
+        '4': 'Thu',
+        '5': 'Fri',
+        '6': 'Sat',
+        '0': 'Sun',
+        '7': 'Sun',
+      };
+      for (var d in dayNumbers) {
+        final dayName = dayMap[d];
+        if (dayName != null && !_selectedDays.contains(dayName)) {
+          _selectedDays.add(dayName);
+        }
+      }
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primaryPurple,
+            onPrimary: Colors.white,
+            onSurface: Colors.black,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _selectedTime = picked);
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedDays.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Select at least one day')));
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    // Build cron string
+    final minute = _selectedTime.minute.toString().padLeft(2, '0');
+    final hour = _selectedTime.hour.toString().padLeft(2, '0');
+    final dayNumbers = _selectedDays
+        .map((d) {
+          switch (d) {
+            case 'Mon':
+              return '1';
+            case 'Tue':
+              return '2';
+            case 'Wed':
+              return '3';
+            case 'Thu':
+              return '4';
+            case 'Fri':
+              return '5';
+            case 'Sat':
+              return '6';
+            case 'Sun':
+              return '0';
+            default:
+              return '1';
+          }
+        })
+        .join(',');
+    final cron = '$minute $hour * * $dayNumbers';
+
+    final data = {
+      'medication_name': _medicationController.text.trim(),
+      'dosage_tablet': double.tryParse(_dosageController.text.trim()) ?? 1.0,
+      'dispense_schedule': cron,
+      // inventory is usually not edited here, but you can add if needed
+    };
+
+    final success = await _apiService.updatePrescription(
+      widget.prescription['prescription_id'],
+      data,
+    );
+
+    if (mounted) {
+      setState(() => _isSaving = false);
+      if (success) {
+        Navigator.pop(context);
+        widget.onUpdated(); // refresh list
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Prescription updated')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Update failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: kToolbarHeight),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Edit Prescription',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _medicationController,
+                decoration: const InputDecoration(
+                  labelText: 'Medication Name',
+                  prefixIcon: Icon(Icons.medication_outlined),
+                ),
+                validator: (v) => v!.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _dosageController,
+                decoration: const InputDecoration(
+                  labelText: 'Dosage (tablets)',
+                  prefixIcon: Icon(Icons.vaccines_outlined),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (v) => v!.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 24),
+              const Text('Time', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _pickTime,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time),
+                      const SizedBox(width: 12),
+                      Text(_selectedTime.format(context)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text('Days', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: _daysOfWeek.map((day) {
+                  final isSelected = _selectedDays.contains(day);
+                  return FilterChip(
+                    label: Text(day),
+                    selected: isSelected,
+                    selectedColor: AppColors.primaryPurple.withOpacity(0.2),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected)
+                          _selectedDays.add(day);
+                        else
+                          _selectedDays.remove(day);
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPurple,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Save Changes',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -3048,9 +3477,8 @@ class _EditPatientPageState extends State<EditPatientPage> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
-  late TextEditingController _genderController;
-  late TextEditingController _dobController;
   late TextEditingController _medicalNotesController;
+  late TextEditingController _dobController;
 
   String? _selectedGender;
   DateTime? _selectedDob;
@@ -3067,21 +3495,22 @@ class _EditPatientPageState extends State<EditPatientPage> {
     _emailController = TextEditingController(text: p['email'] ?? '');
     _phoneController = TextEditingController(text: p['phone_no'] ?? '');
     _addressController = TextEditingController(text: p['address'] ?? '');
-    _genderController = TextEditingController(text: p['gender'] ?? '');
     _selectedGender = p['gender'];
+    _medicalNotesController = TextEditingController(
+      text: p['medical_notes'] ?? '',
+    );
     if (p['date_of_birth'] != null && p['date_of_birth'].isNotEmpty) {
       try {
         _selectedDob = DateTime.parse(p['date_of_birth']);
         _dobController = TextEditingController(
           text: _formatDate(_selectedDob!),
         );
-      } catch (_) {}
+      } catch (_) {
+        _dobController = TextEditingController();
+      }
     } else {
       _dobController = TextEditingController();
     }
-    _medicalNotesController = TextEditingController(
-      text: p['medical_notes'] ?? '',
-    );
   }
 
   String _formatDate(DateTime date) =>
@@ -3105,18 +3534,12 @@ class _EditPatientPageState extends State<EditPatientPage> {
   }
 
   Future<void> _pickImage() async {
-    // You can use image_picker package; for simplicity we'll use a file picker
-    // Assume you have image_picker: ^1.0.4
-    // Add import: import 'package:image_picker/image_picker.dart';
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _photoPath = pickedFile.path;
-      });
-    }
+    if (pickedFile != null) setState(() => _photoPath = pickedFile.path);
   }
 
+  // Inside _EditPatientPageState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
@@ -3136,35 +3559,51 @@ class _EditPatientPageState extends State<EditPatientPage> {
       formData,
       photoPath: _photoPath,
     );
+
     if (mounted) {
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Patient updated successfully')),
         );
-        Navigator.pop(context, true); // return true to refresh list
+
+        // Create the updated map to send back to the details page
+        Map<String, dynamic> updatedData = Map<String, dynamic>.from(
+          widget.patient,
+        );
+        updatedData['full_name'] = formData['full_name'];
+        updatedData['email'] = formData['email'];
+        updatedData['phone_no'] = formData['phone_no'];
+        updatedData['address'] = formData['address'];
+        updatedData['gender'] = formData['gender'];
+        updatedData['date_of_birth'] = formData['date_of_birth'];
+        updatedData['medical_notes'] = formData['medical_notes'];
+
+        if (result['photo_url'] != null) {
+          updatedData['profile_photo'] = result['photo_url'];
+        }
+
+        // Pop and return the fresh data
+        Navigator.pop(context, updatedData);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Update failed: ${result['error']}')),
         );
       }
     }
-    setState(() => _isSaving = false);
+    if (mounted) setState(() => _isSaving = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Patient'),
+        title: const Text(
+          'Edit Patient',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: _save,
-            icon: const Icon(Icons.save),
-            tooltip: 'Save',
-          ),
-        ],
+        // Removed the actions: [IconButton(...)] from here!
       ),
       body: Container(
         color: const Color(0xFFEFE8FA),
@@ -3173,113 +3612,142 @@ class _EditPatientPageState extends State<EditPatientPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Profile photo preview and change button
+              // Profile photo section
               Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: _photoPath != null
-                          ? FileImage(File(_photoPath!))
-                          : (widget.patient['profile_photo'] != null &&
-                                    widget.patient['profile_photo'].isNotEmpty
-                                ? NetworkImage(
-                                        _buildImageUrl(
-                                          widget.patient['profile_photo'],
-                                        ),
-                                      )
-                                      as ImageProvider
-                                : null),
-                      child:
-                          (_photoPath == null &&
-                              (widget.patient['profile_photo'] == null ||
-                                  widget.patient['profile_photo'].isEmpty))
-                          ? Text(
-                              widget.patient['full_name']
-                                      ?.substring(0, 1)
-                                      .toUpperCase() ??
-                                  '?',
-                              style: const TextStyle(fontSize: 36),
-                            )
-                          : null,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: AppColors.primaryPurple,
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.camera_alt,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                          onPressed: _pickImage,
-                        ),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
                       ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 55,
+                    backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+                    backgroundImage:
+                        widget.patient['profile_photo'] != null &&
+                            widget.patient['profile_photo'].isNotEmpty
+                        ? NetworkImage(
+                            _buildImageUrl(widget.patient['profile_photo']),
+                          )
+                        : null,
+                    child:
+                        (widget.patient['profile_photo'] == null ||
+                            widget.patient['profile_photo'].isEmpty)
+                        ? Text(
+                            widget.patient['full_name']
+                                    ?.substring(0, 1)
+                                    .toUpperCase() ??
+                                '?',
+                            style: const TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryPurple,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Form fields in cards
+              _buildInputCard(
+                'Full Name',
+                _fullNameController,
+                Icons.person,
+                validator: (v) => v!.isEmpty ? 'Required' : null,
+              ),
+              _buildInputCard(
+                'Email',
+                _emailController,
+                Icons.email,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              _buildInputCard(
+                'Phone',
+                _phoneController,
+                Icons.phone,
+                keyboardType: TextInputType.phone,
+              ),
+              _buildInputCard('Address', _addressController, Icons.location_on),
+              _buildDropdownCard(
+                'Gender',
+                _selectedGender,
+                _genders,
+                (val) => setState(() => _selectedGender = val),
+              ),
+              _buildDateCard(
+                'Date of Birth',
+                _dobController,
+                () => _pickDate(),
+              ),
+              _buildInputCard(
+                'Medical Notes',
+                _medicalNotesController,
+                Icons.note,
+                maxLines: 3,
+              ),
+
+              const SizedBox(height: 32),
+
+              // 👇 THE NEW SOLID DARK PURPLE BUTTON 👇
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.primaryPurple, // Solid Dark Purple
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryPurple.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(labelText: 'Phone'),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _addressController,
-                decoration: const InputDecoration(labelText: 'Address'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedGender,
-                decoration: const InputDecoration(labelText: 'Gender'),
-                items: _genders
-                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                    .toList(),
-                onChanged: (val) => setState(() => _selectedGender = val),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _dobController,
-                decoration: const InputDecoration(labelText: 'Date of Birth'),
-                readOnly: true,
-                onTap: _pickDate,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _medicalNotesController,
-                decoration: const InputDecoration(labelText: 'Medical Notes'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.save_rounded, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Save Changes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
-                child: _isSaving
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'Save Changes',
-                        style: TextStyle(color: Colors.white),
-                      ),
               ),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -3287,11 +3755,185 @@ class _EditPatientPageState extends State<EditPatientPage> {
     );
   }
 
-  String _buildImageUrl(String url) {
-    return url.startsWith('http')
-        ? url
-        : '${ApiService.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
+  Widget _buildInputCard(
+    String label,
+    TextEditingController controller,
+    IconData icon, {
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: TextFormField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            prefixIcon: Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: AppColors.primaryPurple, size: 20),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 50,
+              minHeight: 40,
+            ),
+            border: InputBorder.none,
+            floatingLabelBehavior: FloatingLabelBehavior.auto,
+          ),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: AppColors.textDark,
+          ),
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          validator: validator,
+        ),
+      ),
+    );
   }
+
+  Widget _buildDropdownCard(
+    String label,
+    String? value,
+    List<String> items,
+    void Function(String?) onChanged,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: DropdownButtonFormField<String>(
+          value: value,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            prefixIcon: Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.transgender_rounded,
+                color: AppColors.primaryPurple,
+                size: 20,
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 50,
+              minHeight: 40,
+            ),
+            border: InputBorder.none,
+          ),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: AppColors.textDark,
+          ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: AppColors.primaryPurple,
+          ),
+          items: items
+              .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateCard(
+    String label,
+    TextEditingController controller,
+    VoidCallback onTap,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: TextFormField(
+          controller: controller,
+          readOnly: true,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            prefixIcon: Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.calendar_today_rounded,
+                color: AppColors.primaryPurple,
+                size: 20,
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 50,
+              minHeight: 40,
+            ),
+            border: InputBorder.none,
+          ),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: AppColors.textDark,
+          ),
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+
+  String _buildImageUrl(String url) => url.startsWith('http')
+      ? url
+      : '${ApiService.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
 }
 
 class AddPatientPage extends StatefulWidget {
@@ -3311,9 +3953,11 @@ class _AddPatientPageState extends State<AddPatientPage> {
   final _passwordCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _medicalNotesCtrl = TextEditingController();
+  final _dobCtrl = TextEditingController();
+
   String? _selectedGender;
   DateTime? _selectedDob;
-  final _medicalNotesCtrl = TextEditingController();
   bool _isSaving = false;
   final List<String> _genders = ['Male', 'Female', 'Other'];
 
@@ -3324,9 +3968,16 @@ class _AddPatientPageState extends State<AddPatientPage> {
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
     );
-    if (picked != null) setState(() => _selectedDob = picked);
+    if (picked != null) {
+      setState(() {
+        _selectedDob = picked;
+        _dobCtrl.text =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      });
+    }
   }
 
+  // Inside _AddPatientPageState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
@@ -3347,6 +3998,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
     };
 
     final res = await _apiService.addPatient(data);
+
     if (mounted) {
       if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3359,14 +4011,17 @@ class _AddPatientPageState extends State<AddPatientPage> {
         );
       }
     }
-    setState(() => _isSaving = false);
+    if (mounted) setState(() => _isSaving = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add New Patient'),
+        title: const Text(
+          'Add New Patient',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
       ),
@@ -3377,77 +4032,308 @@ class _AddPatientPageState extends State<AddPatientPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              TextFormField(
-                controller: _fullNameCtrl,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              // Header Illustration
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryPurple.withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryPurple.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.person_add_rounded,
+                      size: 50,
+                      color: AppColors.primaryPurple,
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailCtrl,
-                decoration: const InputDecoration(labelText: 'Email'),
+              const SizedBox(height: 32),
+
+              _buildInputCard(
+                'Full Name',
+                _fullNameCtrl,
+                Icons.person,
+                validator: (v) => v!.isEmpty ? 'Required' : null,
+              ),
+              _buildInputCard(
+                'Email',
+                _emailCtrl,
+                Icons.email,
                 keyboardType: TextInputType.emailAddress,
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _passwordCtrl,
-                decoration: const InputDecoration(labelText: 'Password'),
+              _buildInputCard(
+                'Password',
+                _passwordCtrl,
+                Icons.lock,
                 obscureText: true,
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phoneCtrl,
-                decoration: const InputDecoration(labelText: 'Phone'),
+              _buildInputCard(
+                'Phone',
+                _phoneCtrl,
+                Icons.phone,
                 keyboardType: TextInputType.phone,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _addressCtrl,
-                decoration: const InputDecoration(labelText: 'Address'),
+              _buildInputCard('Address', _addressCtrl, Icons.location_on),
+              _buildDropdownCard(
+                'Gender',
+                _selectedGender,
+                _genders,
+                (val) => setState(() => _selectedGender = val),
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedGender,
-                decoration: const InputDecoration(labelText: 'Gender'),
-                items: _genders
-                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                    .toList(),
-                onChanged: (val) => setState(() => _selectedGender = val),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                decoration: const InputDecoration(labelText: 'Date of Birth'),
-                readOnly: true,
-                controller: TextEditingController(
-                  text: _selectedDob != null
-                      ? '${_selectedDob!.year}-${_selectedDob!.month}-${_selectedDob!.day}'
-                      : '',
-                ),
-                onTap: _pickDate,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _medicalNotesCtrl,
-                decoration: const InputDecoration(labelText: 'Medical Notes'),
+              _buildDateCard('Date of Birth', _dobCtrl, _pickDate),
+              _buildInputCard(
+                'Medical Notes',
+                _medicalNotesCtrl,
+                Icons.note,
                 maxLines: 3,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
+
+              const SizedBox(height: 32),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: AppColors.mainGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryPurple.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-                child: _isSaving
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'Create Patient',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.person_add_rounded, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Create Patient',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputCard(
+    String label,
+    TextEditingController controller,
+    IconData icon, {
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: TextFormField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            prefixIcon: Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: AppColors.primaryPurple, size: 20),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 50,
+              minHeight: 40,
+            ),
+            border: InputBorder.none,
+            floatingLabelBehavior: FloatingLabelBehavior.auto,
+          ),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: AppColors.textDark,
+          ),
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          obscureText: obscureText,
+          validator: validator,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownCard(
+    String label,
+    String? value,
+    List<String> items,
+    void Function(String?) onChanged,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: DropdownButtonFormField<String>(
+          value: value,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            prefixIcon: Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.transgender_rounded,
+                color: AppColors.primaryPurple,
+                size: 20,
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 50,
+              minHeight: 40,
+            ),
+            border: InputBorder.none,
+          ),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: AppColors.textDark,
+          ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: AppColors.primaryPurple,
+          ),
+          items: items
+              .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateCard(
+    String label,
+    TextEditingController controller,
+    VoidCallback onTap,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: TextFormField(
+          controller: controller,
+          readOnly: true,
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            prefixIcon: Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.calendar_today_rounded,
+                color: AppColors.primaryPurple,
+                size: 20,
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 50,
+              minHeight: 40,
+            ),
+            border: InputBorder.none,
+          ),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: AppColors.textDark,
+          ),
+          onTap: onTap,
         ),
       ),
     );

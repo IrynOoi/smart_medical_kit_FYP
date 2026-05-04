@@ -681,4 +681,79 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  Future<bool> deletePatient(int patientId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/patient/$patientId'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error deleting patient: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updatePrescription(
+    int prescriptionId,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await put('/prescription/$prescriptionId', data);
+      return response['success'] == true;
+    } catch (e) {
+      print('Update prescription error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deletePrescription(int prescriptionId) async {
+    try {
+      final response = await delete('/prescription/$prescriptionId');
+      return response['success'] == true;
+    } catch (e) {
+      print('Delete prescription error: $e');
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 🔧 HTTP HELPER METHODS
+  // ==========================================
+
+  Future<Map<String, dynamic>> put(
+    String endpoint,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode(data),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> delete(String endpoint) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }
