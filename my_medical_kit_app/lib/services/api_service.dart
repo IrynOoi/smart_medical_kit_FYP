@@ -30,9 +30,7 @@ class ApiService {
       );
 
       print("📥 [API] Received response status code: ${response.statusCode}");
-      print(
-        "📥 [API] Received raw server response: ${response.body}",
-      ); // 👈 most important
+      print("📥 [API] Received raw server response: ${response.body}");
 
       return jsonDecode(response.body);
     } catch (e) {
@@ -103,6 +101,7 @@ class ApiService {
       return null;
     }
   }
+
   // ==========================================
   // 👤 PATIENT ENDPOINTS
   // ==========================================
@@ -112,9 +111,7 @@ class ApiService {
       final response = await http.get(Uri.parse('$baseUrl/patient/$patientId'));
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        print(
-          'Caregiver data: ${jsonResponse['data']['caregiver']}',
-        ); // 👈 添加这行
+        print('Caregiver data: ${jsonResponse['data']['caregiver']}');
         if (jsonResponse['success']) {
           return Patient.fromJson(jsonResponse['data']);
         }
@@ -207,7 +204,6 @@ class ApiService {
         final json = jsonDecode(response.body);
 
         if (json['success']) {
-          // 🌟 正確解析 Python 傳來的 {"taken": [...], "missed": [...]}
           final takenList = (json['data']['taken'] as List)
               .map((e) => (e as num).toDouble())
               .toList();
@@ -239,7 +235,6 @@ class ApiService {
     throw Exception('Failed to load prescriptions');
   }
 
-  // 產生預設的空陣列，防止 UI 崩潰
   Map<String, List<double>> _emptyChartData(String period) {
     int length = period == 'Month' ? 4 : (period == 'Day' ? 6 : 7);
     return {
@@ -284,7 +279,6 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/patient/$patientId/ai_prediction'),
-        // ADD THESE HEADERS TO BYPASS NGROK'S WARNING PAGE
         headers: {
           'ngrok-skip-browser-warning': 'true',
           'Content-Type': 'application/json',
@@ -308,7 +302,6 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/patient/$patientId/adherence_stats'),
-        // ADD HEADERS HERE TOO
         headers: {'ngrok-skip-browser-warning': 'true'},
       );
       if (response.statusCode == 200) {
@@ -460,9 +453,8 @@ class ApiService {
           return jsonResponse['data'];
         }
       }
-      // Return empty data - the backend will provide the real average
       return {
-        'overall_adherence_prediction': 0.0, // Will be replaced by backend data
+        'overall_adherence_prediction': 0.0,
         'high_risk_patients': 0,
         'medium_risk_patients': 0,
         'total_analyzed': 0,
@@ -506,7 +498,7 @@ class ApiService {
       );
       final jsonResponse = jsonDecode(response.body);
       if (jsonResponse['success']) {
-        return jsonResponse['data']; // contains prediction_score, risk_level
+        return jsonResponse['data'];
       }
       return {'error': jsonResponse['error'] ?? 'Unknown error'};
     } catch (e) {
@@ -519,7 +511,6 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/caregiver/$caregiverId/at_risk_patients'),
-        // 👇 Add these headers!
         headers: {
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true',
@@ -537,8 +528,6 @@ class ApiService {
       return [];
     }
   }
-
-  // Add to api_service.dart
 
   // ==========================================
   // 🤖 AI PREDICTION ENDPOINTS
@@ -591,7 +580,9 @@ class ApiService {
     }
   }
 
-  // Add this to your api_service.dart
+  // ==========================================
+  // 🛠️ DEVICE & INVENTORY
+  // ==========================================
 
   Future<Map<String, dynamic>> getPatientDevice(int patientId) async {
     try {
@@ -633,6 +624,96 @@ class ApiService {
     }
   }
 
+  // ==========================================
+  // 🎮 HARDWARE CONTROL (via backend proxy)
+  // ==========================================
+
+  Future<bool> controlLed(int patientId, bool turnOn) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device/control/led'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'action': turnOn ? 'on' : 'off',
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('controlLed error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> controlBuzzer(int patientId, bool turnOn) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device/control/buzzer'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'action': turnOn ? 'on' : 'off',
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('controlBuzzer error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> controlDisplay(int patientId, String command) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device/control/display'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'patient_id': patientId, 'command': command}),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('controlDisplay error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> controlStepper(int patientId, int motor, String action) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device/control/stepper'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'motor': motor,
+          'action': action,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('controlStepper error: $e');
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 👤 UPDATE & DELETE
+  // ==========================================
+
   Future<Map<String, dynamic>> updatePatient(
     int patientId,
     Map<String, dynamic> formData, {
@@ -643,11 +724,9 @@ class ApiService {
         'PUT',
         Uri.parse('$baseUrl/update_patient/$patientId'),
       );
-      // Add text fields
       formData.forEach((key, value) {
         if (value != null) request.fields[key] = value.toString();
       });
-      // Add photo if provided
       if (photoPath != null && photoPath.isNotEmpty) {
         var file = await http.MultipartFile.fromPath(
           'profile_photo',
@@ -753,6 +832,256 @@ class ApiService {
       );
       return jsonDecode(response.body);
     } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<bool> updateDevice(int deviceId, String newSerial) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/iot_device/$deviceId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'device_serial': newSerial}),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('updateDevice error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteDevice(int deviceId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/iot_device/$deviceId'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('deleteDevice error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> addDevice(String serial, String ip, int battery) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/iot_device'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'device_serial': serial,
+          'last_known_ip': ip ?? '',
+          'battery': battery,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('addDevice error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getPrescriptionForDevicePatient(
+    int deviceId,
+    int patientId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/device/$deviceId/patient/$patientId/prescription'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) return jsonResponse['data'];
+      }
+      return null;
+    } catch (e) {
+      debugPrint('getPrescriptionForDevicePatient error: $e');
+      return null;
+    }
+  }
+
+  Future<bool> assignPatientToDevice(
+    int deviceId,
+    int patientId,
+    int motorSlot,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/device/$deviceId/assign_patient'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'patient_id': patientId, 'motor_slot': motorSlot}),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('assignPatientToDevice error: $e');
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMedications() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/medications'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success'])
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('getMedications error: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> addMedication(String name) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/medications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'medication_name': name}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint('addMedication error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // ==========================================
+  // 🏭 DEVICE + PRESCRIPTION (combined)
+  // ==========================================
+
+  Future<bool> createDeviceWithPrescription({
+    required String serial,
+    required int patientId,
+    required int motorSlot,
+    required int medicationId,
+    required int inventory,
+    required int threshold,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device/create_with_prescription'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'device_serial': serial,
+          'patient_id': patientId,
+          'motor_slot': motorSlot,
+          'medication_id': medicationId,
+          'current_inventory': inventory,
+          'refill_threshold': threshold,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('createDeviceWithPrescription error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateDevicePrescription({
+    required int deviceId,
+    required int patientId,
+    required int motorSlot,
+    required int medicationId,
+    required int inventory,
+    required int threshold,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/device/$deviceId/prescription'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'motor_slot': motorSlot,
+          'medication_id': medicationId,
+          'current_inventory': inventory,
+          'refill_threshold': threshold,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('updateDevicePrescription error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> updateMedication(
+    int medicationId,
+    String newName,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/medications/$medicationId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'medication_name': newName}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint('updateMedication error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteMedication(int medicationId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/medications/$medicationId'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint('deleteMedication error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> addPrescription(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/add_prescription'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode(data),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      print('Error adding prescription: $e');
       return {'success': false, 'error': e.toString()};
     }
   }

@@ -1,4 +1,3 @@
-
 #cleanup_connections.py
 import psycopg2
 

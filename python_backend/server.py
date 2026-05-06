@@ -328,12 +328,15 @@ def get_patient_prescriptions(patient_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT prescription_id, patient_id, medication_name, dosage_tablet, 
-                       dispense_schedule, current_inventory, refill_threshold, 
-                       start_date, end_date, created_at, updated_at, device_id
-                FROM prescription_config 
-                WHERE patient_id = %s AND (end_date IS NULL OR end_date >= CURRENT_DATE)
-                ORDER BY start_date ASC
+                SELECT pc.prescription_id, pc.patient_id, m.medication_name,
+                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory,
+                       pc.refill_threshold, pc.start_date, pc.end_date,
+                       pc.created_at, pc.updated_at, pc.device_id
+                FROM prescription_config pc
+                JOIN medications m ON pc.medication_id = m.medication_id
+                WHERE pc.patient_id = %s 
+                  AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+                ORDER BY pc.start_date ASC
             ''', (patient_id,))
             prescriptions = cursor.fetchall()
             cursor.close()
@@ -390,9 +393,10 @@ def get_adherence_logs(patient_id):
             cursor.execute('''
                 SELECT al.adlog_id, al.prescription_id, al.device_id, 
                        al.scheduled_time, al.dispensed_time, al.status, al.recorded_at,
-                       pc.medication_name
+                       m.medication_name
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                JOIN medications m ON pc.medication_id = m.medication_id
                 WHERE pc.patient_id = %s
                 ORDER BY al.scheduled_time DESC
                 LIMIT %s
@@ -509,7 +513,13 @@ def get_caregiver_overview(caregiver_id):
             ''', (caregiver_id,))
             rx_data = cursor.fetchone()
             total_rx = rx_data['total_prescriptions'] if rx_data else 0
-            
+
+            # Inside get_caregiver_overview, after the `rx_data` query, add:
+            cursor.execute('SELECT COUNT(*) AS distinct_meds FROM medications')
+            distinct_meds = cursor.fetchone()['distinct_meds'] or 0
+
+
+
             cursor.close()
 
         # 計算達成率
@@ -524,7 +534,8 @@ def get_caregiver_overview(caregiver_id):
             "low_stock_count": low['low_stock_count'] or 0,
             "total_doses": total_doses,
             "adherence_score": adherence_score,
-            "total_prescriptions": total_rx  # 🌟 NEW: Now sending this to Flutter!
+            "total_prescriptions": total_rx,  # 🌟 NEW: Now sending this to Flutter!
+            "distinct_medications": distinct_meds
         }})
     except Exception as e:
         print(f"Get caregiver overview error: {e}")
@@ -629,16 +640,16 @@ def get_chart_data(caregiver_id):
 @app.route('/caregiver/<int:caregiver_id>/recent_alerts', methods=['GET'])
 def get_caregiver_alerts(caregiver_id):
     try:
-        # 🌟 支援 limit 參數，讓 Details Page 可以載入更多警告紀錄
         limit = request.args.get('limit', default=20, type=int)
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT al.adlog_id, u.full_name AS patient_name,
-                       pc.medication_name, al.scheduled_time, al.status,
+                       m.medication_name, al.scheduled_time, al.status,
                        pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                JOIN medications m ON pc.medication_id = m.medication_id
                 JOIN patient p ON pc.patient_id = p.patient_id
                 JOIN users u ON p.patient_id = u.user_id
                 WHERE p.caregiver_id = %s
@@ -751,21 +762,29 @@ def compute_prediction_for_patient(patient_id):
         conn.commit()
         return new_pred
 
-        
 @app.route('/caregiver/<int:caregiver_id>/patients', methods=['GET'])
 def get_caregiver_patients(caregiver_id):
-    """Get all patients under this caregiver"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            # 👇 ADDED u.email to the SELECT query here
             cursor.execute('''
-                SELECT u.user_id as patient_id, u.email, u.full_name, u.date_of_birth, u.gender,
-                       u.phone_no, u.address, p.medical_notes, u.profile_photo,
-                       d.battery_level, d.device_serial, d.last_active_timestamp
+                SELECT 
+                    u.user_id as patient_id, u.email, u.full_name, u.date_of_birth, u.gender,
+                    u.phone_no, u.address, p.medical_notes, u.profile_photo,
+                    d.device_id,
+                    d.last_reported_battery AS battery_level,
+                    d.device_serial,
+                    d.last_battery_report AS last_active_timestamp,
+                    d.last_known_ip,
+                    pc.current_inventory AS inventory,
+                    pc.refill_threshold AS refill_threshold
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
-                LEFT JOIN iot_device d ON d.patient_id = p.patient_id
+                LEFT JOIN patient_device pd ON p.patient_id = pd.patient_id
+                LEFT JOIN iot_device d ON pd.device_id = d.device_id
+                LEFT JOIN prescription_config pc 
+                    ON pc.patient_id = p.patient_id 
+                    AND pc.device_id = d.device_id
                 WHERE p.caregiver_id = %s AND u.is_active = true
                 ORDER BY u.full_name ASC
             ''', (caregiver_id,))
@@ -775,6 +794,7 @@ def get_caregiver_patients(caregiver_id):
     except Exception as e:
         print(f"Error in get_caregiver_patients: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/caregiver/<int:caregiver_id>', methods=['GET'])
 def get_caregiver_profile(caregiver_id):
@@ -963,47 +983,46 @@ def record_medication():
 
 @app.route('/add_prescription', methods=['POST'])
 def add_prescription():
-    """Create a new prescription config and return it for the setup page"""
     try:
         data = request.get_json()
-        
-        # Extract required fields from the frontend request
         patient_id = data.get('patient_id')
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
-        dispense_schedule = data.get('dispense_schedule')  # e.g., '0 8 * * *'
+        dispense_schedule = data.get('dispense_schedule')
         current_inventory = data.get('current_inventory', 0)
         refill_threshold = data.get('refill_threshold', 5)
-        start_date = data.get('start_date') 
-        device_id = data.get('device_id') # Can be None/null if not assigned yet
+        start_date = data.get('start_date')
+        device_id = data.get('device_id')
 
-        # Basic validation
         if not all([patient_id, medication_name, dosage_tablet, dispense_schedule, start_date]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # Insert and return the full row so the frontend can display it immediately
+            # Get medication_id from medications table
+            cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
+            med_row = cursor.fetchone()
+            if not med_row:
+                return jsonify({"success": False, "message": f"Medication '{medication_name}' not found"}), 400
+            medication_id = med_row['medication_id']
+
             cursor.execute('''
                 INSERT INTO prescription_config 
-                (patient_id, medication_name, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id)
+                (patient_id, medication_id, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING prescription_id, patient_id, medication_name, dosage_tablet, 
+                RETURNING prescription_id, patient_id, medication_id, dosage_tablet, 
                           dispense_schedule, current_inventory, refill_threshold, 
                           start_date, end_date, created_at, updated_at, device_id
-            ''', (patient_id, medication_name, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id))
+            ''', (patient_id, medication_id, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id))
             
             new_prescription = cursor.fetchone()
+            # Optionally add the medication_name back for the response
+            new_prescription['medication_name'] = medication_name
             conn.commit()
             cursor.close()
 
-        return jsonify({
-            "success": True, 
-            "message": "Prescription created successfully!", 
-            "data": new_prescription
-        })
-        
+        return jsonify({"success": True, "message": "Prescription created successfully!", "data": new_prescription})
     except Exception as e:
         print(f"Add prescription error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1011,16 +1030,17 @@ def add_prescription():
 
 @app.route('/prescription/<int:prescription_id>', methods=['GET'])
 def get_prescription_details(prescription_id):
-    """View details of a specific prescription setup"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT prescription_id, patient_id, medication_name, dosage_tablet, 
-                       dispense_schedule, current_inventory, refill_threshold, 
-                       start_date, end_date, created_at, updated_at, device_id
-                FROM prescription_config
-                WHERE prescription_id = %s
+                SELECT pc.prescription_id, pc.patient_id, m.medication_name,
+                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory,
+                       pc.refill_threshold, pc.start_date, pc.end_date,
+                       pc.created_at, pc.updated_at, pc.device_id
+                FROM prescription_config pc
+                JOIN medications m ON pc.medication_id = m.medication_id
+                WHERE pc.prescription_id = %s
             ''', (prescription_id,))
             prescription = cursor.fetchone()
             cursor.close()
@@ -1029,11 +1049,9 @@ def get_prescription_details(prescription_id):
             return jsonify({"success": True, "data": prescription})
         else:
             return jsonify({"success": False, "error": "Prescription not found"}), 404
-            
     except Exception as e:
         print(f"Get prescription details error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-# Ensure this is imported at the top of server.py
 
 @app.route('/predict_and_save', methods=['POST'])
 def predict_and_save():
@@ -1315,14 +1333,17 @@ def delete_patient(patient_id):
 
 @app.route('/iot_device/patient/<int:patient_id>', methods=['GET'])
 def get_patient_device(patient_id):
-    """Get IoT device info for a patient"""
+    """Get IoT device info for a patient (via patient_device junction)"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT device_id, device_serial, battery_level, last_active_timestamp
-                FROM iot_device
-                WHERE patient_id = %s
+                SELECT d.device_id, d.device_serial, 
+                       d.last_reported_battery AS battery_level,
+                       d.last_battery_report AS last_active_timestamp
+                FROM iot_device d
+                JOIN patient_device pd ON d.device_id = pd.device_id
+                WHERE pd.patient_id = %s
                 LIMIT 1
             ''', (patient_id,))
             device = cursor.fetchone()
@@ -1365,6 +1386,482 @@ def test_device(user_id):
     """Simulate testing the IoT device"""
     # In a real implementation, this would send a signal to the actual hardware
     return jsonify({"success": True, "message": "Buzzer Signal Sent to Kit! 🔊"})
+
+
+
+# ==========================================
+# 📋 UPDATE & DELETE PRESCRIPTION
+# ==========================================
+
+@app.route('/prescription/<int:prescription_id>', methods=['PUT'])
+def update_prescription(prescription_id):
+    try:
+        data = request.get_json()
+        medication_name = data.get('medication_name')
+        dosage_tablet = data.get('dosage_tablet')
+        dispense_schedule = data.get('dispense_schedule')
+        
+        if not all([medication_name, dosage_tablet, dispense_schedule]):
+            return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get medication_id
+            cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
+            med_row = cursor.fetchone()
+            if not med_row:
+                return jsonify({"success": False, "message": f"Medication '{medication_name}' not found"}), 400
+            medication_id = med_row[0]
+            
+            cursor.execute('''
+                UPDATE prescription_config 
+                SET medication_id = %s, dosage_tablet = %s, dispense_schedule = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE prescription_id = %s
+            ''', (medication_id, dosage_tablet, dispense_schedule, prescription_id))
+            
+            conn.commit()
+            cursor.close()
+
+        return jsonify({"success": True, "message": "Prescription updated successfully!"})
+    except Exception as e:
+        print(f"Update prescription error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/prescription/<int:prescription_id>', methods=['DELETE'])
+def delete_prescription(prescription_id):
+    """Delete a prescription and its associated logs"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # 1. Delete associated adherence logs first (to avoid foreign key constraint errors)
+            cursor.execute('DELETE FROM adherence_logs WHERE prescription_id = %s', (prescription_id,))
+            
+            # 2. Delete the prescription itself
+            cursor.execute('DELETE FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
+            
+            conn.commit()
+            cursor.close()
+
+        return jsonify({"success": True, "message": "Prescription and related logs deleted!"})
+    except Exception as e:
+        print(f"Delete prescription error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/device/heartbeat', methods=['POST'])
+def device_heartbeat():
+    """Called by ESP32 to report its current state"""
+    try:
+        data = request.get_json()
+        device_serial = data.get('device_serial')
+        battery = data.get('battery', 100)
+        wifi_rssi = data.get('rssi')
+        # Get the device's public IP as seen by the server
+        # (If ESP32 sends its local IP, use that instead)
+        device_ip = request.remote_addr
+
+        if not device_serial:
+            return jsonify({"success": False, "message": "device_serial required"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO iot_device (device_serial, last_reported_battery, last_known_ip, last_battery_report, wifi_rssi)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
+                ON CONFLICT (device_serial) DO UPDATE SET
+                    last_reported_battery = EXCLUDED.last_reported_battery,
+                    last_known_ip = EXCLUDED.last_known_ip,
+                    last_battery_report = EXCLUDED.last_battery_report,
+                    wifi_rssi = EXCLUDED.wifi_rssi
+            ''', (device_serial, battery, device_ip, wifi_rssi))
+            conn.commit()
+            cursor.close()
+
+        return jsonify({"success": True, "message": "Heartbeat received"})
+    except Exception as e:
+        print(f"Heartbeat error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+# ==========================================
+# 🎮 HARDWARE CONTROL PROXY ENDPOINTS
+# ==========================================
+
+def _forward_to_esp(device_ip, endpoint, method='GET', json_data=None):
+    """Helper to forward a request to the ESP32."""
+    import requests
+    url = f"http://{device_ip}{endpoint}"
+    try:
+        if method == 'GET':
+            resp = requests.get(url, timeout=5)
+        else:
+            resp = requests.post(url, json=json_data, timeout=5)
+        return resp.status_code, resp.text
+    except Exception as e:
+        return None, str(e)
+
+@app.route('/device/control/led', methods=['POST'])
+def control_led():
+    data = request.get_json()
+    patient_id = data.get('patient_id')
+    action = data.get('action')
+    if not patient_id or action not in ('on', 'off'):
+        return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT d.last_known_ip
+            FROM iot_device d
+            JOIN patient_device pd ON d.device_id = pd.device_id
+            WHERE pd.patient_id = %s
+            LIMIT 1
+        ''', (patient_id,))
+        device = cursor.fetchone()
+        cursor.close()
+
+    if not device or not device['last_known_ip']:
+        return jsonify({"success": False, "message": "Device IP not known"}), 404
+
+    status_code, response = _forward_to_esp(device['last_known_ip'], f"/led/{action}")
+    if status_code == 200:
+        return jsonify({"success": True, "message": f"LED turned {action}"})
+    else:
+        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+
+@app.route('/device/control/buzzer', methods=['POST'])
+def control_buzzer():
+    data = request.get_json()
+    patient_id = data.get('patient_id')
+    action = data.get('action')   # 'on' or 'off'
+    if not patient_id or action not in ('on', 'off'):
+        return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT d.last_known_ip
+            FROM iot_device d
+            JOIN patient p ON d.patient_id = p.patient_id
+            WHERE p.patient_id = %s
+            LIMIT 1
+        ''', (patient_id,))
+        device = cursor.fetchone()
+        cursor.close()
+
+    if not device or not device['last_known_ip']:
+        return jsonify({"success": False, "message": "Device IP not known"}), 404
+
+    status_code, response = _forward_to_esp(device['last_known_ip'], f"/buzzer/{action}")
+    if status_code == 200:
+        return jsonify({"success": True, "message": f"Buzzer turned {action}"})
+    else:
+        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+
+@app.route('/device/control/display', methods=['POST'])
+def control_display():
+    data = request.get_json()
+    patient_id = data.get('patient_id')
+    command = data.get('command')   # 'hello', 'clear', 'sv'
+    if not patient_id or command not in ('hello', 'clear', 'sv'):
+        return jsonify({"success": False, "message": "patient_id and command (hello/clear/sv) required"}), 400
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT d.last_known_ip
+            FROM iot_device d
+            JOIN patient p ON d.patient_id = p.patient_id
+            WHERE p.patient_id = %s
+            LIMIT 1
+        ''', (patient_id,))
+        device = cursor.fetchone()
+        cursor.close()
+
+    if not device or not device['last_known_ip']:
+        return jsonify({"success": False, "message": "Device IP not known"}), 404
+
+    status_code, response = _forward_to_esp(device['last_known_ip'], f"/display/{command}")
+    if status_code == 200:
+        return jsonify({"success": True, "message": f"Display command '{command}' sent"})
+    else:
+        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+
+@app.route('/device/control/stepper', methods=['POST'])
+def control_stepper():
+    data = request.get_json()
+    patient_id = data.get('patient_id')
+    motor = data.get('motor')      # 1, 2, or 3
+    action = data.get('action')    # 'forward', 'backward', '90', '180'
+    if not patient_id or motor not in (1,2,3) or action not in ('forward','backward','90','180'):
+        return jsonify({"success": False, "message": "patient_id, motor(1-3), action(forward/backward/90/180) required"}), 400
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT d.last_known_ip
+            FROM iot_device d
+            JOIN patient p ON d.patient_id = p.patient_id
+            WHERE p.patient_id = %s
+            LIMIT 1
+        ''', (patient_id,))
+        device = cursor.fetchone()
+        cursor.close()
+
+    if not device or not device['last_known_ip']:
+        return jsonify({"success": False, "message": "Device IP not known"}), 404
+
+    # Map motor number to endpoint prefix
+    motor_prefix = "" if motor == 1 else str(motor)   # /stepper, /stepper2, /stepper3
+    endpoint = f"/stepper{motor_prefix}/{action}"
+    status_code, response = _forward_to_esp(device['last_known_ip'], endpoint)
+    if status_code == 200:
+        return jsonify({"success": True, "message": f"Motor {motor} {action} command sent"})
+    else:
+        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+
+
+@app.route('/iot_device/<int:device_id>', methods=['PUT'])
+def update_device(device_id):
+    data = request.get_json()
+    new_serial = data.get('device_serial')
+    if not new_serial:
+        return jsonify({"success": False, "message": "device_serial required"}), 400
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE iot_device SET device_serial = %s WHERE device_id = %s', (new_serial, device_id))
+        conn.commit()
+    return jsonify({"success": True, "message": "Device updated"})
+
+@app.route('/iot_device/<int:device_id>', methods=['DELETE'])
+def delete_device(device_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM iot_device WHERE device_id = %s', (device_id,))
+        conn.commit()
+    return jsonify({"success": True, "message": "Device deleted"})
+
+
+
+@app.route('/iot_device', methods=['POST'])
+def add_device():
+    data = request.get_json()
+    device_serial = data.get('device_serial')
+    last_known_ip = data.get('last_known_ip')
+    battery = data.get('battery', 100)
+
+    if not device_serial:
+        return jsonify({"success": False, "message": "device_serial required"}), 400
+
+    # Convert empty string to None
+    if not last_known_ip:
+        last_known_ip = None
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO iot_device (device_serial, last_known_ip, last_reported_battery, last_battery_report)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            RETURNING device_id
+        ''', (device_serial, last_known_ip, battery))
+        new_id = cursor.fetchone()[0]
+        conn.commit()
+    return jsonify({"success": True, "message": "Device added", "device_id": new_id})
+
+
+@app.route('/medications', methods=['GET'])
+def get_medications():
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('SELECT medication_id, medication_name FROM medications ORDER BY medication_name')
+            meds = cursor.fetchall()
+        return jsonify({"success": True, "data": meds})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/medications', methods=['POST'])
+def add_medication():
+    try:
+        data = request.get_json()
+        medication_name = data.get('medication_name')
+        
+        if not medication_name:
+            return jsonify({"success": False, "message": "Medication name is required"}), 400
+            
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check if medication already exists
+            cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
+            if cursor.fetchone():
+                return jsonify({"success": False, "message": "Medication already exists"}), 400
+                
+            cursor.execute('''
+                INSERT INTO medications (medication_name) 
+                VALUES (%s) RETURNING medication_id, medication_name
+            ''', (medication_name,))
+            new_med = cursor.fetchone()
+            conn.commit()
+            
+        return jsonify({"success": True, "data": {"medication_id": new_med[0], "medication_name": new_med[1]}})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/device/create_with_prescription', methods=['POST'])
+def create_device_with_prescription():
+    data = request.get_json()
+    device_serial = data.get('device_serial')
+    patient_id = data.get('patient_id')
+    motor_slot = data.get('motor_slot')
+    medication_id = data.get('medication_id')
+    inventory = data.get('current_inventory', 30)
+    threshold = data.get('refill_threshold', 10)
+
+    if not all([device_serial, patient_id, motor_slot, medication_id]):
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Insert device
+        cursor.execute('''
+            INSERT INTO iot_device (device_serial, last_reported_battery, last_battery_report)
+            VALUES (%s, 100, CURRENT_TIMESTAMP)
+            RETURNING device_id
+        ''', (device_serial,))
+        device_id = cursor.fetchone()[0]
+
+        # Link patient to device
+        cursor.execute('INSERT INTO patient_device (patient_id, device_id) VALUES (%s, %s)', (patient_id, device_id))
+
+        # Create prescription
+        cursor.execute('''
+            INSERT INTO prescription_config
+            (patient_id, device_id, motor_slot, medication_id, dosage_tablet, dispense_schedule,
+             current_inventory, refill_threshold, start_date)
+            VALUES (%s, %s, %s, %s, 1.0, '0 8 * * *', %s, %s, CURRENT_DATE)
+        ''', (patient_id, device_id, motor_slot, medication_id, inventory, threshold))
+
+        conn.commit()
+    return jsonify({"success": True, "message": "Device and prescription created"})
+
+@app.route('/device/<int:device_id>/prescription', methods=['PUT'])
+def update_device_prescription(device_id):
+    data = request.get_json()
+    patient_id = data.get('patient_id')
+    motor_slot = data.get('motor_slot')
+    medication_id = data.get('medication_id')
+    inventory = data.get('current_inventory')
+    threshold = data.get('refill_threshold')
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Ensure patient_device link exists
+        cursor.execute('''
+            INSERT INTO patient_device (patient_id, device_id)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+        ''', (patient_id, device_id))
+
+        # Update or insert prescription
+        cursor.execute('''
+            INSERT INTO prescription_config
+            (patient_id, device_id, motor_slot, medication_id, dosage_tablet, dispense_schedule,
+             current_inventory, refill_threshold, start_date)
+            VALUES (%s, %s, %s, %s, 1.0, '0 8 * * *', %s, %s, CURRENT_DATE)
+            ON CONFLICT (patient_id, device_id)  -- need a unique constraint; fallback to update
+            DO UPDATE SET
+                motor_slot = EXCLUDED.motor_slot,
+                medication_id = EXCLUDED.medication_id,
+                current_inventory = EXCLUDED.current_inventory,
+                refill_threshold = EXCLUDED.refill_threshold,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (patient_id, device_id, motor_slot, medication_id, inventory, threshold))
+
+        conn.commit()
+    return jsonify({"success": True, "message": "Prescription updated"})
+
+
+
+@app.route('/device/<int:device_id>/patient/<int:patient_id>/prescription', methods=['GET'])
+def get_prescription_for_device_patient(device_id, patient_id):
+    """Fetch prescription details for a given device and patient."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT prescription_id, motor_slot, medication_id,
+                       current_inventory, refill_threshold
+                FROM prescription_config
+                WHERE patient_id = %s AND device_id = %s
+                LIMIT 1
+            ''', (patient_id, device_id))
+            result = cursor.fetchone()
+            if result:
+                return jsonify({"success": True, "data": result})
+            else:
+                return jsonify({"success": True, "data": None})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/medications/<int:medication_id>', methods=['PUT'])
+def update_medication(medication_id):
+    """Update an existing medication name."""
+    try:
+        data = request.get_json()
+        new_name = data.get('medication_name')
+        if not new_name:
+            return jsonify({"success": False, "message": "Medication name required"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Check if name already exists (exclude current)
+            cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s AND medication_id != %s', (new_name, medication_id))
+            if cursor.fetchone():
+                return jsonify({"success": False, "message": "Medication name already exists"}), 400
+
+            cursor.execute('''
+                UPDATE medications
+                SET medication_name = %s
+                WHERE medication_id = %s
+                RETURNING medication_id, medication_name
+            ''', (new_name, medication_id))
+            updated = cursor.fetchone()
+            conn.commit()
+            if updated:
+                return jsonify({"success": True, "data": {"medication_id": updated[0], "medication_name": updated[1]}})
+            else:
+                return jsonify({"success": False, "message": "Medication not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/medications/<int:medication_id>', methods=['DELETE'])
+def delete_medication(medication_id):
+    """Delete a medication if not referenced by any prescription."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Check if medication is used in any prescription
+            cursor.execute('SELECT COUNT(*) FROM prescription_config WHERE medication_id = %s', (medication_id,))
+            count = cursor.fetchone()[0]
+            if count > 0:
+                return jsonify({"success": False, "message": f"Cannot delete: medication is used in {count} prescription(s)"}), 400
+
+            cursor.execute('DELETE FROM medications WHERE medication_id = %s RETURNING medication_id', (medication_id,))
+            deleted = cursor.fetchone()
+            conn.commit()
+            if deleted:
+                return jsonify({"success": True, "message": "Medication deleted"})
+            else:
+                return jsonify({"success": False, "message": "Medication not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 # ==========================================

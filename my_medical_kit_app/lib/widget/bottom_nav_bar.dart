@@ -1,16 +1,16 @@
 //bottom_nav_bar.dart
 
 import 'package:flutter/material.dart';
-import 'package:my_medical_kit_app/screens/patient_dashboard_page.dart';
-import 'package:my_medical_kit_app/screens/caregiver_dashboard_page.dart';
-import 'package:my_medical_kit_app/screens/patient_history_page.dart';
+import 'package:my_medical_kit_app/screens/patient/patient_dashboard_page.dart';
+import 'package:my_medical_kit_app/screens/caregiver/caregiver_dashboard_page.dart';
+import 'package:my_medical_kit_app/screens/patient/patient_history_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/screens/caregiver_medication_history_page.dart';
+import 'package:my_medical_kit_app/screens/caregiver/caregiver_medication_history_page.dart';
 import 'package:my_medical_kit_app/screens/profile_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_medical_kit_app/screens/ai_analytics_page_caregiver.dart';
+import 'package:my_medical_kit_app/screens/caregiver/ai_analytics_page_caregiver.dart';
 import 'package:my_medical_kit_app/screens/inventory_management_page.dart';
-import 'package:my_medical_kit_app/screens/ai_prediction_patient.dart'; // Adjust path if necessary
+import 'package:my_medical_kit_app/screens/patient/ai_prediction_patient.dart'; // Adjust path if necessary
 
 class ComingSoonPage extends StatelessWidget {
   final String title;

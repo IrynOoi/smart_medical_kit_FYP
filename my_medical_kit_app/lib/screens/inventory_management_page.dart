@@ -1,5 +1,4 @@
 // lib/screens/inventory_management_page.dart
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -32,6 +31,10 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   List<Map<String, dynamic>> _inventoryList = [];
   final Map<int, String> _patientNames = {};
 
+  // For caregiver: selected patient ID to control
+  int? _selectedControlPatientId;
+  Map<int, String> _controlPatientOptions = {};
+
   // Constant for determining online/offline status
   static const int _onlineThresholdHours = 24;
 
@@ -50,8 +53,24 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     try {
       if (widget.role == 'patient') {
         await _loadPatientData();
+        // For patient, selected control patient is themselves
+        _selectedControlPatientId = widget.userId;
       } else {
         await _loadCaregiverData();
+        // Build patient options for dropdown
+        _controlPatientOptions = Map.fromEntries(
+          _inventoryList
+              .map(
+                (med) => MapEntry(
+                  med['patient_id'] as int,
+                  med['patient_name'] as String,
+                ),
+              )
+              .toSet(),
+        );
+        if (_controlPatientOptions.isNotEmpty) {
+          _selectedControlPatientId = _controlPatientOptions.keys.first;
+        }
       }
       setState(() => _isLoading = false);
     } catch (e) {
@@ -85,6 +104,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
             'patient_name': null,
             'dosage_tablet': med.dosageTablet,
             'device_id': med.deviceId,
+            'patient_id': widget.userId,
           },
         )
         .toList();
@@ -123,7 +143,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // RESTOCK WITH DIALOG (removes hardcoded quantity)
+  // RESTOCK WITH DIALOG
   // ------------------------------------------------------------
   Future<void> _showRestockDialog(
     int prescriptionId,
@@ -161,11 +181,11 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: _testDevice,
+            onPressed: () => _testDevice(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white, // ✅ explicit white text
-              minimumSize: const Size(70, 40), // ✅ ensures button has size
+              foregroundColor: Colors.white,
+              minimumSize: const Size(70, 40),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -219,7 +239,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // TEST DEVICE (improved error handling)
+  // TEST DEVICE (kept for compatibility)
   // ------------------------------------------------------------
   Future<void> _testDevice() async {
     try {
@@ -248,6 +268,79 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
         );
       }
     }
+  }
+
+  // ------------------------------------------------------------
+  // NEW IoT CONTROL METHODS (using backend proxy)
+  // ------------------------------------------------------------
+  Future<void> _controlLed(bool turnOn) async {
+    if (_selectedControlPatientId == null) return;
+    final success = await _apiService.controlLed(
+      _selectedControlPatientId!,
+      turnOn,
+    );
+    _showControlResult(success, turnOn ? 'LED turned ON' : 'LED turned OFF');
+  }
+
+  Future<void> _controlBuzzer(bool turnOn) async {
+    if (_selectedControlPatientId == null) return;
+    final success = await _apiService.controlBuzzer(
+      _selectedControlPatientId!,
+      turnOn,
+    );
+    _showControlResult(
+      success,
+      turnOn ? 'Buzzer turned ON' : 'Buzzer turned OFF',
+    );
+  }
+
+  Future<void> _controlDisplay(String command) async {
+    if (_selectedControlPatientId == null) return;
+    final success = await _apiService.controlDisplay(
+      _selectedControlPatientId!,
+      command,
+    );
+    String message = '';
+    switch (command) {
+      case 'hello':
+        message = 'Displayed "Hello World"';
+        break;
+      case 'clear':
+        message = 'Display cleared';
+        break;
+      case 'sv':
+        message = 'Displayed Supervisor name';
+        break;
+    }
+    _showControlResult(success, message);
+  }
+
+  Future<void> _controlStepper(int motor, String action) async {
+    if (_selectedControlPatientId == null) return;
+    final success = await _apiService.controlStepper(
+      _selectedControlPatientId!,
+      motor,
+      action,
+    );
+    final actionText = action == 'forward'
+        ? '360° Forward'
+        : action == 'backward'
+        ? '360° Backward'
+        : action == '90'
+        ? '90°'
+        : '180°';
+    _showControlResult(success, 'Motor $motor turned $actionText');
+  }
+
+  void _showControlResult(bool success, String successMessage) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? '✅ $successMessage' : '❌ Command failed'),
+        backgroundColor: success ? Colors.green : Colors.red,
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   // ------------------------------------------------------------
@@ -313,7 +406,6 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
-      // Removed the SafeArea and outer Column to allow the purple header to reach the very top
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primaryPurple,
@@ -338,7 +430,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // DEVICE HEADER (Signal replaced with Online/Offline status)
+  // DEVICE HEADER
   // ------------------------------------------------------------
   Widget _buildDeviceHeader() {
     final batteryLevel = _deviceData['battery_level'];
@@ -506,7 +598,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // PATIENT CONTROLS
+  // PATIENT CONTROLS (now includes full IoT control)
   // ------------------------------------------------------------
   Widget _buildPatientControls() {
     return Padding(
@@ -514,80 +606,128 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Patient selector for caregiver (only visible if role == caregiver)
+          if (widget.role == 'caregiver' && _controlPatientOptions.isNotEmpty)
+            _buildPatientSelector(),
+          const SizedBox(height: 16),
+
           const Text(
-            'Smart Kit Actions',
+            'Remote Device Control',
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: AppColors.textDark,
             ),
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+
+          // LED & Buzzer Row
+          _buildControlCard(
+            title: 'LED',
+            icon: Icons.highlight,
+            color: Colors.amber,
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _controlLed(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('ON'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _controlLed(false),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('OFF'),
+                  ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+
+          _buildControlCard(
+            title: 'Buzzer',
+            icon: Icons.volume_up,
+            color: Colors.deepPurple,
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryPurple.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.notifications_active_rounded,
-                    color: AppColors.primaryPurple,
-                  ),
-                ),
-                const SizedBox(width: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Test Buzzer & LED',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+                  child: ElevatedButton(
+                    onPressed: () => _controlBuzzer(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      Text(
-                        'Trigger kit hardware to ensure it is working.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
+                    ),
+                    child: const Text('ON'),
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: _testDevice,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    // ✅ FIXED: Explicitly set foreground color to white
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _controlBuzzer(false),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                  ),
-                  child: const Text(
-                    'Test',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold, // Make it pop a bit more
-                    ),
+                    child: const Text('OFF'),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          _buildControlCard(
+            title: 'OLED Display',
+            icon: Icons.screenshot,
+            color: Colors.teal,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildDisplayButton('hello', 'Hello', Icons.text_fields),
+                _buildDisplayButton('clear', 'Clear', Icons.clear),
+                _buildDisplayButton('sv', 'Supervisor', Icons.person),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          _buildControlCard(
+            title: 'Stepper Motors',
+            icon: Icons.settings,
+            color: Colors.orange,
+            child: Column(
+              children: [
+                // Motor 1 controls
+                _buildMotorRow(1, Colors.blue),
+                const SizedBox(height: 12),
+                // Motor 2 controls
+                _buildMotorRow(2, Colors.green),
+                const SizedBox(height: 12),
+                // Motor 3 controls
+                _buildMotorRow(3, Colors.purple),
               ],
             ),
           ),
@@ -596,8 +736,164 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     );
   }
 
+  Widget _buildPatientSelector() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Select Patient',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int>(
+            initialValue: _selectedControlPatientId,
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            items: _controlPatientOptions.entries.map((entry) {
+              return DropdownMenuItem<int>(
+                value: entry.key,
+                child: Text(entry.value),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedControlPatientId = value;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControlCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisplayButton(String command, String label, IconData icon) {
+    return ElevatedButton.icon(
+      onPressed: () => _controlDisplay(command),
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.grey.shade200,
+        foregroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Widget _buildMotorRow(int motor, Color color) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 60,
+          child: Text(
+            'Motor $motor',
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
+          ),
+        ),
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildMotorButton(motor, 'forward', '360°', Icons.rotate_right),
+              _buildMotorButton(motor, 'backward', '360° ←', Icons.rotate_left),
+              _buildMotorButton(motor, '180', '180°', Icons.pie_chart_outline),
+              _buildMotorButton(motor, '90', '90°', Icons.pie_chart),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMotorButton(
+    int motor,
+    String action,
+    String label,
+    IconData icon,
+  ) {
+    return ElevatedButton(
+      onPressed: () => _controlStepper(motor, action),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.grey.shade100,
+        foregroundColor: Colors.black87,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [Icon(icon, size: 16), const SizedBox(width: 4), Text(label)],
+      ),
+    );
+  }
+
   // ------------------------------------------------------------
-  // INVENTORY SUMMARY
+  // INVENTORY SUMMARY (unchanged from original)
   // ------------------------------------------------------------
   Widget _buildInventorySummary() {
     if (_inventoryList.isEmpty) return const SizedBox.shrink();
@@ -690,7 +986,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // INVENTORY LIST (improved progress bar max)
+  // INVENTORY LIST (unchanged from original)
   // ------------------------------------------------------------
   Widget _buildInventorySection() {
     if (_inventoryList.isEmpty) {
