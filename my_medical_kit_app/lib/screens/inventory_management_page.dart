@@ -1,4 +1,5 @@
 // lib/screens/inventory_management_page.dart
+// lib/screens/inventory_management_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -23,6 +24,14 @@ class InventoryManagementPage extends StatefulWidget {
 class _InventoryManagementPageState extends State<InventoryManagementPage> {
   final ApiService _apiService = ApiService();
 
+  List<Map<String, dynamic>> _deviceInventoryList = [];
+  bool _isLoadingDeviceInventory = false;
+
+  // Device dropdown
+  List<Map<String, dynamic>> _devicesList = [];
+  int? _selectedDeviceId;
+  Map<String, dynamic> _selectedDeviceDetail = {}; // For header update
+
   bool _isLoading = true;
   bool _isRefreshing = false;
   String _errorMessage = '';
@@ -35,13 +44,79 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   int? _selectedControlPatientId;
   Map<int, String> _controlPatientOptions = {};
 
+  // device info for the selected patient (caregiver only)
+  Map<String, dynamic> _selectedPatientDevice = {};
+
   // Constant for determining online/offline status
   static const int _onlineThresholdHours = 24;
+
+  // Direct ESP32 test section variables
+  String _testEspIp = "172.20.10.2";
+  int _selectedTestMotor = 1;
+  final TextEditingController _espIpController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadDevices();
+    _espIpController.text = _testEspIp;
+  }
+
+  Future<void> _loadDevices() async {
+    try {
+      final devices = await _apiService.getDevices();
+      setState(() {
+        _devicesList = devices;
+      });
+    } catch (e) {
+      print('Error loading devices: $e');
+    }
+  }
+
+  Future<void> _onDeviceSelected(int? deviceId) async {
+    if (deviceId == null) return;
+    setState(() {
+      _selectedDeviceId = deviceId;
+      _selectedDeviceDetail = {};
+    });
+
+    // Fetch device details
+    final device = await _apiService.getDevice(deviceId);
+    if (device.isNotEmpty) {
+      setState(() {
+        _selectedDeviceDetail = device;
+      });
+    }
+
+    await _loadDeviceInventory(deviceId);
+
+    // Find patient assigned to this device (for control commands)
+    final patientId = await _apiService.getPatientIdFromDevice(deviceId);
+    if (patientId != null) {
+      setState(() {
+        _selectedControlPatientId = patientId;
+      });
+      // Also fetch device status card for that patient (caregiver view)
+      if (widget.role == 'caregiver') {
+        await _fetchDeviceForPatient(patientId);
+      }
+    } else {
+      // No patient assigned – cannot control
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '⚠️ No patient assigned to this device. Control disabled.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        setState(() {
+          _selectedControlPatientId = null;
+        });
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -70,6 +145,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
         );
         if (_controlPatientOptions.isNotEmpty) {
           _selectedControlPatientId = _controlPatientOptions.keys.first;
+          await _fetchDeviceForPatient(_selectedControlPatientId!);
         }
       }
       setState(() => _isLoading = false);
@@ -77,6 +153,30 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
       setState(() {
         _errorMessage = 'Failed to load inventory data: $e';
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchDeviceForPatient(int patientId) async {
+    try {
+      final device = await _apiService.getPatientDevice(patientId);
+      setState(() {
+        _selectedPatientDevice = device.isNotEmpty
+            ? device
+            : {
+                'device_serial': 'Not connected',
+                'battery_level': 0,
+                'last_active_timestamp': null,
+              };
+      });
+    } catch (e) {
+      print('Error fetching device for patient $patientId: $e');
+      setState(() {
+        _selectedPatientDevice = {
+          'device_serial': 'Error',
+          'battery_level': 0,
+          'last_active_timestamp': null,
+        };
       });
     }
   }
@@ -140,6 +240,38 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
       'battery_level': null,
       'last_active_timestamp': null,
     };
+  }
+
+  Future<void> _loadDeviceInventory(int deviceId) async {
+    setState(() => _isLoadingDeviceInventory = true);
+    try {
+      final prescriptions = await _apiService.getDevicePrescriptions(deviceId);
+      final List<Map<String, dynamic>> inventory = [];
+      for (var med in prescriptions) {
+        String patientName = '';
+        if (widget.role == 'caregiver' &&
+            _patientNames.containsKey(med.patientId)) {
+          patientName = _patientNames[med.patientId]!;
+        }
+        inventory.add({
+          'prescription_id': med.prescriptionId,
+          'medication_name': med.medicationName,
+          'current_inventory': med.currentInventory,
+          'refill_threshold': med.refillThreshold,
+          'patient_name': patientName,
+          'patient_id': med.patientId,
+          'dosage_tablet': med.dosageTablet,
+          'device_id': med.deviceId,
+        });
+      }
+      setState(() {
+        _deviceInventoryList = inventory;
+      });
+    } catch (e) {
+      print('Error loading device inventory: $e');
+    } finally {
+      setState(() => _isLoadingDeviceInventory = false);
+    }
   }
 
   // ------------------------------------------------------------
@@ -271,7 +403,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // NEW IoT CONTROL METHODS (using backend proxy)
+  // IoT CONTROL METHODS (using backend proxy)
   // ------------------------------------------------------------
   Future<void> _controlLed(bool turnOn) async {
     if (_selectedControlPatientId == null) return;
@@ -344,6 +476,34 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
+  // Direct ESP32 test methods (bypass backend)
+  // ------------------------------------------------------------
+  Future<void> _sendDirectCommand(String endpoint, String successMsg) async {
+    final url = Uri.parse('http://$_testEspIp$endpoint');
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ $successMsg'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // ------------------------------------------------------------
   // FORMAT LAST ACTIVE & ONLINE STATUS
   // ------------------------------------------------------------
   String _formatLastActive(String? timestamp) {
@@ -366,6 +526,16 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     if (lastActive == null) return false;
     try {
       final last = DateTime.parse(lastActive);
+      return DateTime.now().difference(last).inHours < _onlineThresholdHours;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _isDeviceOnlineFromTimestamp(String? timestamp) {
+    if (timestamp == null) return false;
+    try {
+      final last = DateTime.parse(timestamp);
       return DateTime.now().difference(last).inHours < _onlineThresholdHours;
     } catch (_) {
       return false;
@@ -405,7 +575,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: const Color(0xFFF3E5F5),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primaryPurple,
@@ -415,12 +585,34 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDeviceHeader(),
+              const SizedBox(height: 16),
+              _buildDeviceSelector(),
               const SizedBox(height: 24),
               if (widget.role == 'patient') _buildPatientControls(),
               const SizedBox(height: 24),
-              _buildInventorySummary(),
-              const SizedBox(height: 16),
-              _buildInventorySection(),
+              _buildDirectTestSection(),
+              const SizedBox(height: 24),
+              if (_selectedDeviceId != null) _buildInventorySummary(),
+              if (_selectedDeviceId != null) const SizedBox(height: 16),
+              if (_selectedDeviceId != null) _buildInventorySection(),
+              if (_selectedDeviceId == null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Please select a device to view its medication inventory.',
+                        style: TextStyle(color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 32),
             ],
           ),
@@ -429,14 +621,56 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
     );
   }
 
-  // ------------------------------------------------------------
-  // DEVICE HEADER
-  // ------------------------------------------------------------
+  Widget _buildDeviceSelector() {
+    if (_devicesList.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: DropdownButtonFormField<int>(
+          value: _selectedDeviceId,
+          hint: const Text('Select a device serial'),
+          isExpanded: true,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
+          items: _devicesList.map((device) {
+            return DropdownMenuItem<int>(
+              value: device['device_id'],
+              child: Text(device['device_serial'] ?? 'Unknown'),
+            );
+          }).toList(),
+          onChanged: _onDeviceSelected,
+        ),
+      ),
+    );
+  }
+
   Widget _buildDeviceHeader() {
-    final batteryLevel = _deviceData['battery_level'];
+    // Use selected device data if available, otherwise original patient device data
+    final displayDevice = _selectedDeviceDetail.isNotEmpty
+        ? _selectedDeviceDetail
+        : _deviceData;
+
+    final batteryLevel = displayDevice['battery_level'];
     final isLowBattery = batteryLevel != null && batteryLevel < 20;
-    final deviceName = _deviceData['device_serial'] ?? 'Not Connected';
-    final isOnline = _isDeviceOnline();
+    final deviceName = displayDevice['device_serial'] ?? 'Not Connected';
+    final isOnline = _isDeviceOnlineFromTimestamp(
+      displayDevice['last_active_timestamp'],
+    );
 
     return Container(
       width: double.infinity,
@@ -560,7 +794,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
               ),
               _buildDeviceStatCard(
                 'Sync',
-                _formatLastActive(_deviceData['last_active_timestamp']),
+                _formatLastActive(displayDevice['last_active_timestamp']),
                 Icons.sync_rounded,
                 Colors.orangeAccent,
               ),
@@ -598,7 +832,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // PATIENT CONTROLS (now includes full IoT control)
+  // PATIENT CONTROLS (includes device status card for caregiver)
   // ------------------------------------------------------------
   Widget _buildPatientControls() {
     return Padding(
@@ -609,6 +843,10 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           // Patient selector for caregiver (only visible if role == caregiver)
           if (widget.role == 'caregiver' && _controlPatientOptions.isNotEmpty)
             _buildPatientSelector(),
+          const SizedBox(height: 16),
+
+          // Device status card (show only for caregiver, patient already has header)
+          if (widget.role == 'caregiver') _buildDeviceStatusCard(),
           const SizedBox(height: 16),
 
           const Text(
@@ -720,13 +958,10 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
             color: Colors.orange,
             child: Column(
               children: [
-                // Motor 1 controls
                 _buildMotorRow(1, Colors.blue),
                 const SizedBox(height: 12),
-                // Motor 2 controls
                 _buildMotorRow(2, Colors.green),
                 const SizedBox(height: 12),
-                // Motor 3 controls
                 _buildMotorRow(3, Colors.purple),
               ],
             ),
@@ -763,7 +998,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
-            initialValue: _selectedControlPatientId,
+            value: _selectedControlPatientId,
             decoration: InputDecoration(
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -776,11 +1011,145 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
                 child: Text(entry.value),
               );
             }).toList(),
-            onChanged: (value) {
+            onChanged: (value) async {
               setState(() {
                 _selectedControlPatientId = value;
               });
+              if (value != null) {
+                await _fetchDeviceForPatient(value);
+              }
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeviceStatusCard() {
+    final serial = _selectedPatientDevice['device_serial'] ?? 'Unknown';
+    final battery = _selectedPatientDevice['battery_level'];
+    final lastActive = _selectedPatientDevice['last_active_timestamp'];
+    final isOnline = _isDeviceOnlineFromTimestamp(lastActive);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.devices_rounded,
+                color: AppColors.primaryPurple,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Device Status',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isOnline
+                      ? Colors.green.withOpacity(0.2)
+                      : Colors.grey.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isOnline ? Icons.wifi : Icons.wifi_off,
+                      size: 14,
+                      color: isOnline ? Colors.green : Colors.grey,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isOnline ? 'Online' : 'Offline',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isOnline ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Serial Number',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    Text(
+                      serial,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Battery',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.battery_std,
+                          size: 16,
+                          color: battery != null && battery < 20
+                              ? Colors.red
+                              : Colors.green,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          battery != null ? '$battery%' : 'N/A',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: battery != null && battery < 20
+                                ? Colors.red
+                                : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Last active: ${_formatLastActive(lastActive)}',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
@@ -893,20 +1262,286 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // INVENTORY SUMMARY (unchanged from original)
+  // Direct Hardware Test Section (Bypasses backend)
+  // ------------------------------------------------------------
+  Widget _buildDirectTestSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with IP editor
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.developer_board, color: Colors.blueGrey),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Direct Hardware Test (ESP32)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 140,
+                    child: TextFormField(
+                      controller: _espIpController,
+                      decoration: const InputDecoration(
+                        labelText: 'IP',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                      onChanged: (value) => _testEspIp = value,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // LED & Buzzer
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              _sendDirectCommand('/led/on', 'LED ON'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple
+                                .withOpacity(0.15),
+                            foregroundColor: AppColors.primaryPurple,
+                            elevation: 0,
+                          ),
+                          child: const Text('LED ON'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              _sendDirectCommand('/led/off', 'LED OFF'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple
+                                .withOpacity(0.15),
+                            foregroundColor: AppColors.primaryPurple,
+                            elevation: 0,
+                          ),
+                          child: const Text('LED OFF'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              _sendDirectCommand('/buzzer/on', 'Buzzer ON'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple
+                                .withOpacity(0.15),
+                            foregroundColor: AppColors.primaryPurple,
+                            elevation: 0,
+                          ),
+                          child: const Text('Buzzer ON'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              _sendDirectCommand('/buzzer/off', 'Buzzer OFF'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple
+                                .withOpacity(0.1),
+                            foregroundColor: AppColors.primaryPurple,
+                            elevation: 0,
+                          ),
+                          child: const Text('Buzzer OFF'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Display
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'OLED Display',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () =>
+                            _sendDirectCommand('/display/hello', 'Hello World'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryPurple.withOpacity(
+                            0.15,
+                          ),
+                          foregroundColor: AppColors.primaryPurple,
+                          elevation: 0,
+                        ),
+                        child: const Text('Hello'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _sendDirectCommand(
+                          '/display/clear',
+                          'Display cleared',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryPurple.withOpacity(
+                            0.15,
+                          ),
+                          foregroundColor: AppColors.primaryPurple,
+                          elevation: 0,
+                        ),
+                        child: const Text('Clear'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _sendDirectCommand(
+                          '/display/sv',
+                          'Supervisor Name',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryPurple.withOpacity(
+                            0.15,
+                          ),
+                          foregroundColor: AppColors.primaryPurple,
+                          elevation: 0,
+                        ),
+                        child: const Text('Supervisor'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Motors
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Stepper Motors',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('Motor:'),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SegmentedButton<int>(
+                          segments: const [
+                            ButtonSegment(value: 1, label: Text('1')),
+                            ButtonSegment(value: 2, label: Text('2')),
+                            ButtonSegment(value: 3, label: Text('3')),
+                          ],
+                          selected: {_selectedTestMotor},
+                          onSelectionChanged: (Set<int> newSelection) {
+                            setState(() {
+                              _selectedTestMotor = newSelection.first;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildDirectMotorButton(
+                        'Forward 360°',
+                        '/stepper${_selectedTestMotor == 1 ? '' : _selectedTestMotor}/forward',
+                      ),
+                      _buildDirectMotorButton(
+                        'Backward 360°',
+                        '/stepper${_selectedTestMotor == 1 ? '' : _selectedTestMotor}/backward',
+                      ),
+                      _buildDirectMotorButton(
+                        '180°',
+                        '/stepper${_selectedTestMotor == 1 ? '' : _selectedTestMotor}/180',
+                      ),
+                      _buildDirectMotorButton(
+                        '90°',
+                        '/stepper${_selectedTestMotor == 1 ? '' : _selectedTestMotor}/90',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDirectMotorButton(String label, String endpoint) {
+    return ElevatedButton(
+      onPressed: () => _sendDirectCommand(endpoint, label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primaryPurple.withOpacity(0.08),
+        foregroundColor: AppColors.primaryPurple,
+        elevation: 0,
+      ),
+      child: Text(label),
+    );
+  }
+
+  // ------------------------------------------------------------
+  // INVENTORY SUMMARY
   // ------------------------------------------------------------
   Widget _buildInventorySummary() {
-    if (_inventoryList.isEmpty) return const SizedBox.shrink();
+    if (_deviceInventoryList.isEmpty) return const SizedBox.shrink();
 
-    int totalItems = _inventoryList.length;
-    int lowStockCount = _inventoryList
+    int totalItems = _deviceInventoryList.length;
+    int lowStockCount = _deviceInventoryList
         .where(
           (med) =>
               (med['current_inventory'] as int) <=
               (med['refill_threshold'] as int),
         )
         .length;
-    int outOfStockCount = _inventoryList
+    int outOfStockCount = _deviceInventoryList
         .where((med) => (med['current_inventory'] as int) == 0)
         .length;
 
@@ -986,10 +1621,17 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
   }
 
   // ------------------------------------------------------------
-  // INVENTORY LIST (unchanged from original)
+  // INVENTORY LIST
   // ------------------------------------------------------------
   Widget _buildInventorySection() {
-    if (_inventoryList.isEmpty) {
+    if (_isLoadingDeviceInventory) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_deviceInventoryList.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Container(
@@ -1000,7 +1642,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ),
           child: const Center(
             child: Text(
-              'No medications found.',
+              'No medications found for this device.',
               style: TextStyle(color: Colors.grey),
             ),
           ),
@@ -1025,9 +1667,9 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _inventoryList.length,
+            itemCount: _deviceInventoryList.length,
             itemBuilder: (context, index) =>
-                _buildInventoryCard(_inventoryList[index]),
+                _buildInventoryCard(_deviceInventoryList[index]),
           ),
         ],
       ),

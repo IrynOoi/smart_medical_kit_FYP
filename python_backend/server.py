@@ -768,9 +768,16 @@ def get_caregiver_patients(caregiver_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT 
-                    u.user_id as patient_id, u.email, u.full_name, u.date_of_birth, u.gender,
-                    u.phone_no, u.address, p.medical_notes, u.profile_photo,
+                SELECT DISTINCT ON (p.patient_id)
+                    u.user_id as patient_id,
+                    u.email,
+                    u.full_name,
+                    u.date_of_birth,
+                    u.gender,
+                    u.phone_no,
+                    u.address,
+                    p.medical_notes,
+                    u.profile_photo,
                     d.device_id,
                     d.last_reported_battery AS battery_level,
                     d.device_serial,
@@ -780,13 +787,10 @@ def get_caregiver_patients(caregiver_id):
                     pc.refill_threshold AS refill_threshold
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
-                LEFT JOIN patient_device pd ON p.patient_id = pd.patient_id
-                LEFT JOIN iot_device d ON pd.device_id = d.device_id
-                LEFT JOIN prescription_config pc 
-                    ON pc.patient_id = p.patient_id 
-                    AND pc.device_id = d.device_id
+                LEFT JOIN prescription_config pc ON pc.patient_id = p.patient_id AND pc.device_id IS NOT NULL
+                LEFT JOIN iot_device d ON pc.device_id = d.device_id
                 WHERE p.caregiver_id = %s AND u.is_active = true
-                ORDER BY u.full_name ASC
+                ORDER BY p.patient_id, pc.created_at DESC NULLS LAST
             ''', (caregiver_id,))
             patients = cursor.fetchall()
             cursor.close()
@@ -794,7 +798,6 @@ def get_caregiver_patients(caregiver_id):
     except Exception as e:
         print(f"Error in get_caregiver_patients: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/caregiver/<int:caregiver_id>', methods=['GET'])
 def get_caregiver_profile(caregiver_id):
@@ -1338,12 +1341,11 @@ def get_patient_device(patient_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT d.device_id, d.device_serial, 
-                       d.last_reported_battery AS battery_level,
-                       d.last_battery_report AS last_active_timestamp
-                FROM iot_device d
-                JOIN patient_device pd ON d.device_id = pd.device_id
-                WHERE pd.patient_id = %s
+                SELECT d.device_id, d.device_serial, d.last_reported_battery AS battery_level, d.last_battery_report AS last_active_timestamp
+                FROM prescription_config pc
+                JOIN iot_device d ON pc.device_id = d.device_id
+                WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL
+                AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
                 LIMIT 1
             ''', (patient_id,))
             device = cursor.fetchone()
@@ -1516,8 +1518,8 @@ def control_led():
         cursor.execute('''
             SELECT d.last_known_ip
             FROM iot_device d
-            JOIN patient_device pd ON d.device_id = pd.device_id
-            WHERE pd.patient_id = %s
+            JOIN prescription_config pc ON d.device_id = pc.device_id
+            WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL
             LIMIT 1
         ''', (patient_id,))
         device = cursor.fetchone()
@@ -1532,11 +1534,12 @@ def control_led():
     else:
         return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
 
+
 @app.route('/device/control/buzzer', methods=['POST'])
 def control_buzzer():
     data = request.get_json()
     patient_id = data.get('patient_id')
-    action = data.get('action')   # 'on' or 'off'
+    action = data.get('action')
     if not patient_id or action not in ('on', 'off'):
         return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
 
@@ -1545,8 +1548,8 @@ def control_buzzer():
         cursor.execute('''
             SELECT d.last_known_ip
             FROM iot_device d
-            JOIN patient p ON d.patient_id = p.patient_id
-            WHERE p.patient_id = %s
+            JOIN prescription_config pc ON d.device_id = pc.device_id
+            WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL
             LIMIT 1
         ''', (patient_id,))
         device = cursor.fetchone()
@@ -1734,8 +1737,7 @@ def create_device_with_prescription():
         ''', (device_serial,))
         device_id = cursor.fetchone()[0]
 
-        # Link patient to device
-        cursor.execute('INSERT INTO patient_device (patient_id, device_id) VALUES (%s, %s)', (patient_id, device_id))
+
 
         # Create prescription
         cursor.execute('''
@@ -1861,6 +1863,103 @@ def delete_medication(medication_id):
                 return jsonify({"success": False, "message": "Medication not found"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ==========================================
+# 🛠️ DEVICE DETAILS & PATIENT LOOKUP
+# ==========================================
+
+@app.route('/device/<int:device_id>', methods=['GET'])
+def get_device_by_id(device_id):
+    """Return device details for a given device_id."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT device_id, device_serial, last_reported_battery AS battery_level,
+                       last_battery_report AS last_active_timestamp, last_known_ip
+                FROM iot_device
+                WHERE device_id = %s
+            ''', (device_id,))
+            device = cursor.fetchone()
+            cursor.close()
+        if device:
+            return jsonify({"success": True, "data": device})
+        else:
+            return jsonify({"success": False, "error": "Device not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/device/<int:device_id>/patient', methods=['GET'])
+def get_patient_by_device(device_id):
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT p.patient_id, u.full_name
+                FROM prescription_config pc
+                JOIN patient p ON pc.patient_id = p.patient_id
+                JOIN users u ON p.patient_id = u.user_id
+                WHERE pc.device_id = %s
+                ORDER BY pc.created_at DESC
+                LIMIT 1
+            ''', (device_id,))
+            patient = cursor.fetchone()
+            cursor.close()
+        if patient:
+            return jsonify({"success": True, "data": patient})
+        else:
+            return jsonify({"success": True, "data": None})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route('/devices', methods=['GET'])
+def get_all_devices():
+    """Return all IoT devices (for dropdown)."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT device_id, device_serial, last_reported_battery AS battery_level,
+                       last_battery_report AS last_active_timestamp, last_known_ip
+                FROM iot_device
+                ORDER BY device_id
+            ''')
+            devices = cursor.fetchall()
+            cursor.close()
+        return jsonify({"success": True, "data": devices})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route('/device/<int:device_id>/prescriptions', methods=['GET'])
+def get_device_prescriptions(device_id):
+    """Get all prescriptions for a given device."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('''
+                SELECT pc.prescription_id, pc.patient_id, m.medication_name,
+                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory,
+                       pc.refill_threshold, pc.start_date, pc.end_date,
+                       pc.created_at, pc.updated_at, pc.device_id, pc.motor_slot
+                FROM prescription_config pc
+                JOIN medications m ON pc.medication_id = m.medication_id
+                WHERE pc.device_id = %s
+                  AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+                ORDER BY pc.motor_slot ASC
+            ''', (device_id,))
+            prescriptions = cursor.fetchall()
+            cursor.close()
+        return jsonify({"success": True, "data": prescriptions})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 
 
 

@@ -1085,4 +1085,81 @@ class ApiService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  Future<List<Map<String, dynamic>>> getDevices() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/devices'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting devices: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getDevice(int deviceId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/device/$deviceId'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return jsonResponse['data'];
+        }
+      }
+      return {};
+    } catch (e) {
+      print('Error getting device: $e');
+      return {};
+    }
+  }
+
+  Future<int?> getPatientIdFromDevice(int deviceId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/device/$deviceId/patient'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success'] && jsonResponse['data'] != null) {
+          return jsonResponse['data']['patient_id'] as int;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting patient from device: $e');
+      return null;
+    }
+  }
+
+  Future<List<Prescription>> getDevicePrescriptions(int deviceId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/device/$deviceId/prescriptions'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          final List<dynamic> data = jsonResponse['data'];
+          return data.map((json) => Prescription.fromJson(json)).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting device prescriptions: $e');
+      return [];
+    }
+  }
 }
