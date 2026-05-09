@@ -1,5 +1,4 @@
 //bottom_nav_bar.dart
-
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient/patient_dashboard_page.dart';
 import 'package:my_medical_kit_app/screens/caregiver/caregiver_dashboard_page.dart';
@@ -9,8 +8,11 @@ import 'package:my_medical_kit_app/screens/caregiver/caregiver_medication_histor
 import 'package:my_medical_kit_app/screens/profile_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_medical_kit_app/screens/caregiver/ai_analytics_page_caregiver.dart';
-import 'package:my_medical_kit_app/screens/inventory_management_page.dart';
-import 'package:my_medical_kit_app/screens/patient/ai_prediction_patient.dart'; // Adjust path if necessary
+import 'package:my_medical_kit_app/screens/patient/ai_prediction_patient.dart';
+
+// 👇 Import the two new separated inventory pages
+import 'package:my_medical_kit_app/screens/patient/patient_inventory_page.dart';
+import 'package:my_medical_kit_app/screens/caregiver/caregiver_inventory_page.dart';
 
 class ComingSoonPage extends StatelessWidget {
   final String title;
@@ -98,7 +100,6 @@ class _BottomNavBarState extends State<BottomNavBar> {
   }
 
   // Pages change based on role
-  // Pages change based on role
   List<Widget> get _pages {
     final homePage = _role == 'caregiver'
         ? const CaregiverDashboardPage()
@@ -111,7 +112,6 @@ class _BottomNavBarState extends State<BottomNavBar> {
       historyPage = const MedicationHistoryScreen();
     }
 
-    // Add this new logic block for the AI page
     Widget aiPage;
     if (_role == 'patient') {
       aiPage = const AIPredictionPatientPage();
@@ -119,13 +119,18 @@ class _BottomNavBarState extends State<BottomNavBar> {
       aiPage = AiAnalyticsPage(caregiverId: _userId);
     }
 
+    // 👇 Dynamically assign the correct inventory page
+    Widget inventoryPage;
+    if (_role == 'patient') {
+      inventoryPage = PatientInventoryPage(userId: _userId);
+    } else {
+      inventoryPage = CaregiverInventoryPage(userId: _userId);
+    }
+
     return [
       homePage, // Index 0: Home
-      aiPage, // Index 1: AI Predict (now dynamic)
-      InventoryManagementPage(
-        role: _role,
-        userId: _userId,
-      ), // Index 2: Inventory
+      aiPage, // Index 1: AI Predict
+      inventoryPage, // 👇 Index 2: Inventory (Now fully dynamic)
       historyPage, // Index 3: History
       const ProfilePage(), // Index 4: Profile
     ];
@@ -151,15 +156,13 @@ class _BottomNavBarState extends State<BottomNavBar> {
         body: _pages[selectedIndex],
 
         floatingActionButton: SizedBox(
-          height: 62, // Enlarge height
-          width: 62, // Enlarge width
+          height: 62,
+          width: 62,
           child: FloatingActionButton(
             backgroundColor: AppColors.primaryPurple,
             elevation: 4,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                22,
-              ), // Make it slightly rounder to match the size
+              borderRadius: BorderRadius.circular(22),
             ),
             onPressed: () {
               setState(() {
@@ -169,7 +172,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
             child: const Icon(
               Icons.inventory_rounded,
               color: Colors.white,
-              size: 36, // 👇 Enlarge the icon
+              size: 36,
             ),
           ),
         ),

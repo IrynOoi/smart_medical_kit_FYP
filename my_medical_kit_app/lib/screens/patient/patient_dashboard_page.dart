@@ -592,7 +592,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       style: TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
-                        color: scoreColor,
+                        color: AppColors.primaryPurple,
                       ),
                     ),
                     const Text(
@@ -608,23 +608,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildDonutStat(
-                'Taken',
-                _taken.toString(),
-                AppColors.primaryPurple,
-              ),
+              _buildDonutStat('Taken', _taken.toString(), Colors.green),
               _buildVertDivider(),
-              _buildDonutStat(
-                'Missed',
-                _missed.toString(),
-                AppColors.premiumLight,
-              ),
+
+              _buildDonutStat('Pending', _upcoming.toString(), Colors.orange),
               _buildVertDivider(),
-              _buildDonutStat(
-                'Pending',
-                _upcoming.toString(),
-                AppColors.premiumDark.withOpacity(0.6),
-              ),
+              _buildDonutStat('Missed', _missed.toString(), Colors.red),
             ],
           ),
           const Divider(height: 24, thickness: 0.5),
@@ -664,7 +653,13 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           ),
         ),
         const SizedBox(height: 3),
-        Text(label, style: const TextStyle(fontSize: 15, color: Colors.grey)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 15,
+            color: color, // ✅ now uses the same color as the value
+          ),
+        ),
       ],
     );
   }
@@ -1168,11 +1163,10 @@ class _DonutPainter extends CustomPainter {
     }
 
     final segments = [
-      {'v': taken, 'c': AppColors.primaryPurple},
-      {'v': missed, 'c': AppColors.premiumLight},
-      {'v': pending, 'c': AppColors.premiumDark.withOpacity(0.6)},
+      {'v': taken, 'c': Colors.green}, // taken → green
+      {'v': missed, 'c': Colors.red}, // missed → red
+      {'v': pending, 'c': Colors.orange}, // pending → orange
     ];
-
     double start = -pi / 2;
     for (final seg in segments) {
       final v = seg['v'] as double;

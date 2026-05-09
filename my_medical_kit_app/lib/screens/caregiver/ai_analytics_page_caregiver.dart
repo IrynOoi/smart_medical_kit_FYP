@@ -1,4 +1,5 @@
 // lib/screens/ai_analytics_page_caregiver.dart
+import '../../models/ai_prediction.dart';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
@@ -17,6 +18,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   String _errorMessage = '';
+
+  Map<int, AIPrediction?> _patientPredictions = {};
 
   // Real data from backend
   Map<String, dynamic> _overview = {};
@@ -43,20 +46,28 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       _isLoading = true;
       _errorMessage = '';
     });
-
     try {
       final overview = await _apiService.getAnalyticsOverview(
         widget.caregiverId,
       );
-      final patients = await _apiService.getAtRiskPatients(widget.caregiverId);
       final allPatients = await _apiService.getCaregiverPatients(
         widget.caregiverId,
       );
 
+      // 并发获取每个患者的最新预测
+      final Map<int, AIPrediction?> predictions = {};
+      await Future.wait(
+        allPatients.map((patient) async {
+          final pid = patient['patient_id'];
+          final pred = await _apiService.getAIPrediction(pid);
+          predictions[pid] = pred;
+        }),
+      );
+
       setState(() {
         _overview = overview;
-        _riskPatients = patients;
         _allPatients = allPatients;
+        _patientPredictions = predictions;
         _isLoading = false;
       });
     } catch (e) {
@@ -70,15 +81,28 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   // Fetch patient's recent adherence history
   Future<List<int>> _fetchPatientHistory(int patientId) async {
     try {
-      final logs = await _apiService.getAdherenceLogs(patientId, limit: 3);
+      // Fetch a larger limit in case the top 3 are all 'PENDING'
+      final logs = await _apiService.getAdherenceLogs(patientId, limit: 10);
       final history = <int>[];
+
       for (var log in logs) {
-        history.add(log.isTaken ? 1 : 0);
+        // Assume your AdherenceLog model has a 'status' string property.
+        // Skip anything that isn't explicitly TAKEN or MISSED.
+        if (log.status == 'TAKEN') {
+          history.add(1);
+        } else if (log.status == 'MISSED') {
+          history.add(0);
+        }
+
+        // Stop once we have found the 3 most recent VALID actions
+        if (history.length == 3) break;
       }
+
       while (history.length < 3) {
         history.insert(0, 1);
       }
-      return history.take(3).toList().reversed.toList();
+
+      return history.reversed.toList();
     } catch (e) {
       print('Error fetching history: $e');
       return [1, 1, 1];
@@ -106,6 +130,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   }
 
   // Show prediction dialog with history loading
+  // Show prediction dialog with history loading
   Future<void> _showPredictionDialog(Map<String, dynamic> patient) async {
     final int patientId = patient['patient_id'];
     final String patientName = patient['full_name'] ?? 'Patient';
@@ -126,24 +151,28 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
+    await Future.delayed(const Duration(milliseconds: 200));
 
     List<int> history = await _fetchPatientHistory(patientId);
     String dayOfWeek = _getCurrentDayOfWeek();
     String timeOfDay = _getCurrentTimeOfDay();
 
-    Navigator.pop(context); // Close loading dialog
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop(); // Close loading spinner
+    }
 
-    // Show prediction dialog
-    showDialog(
+    // ✅ FIX 1: Move variable OUTSIDE the builder so it doesn't reset on setState!
+    bool isPredicting = false;
+
+    // Show initial prediction setup dialog
+    await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) {
-          bool isPredicting = false;
-          Map<String, dynamic>? predictionResult;
-
           Future<void> runPrediction() async {
-            setStateDialog(() => isPredicting = true);
-
+            setStateDialog(
+              () => isPredicting = true,
+            ); // Show spinner in current dialog
             try {
               final result = await _apiService.predictAndSaveForPatient(
                 patientId: patientId,
@@ -153,16 +182,65 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                 history: history,
               );
 
+              print('🔍 API result: $result');
+
+              // ✅ FIX 2: Close the current setup dialog BEFORE popping the new window
+              if (mounted) {
+                Navigator.pop(context);
+              }
+
               if (result.containsKey('error')) {
                 throw Exception(result['error']);
               }
 
-              predictionResult = result;
-              setStateDialog(() => isPredicting = false);
-              await _loadData();
-            } catch (e) {
-              setStateDialog(() => isPredicting = false);
+              if (!result.containsKey('prediction_score') ||
+                  !result.containsKey('risk_level')) {
+                throw Exception('Invalid response from server');
+              }
+
+              // ✅ FIX 3: Pop out a NEW window with the AI results!
               if (mounted) {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text(
+                      '✅ Prediction Complete!',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                    content: _buildPredictionResultCard(
+                      (result['prediction_score'] as num?)?.toDouble() ?? 0.0,
+                      result['risk_level']?.toString() ?? 'LOW',
+                    ),
+                    actions: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryPurple,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final freshPred = await _apiService.getAIPrediction(patientId);
+              if (mounted) {
+                setState(() {
+                  _patientPredictions[patientId] = freshPred;
+                });
+              }
+            } catch (e) {
+              print('❌ Prediction error: $e');
+              if (mounted) {
+                Navigator.pop(context); // Close the dialog if it failed
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Prediction failed: $e'),
@@ -190,39 +268,6 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                           style: TextStyle(fontSize: 14),
                         ),
                         SizedBox(height: 20),
-                      ],
-                    )
-                  : predictionResult != null
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '✅ Prediction Complete!',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPredictionResultCard(
-                          (predictionResult?['prediction_score'] as num?)
-                                  ?.toDouble() ??
-                              0.0,
-                          predictionResult?['risk_level'] ?? 'LOW',
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryPurple,
-                            ),
-                            child: const Text('Close'),
-                          ),
-                        ),
                       ],
                     )
                   : SingleChildScrollView(
@@ -320,7 +365,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                       ),
                     ),
             ),
-            actions: predictionResult == null && !isPredicting
+            actions: !isPredicting
                 ? [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
@@ -340,6 +385,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         },
       ),
     );
+
+    // Refresh the page after the dialog is closed
+    _loadData();
   }
 
   Widget _buildPredictionResultCard(double score, String riskLevel) {
@@ -348,6 +396,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         : riskLevel == 'MEDIUM'
         ? Colors.orange
         : Colors.green;
+
+    final double forgetProbability = 100.0 - score;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -361,6 +411,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         border: Border.all(color: riskColor.withOpacity(0.3)),
       ),
       child: Column(
+        mainAxisSize:
+            MainAxisSize.min, // 🔴 FIX: Shrinks the box to normal size!
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -397,7 +449,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(
-                '${score.toStringAsFixed(1)}%',
+                '${forgetProbability.toStringAsFixed(1)}%',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -408,7 +460,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
           ),
           const SizedBox(height: 12),
           LinearProgressIndicator(
-            value: score / 100,
+            value: forgetProbability / 100,
             backgroundColor: Colors.grey.shade200,
             color: riskColor,
             minHeight: 8,
@@ -548,108 +600,200 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     }
   }
 
-  // Navigate to patient profile
-  void _navigateToPatientProfile(Map<String, dynamic> patient) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _PatientDetailPage(patient: patient),
-      ),
-    );
-  }
+  // // Navigate to patient profile
+  // void _navigateToPatientProfile(Map<String, dynamic> patient) {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (context) => _PatientDetailPage(patient: patient),
+  //     ),
+  //   );
+  // }
 
-  // Show all at-risk patients
-  void _showAllAtRiskPatients() {
-    showModalBottomSheet(
+  Future<void> _showPatientPrediction(Map<String, dynamic> patient) async {
+    final int patientId = patient['patient_id'];
+    final String patientName = patient['full_name'] ?? 'Patient';
+
+    // Show loading indicator
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // 🔴 FIX: Wait 200ms to allow the dialog animation to finish before API call
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    try {
+      final prediction = await _apiService.getAIPrediction(patientId);
+
+      if (mounted) {
+        // 🔴 FIX: Use rootNavigator to safely close the loading spinner without crashing
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (prediction != null) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('AI Prediction – $patientName'),
+            content: _buildPredictionResultCard(
+              prediction.predictionScore,
+              // 🔴 FIX: Safely extracts string from Enum without crashing
+              prediction.riskLevel.toString().split('.').last.toUpperCase(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
               ),
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'All At-Risk Patients',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showPredictionDialog(patient);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                  foregroundColor: Colors.white, // 🔴 FIX: White text
                 ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _riskPatients.length,
-                  itemBuilder: (context, index) {
-                    final patient = _riskPatients[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor:
-                            (patient['risk_level'] == 'HIGH'
-                                    ? Colors.redAccent
-                                    : Colors.orange)
-                                .withOpacity(0.1),
-                        child: Text(
-                          (patient['name'] ?? '?')[0],
-                          style: TextStyle(
-                            color: patient['risk_level'] == 'HIGH'
-                                ? Colors.redAccent
-                                : Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      title: Text(patient['name'] ?? 'Unknown'),
-                      subtitle: Text(patient['medication'] ?? 'No medication'),
-                      trailing: Chip(
-                        label: Text(patient['risk_level'] ?? 'MEDIUM'),
-                        backgroundColor:
-                            (patient['risk_level'] == 'HIGH'
-                                    ? Colors.redAccent
-                                    : Colors.orange)
-                                .withOpacity(0.2),
-                        labelStyle: TextStyle(
-                          color: patient['risk_level'] == 'HIGH'
-                              ? Colors.redAccent
-                              : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        final fullPatient = _allPatients.firstWhere(
-                          (p) => p['full_name'] == patient['name'],
-                          orElse: () => {},
-                        );
-                        if (fullPatient.isNotEmpty) {
-                          _navigateToPatientProfile(fullPatient);
-                        }
-                      },
-                    );
-                  },
-                ),
+                child: const Text('Refresh Prediction'),
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('No Prediction Yet – $patientName'),
+            content: const Text(
+              'No AI prediction found for this patient.\nWould you like to run the hybrid model now?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showPredictionDialog(patient);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                  foregroundColor: Colors.white, // 🔴 FIX: White text
+                ),
+                child: const Text('Run Prediction'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading prediction: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
+
+  // // Show all at-risk patients
+  // void _showAllAtRiskPatients() {
+  //   showModalBottomSheet(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.transparent,
+  //     builder: (context) => DraggableScrollableSheet(
+  //       initialChildSize: 0.9,
+  //       minChildSize: 0.5,
+  //       maxChildSize: 0.95,
+  //       builder: (context, scrollController) => Container(
+  //         decoration: const BoxDecoration(
+  //           color: Colors.white,
+  //           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  //         ),
+  //         child: Column(
+  //           children: [
+  //             Container(
+  //               margin: const EdgeInsets.symmetric(vertical: 12),
+  //               width: 40,
+  //               height: 4,
+  //               decoration: BoxDecoration(
+  //                 color: Colors.grey.shade300,
+  //                 borderRadius: BorderRadius.circular(2),
+  //               ),
+  //             ),
+  //             const Padding(
+  //               padding: EdgeInsets.all(16),
+  //               child: Text(
+  //                 'All At-Risk Patients',
+  //                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+  //               ),
+  //             ),
+  //             Expanded(
+  //               child: ListView.builder(
+  //                 controller: scrollController,
+  //                 itemCount: _riskPatients.length,
+  //                 itemBuilder: (context, index) {
+  //                   final patient = _riskPatients[index];
+  //                   return ListTile(
+  //                     leading: CircleAvatar(
+  //                       backgroundColor:
+  //                           (patient['risk_level'] == 'HIGH'
+  //                                   ? Colors.redAccent
+  //                                   : Colors.orange)
+  //                               .withOpacity(0.1),
+  //                       child: Text(
+  //                         (patient['name'] ?? '?')[0],
+  //                         style: TextStyle(
+  //                           color: patient['risk_level'] == 'HIGH'
+  //                               ? Colors.redAccent
+  //                               : Colors.orange,
+  //                           fontWeight: FontWeight.bold,
+  //                         ),
+  //                       ),
+  //                     ),
+  //                     title: Text(patient['name'] ?? 'Unknown'),
+  //                     subtitle: Text(patient['medication'] ?? 'No medication'),
+  //                     trailing: Chip(
+  //                       label: Text(patient['risk_level'] ?? 'MEDIUM'),
+  //                       backgroundColor:
+  //                           (patient['risk_level'] == 'HIGH'
+  //                                   ? Colors.redAccent
+  //                                   : Colors.orange)
+  //                               .withOpacity(0.2),
+  //                       labelStyle: TextStyle(
+  //                         color: patient['risk_level'] == 'HIGH'
+  //                             ? Colors.redAccent
+  //                             : Colors.orange,
+  //                         fontWeight: FontWeight.bold,
+  //                       ),
+  //                     ),
+  //                     onTap: () {
+  //                       Navigator.pop(context);
+  //                       final fullPatient = _allPatients.firstWhere(
+  //                         (p) => p['full_name'] == patient['name'],
+  //                         orElse: () => {},
+  //                       );
+  //                       if (fullPatient.isNotEmpty) {
+  //                         _showPatientPrediction(fullPatient);
+  //                       }
+  //                     },
+  //                   );
+  //                 },
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -691,7 +835,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -709,8 +853,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                 _buildBatchPredictionButton(),
                 const SizedBox(height: 16),
                 _buildAssignedPatientsList(),
-                const SizedBox(height: 16),
-                _buildRiskAnalysisList(),
+                // const SizedBox(height: 16),
+                // _buildRiskAnalysisList(),
                 const SizedBox(height: 32),
               ],
             ),
@@ -772,8 +916,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -803,17 +947,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               final patient = _allPatients[index];
               final isPredicting =
                   _predictingPatients[patient['patient_id']] == true;
-              final existingPrediction = _riskPatients.firstWhere(
-                (p) => p['name'] == patient['full_name'],
-                orElse: () => {},
-              );
-              final hasRiskLevel = existingPrediction['risk_level'] != null;
-              return _buildPatientCard(
-                patient,
-                isPredicting,
-                hasRiskLevel,
-                existingPrediction,
-              );
+              return _buildPatientCard(patient, isPredicting);
             },
           ),
         ],
@@ -821,181 +955,121 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     );
   }
 
-  Widget _buildPatientCard(
-    Map<String, dynamic> patient,
-    bool isPredicting,
-    bool hasRiskLevel,
-    Map<String, dynamic> prediction,
-  ) {
-    final String patientName = patient['full_name'] ?? 'Unknown';
-    final String? deviceSerial = patient['device_serial'];
-    final int? batteryLevel = patient['battery_level'];
+  Widget _buildPatientCard(Map<String, dynamic> patient, bool isPredicting) {
+    final int pid = patient['patient_id'];
+    final AIPrediction? pred = _patientPredictions[pid];
+    final String riskLevel =
+        pred?.riskLevel?.toString().split('.').last.toUpperCase() ?? 'LOW';
 
-    String riskLevel = prediction['risk_level']?.toString() ?? 'Not analyzed';
-    double predictionScore = 0.0;
-    if (hasRiskLevel) {
-      predictionScore = _toDouble(
-        prediction['forget_probability'],
-        defaultValue: 0.0,
-      );
-    }
-
+    // Only flag MEDIUM and HIGH
+    final bool hasRisk = riskLevel == 'HIGH' || riskLevel == 'MEDIUM';
     final Color riskColor = riskLevel == 'HIGH'
         ? Colors.redAccent
-        : riskLevel == 'MEDIUM'
-        ? Colors.orange
-        : riskLevel == 'LOW'
-        ? Colors.green
-        : Colors.grey;
+        : (riskLevel == 'MEDIUM' ? Colors.orange : Colors.grey);
 
     return Card(
+      color: Colors.white,
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: hasRiskLevel
-            ? BorderSide(color: riskColor.withOpacity(0.5), width: 1.5)
+        // Draw border ONLY if it's HIGH or MEDIUM, otherwise no border
+        side: hasRisk
+            ? BorderSide(color: riskColor.withOpacity(0.6), width: 1.5)
             : BorderSide.none,
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _navigateToPatientProfile(patient),
+        onTap: () => _showPatientPrediction(patient),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
-                    child: Text(
-                      patientName.isNotEmpty
-                          ? patientName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: AppColors.primaryPurple,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          patientName,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textDark,
-                          ),
-                        ),
-                        if (deviceSerial != null)
-                          Text(
-                            'Device: $deviceSerial • Battery: ${batteryLevel ?? 'N/A'}%',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: (batteryLevel ?? 100) < 20
-                                  ? Colors.red
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: isPredicting
-                        ? null
-                        : () => _showPredictionDialog(patient),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryPurple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: isPredicting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.auto_graph, size: 16),
-                              SizedBox(width: 6),
-                              Text('Predict'),
-                            ],
-                          ),
-                  ),
-                ],
-              ),
-              if (hasRiskLevel) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: riskColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: riskColor.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          riskLevel == 'HIGH'
-                              ? Icons.warning
-                              : riskLevel == 'MEDIUM'
-                              ? Icons.trending_down
-                              : Icons.check_circle,
-                          size: 16,
-                          color: riskColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Risk Level: $riskLevel',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: riskColor,
-                              ),
-                            ),
-                            if (predictionScore > 0)
-                              Text(
-                                'Forget Probability: ${predictionScore.toStringAsFixed(1)}%',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+              CircleAvatar(
+                radius: 24,
+                // Neutral purple background for the avatar instead of the risk color
+                backgroundColor: AppColors.primaryPurple.withOpacity(0.15),
+                child: Text(
+                  patient['full_name']?[0]?.toUpperCase() ?? '?',
+                  style: const TextStyle(
+                    color: AppColors.primaryPurple,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      patient['full_name'] ?? 'Unknown',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (patient['device_serial'] != null)
+                      Text(
+                        'Device: ${patient['device_serial']} • Battery: ${patient['battery_level'] ?? 'N/A'}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: (patient['battery_level'] ?? 100) < 20
+                              ? Colors.red
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    // ✨ NEW: Risk Label injected directly onto the patient card
+                    if (pred != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: hasRisk
+                              ? riskColor.withOpacity(0.1)
+                              : Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Risk: $riskLevel',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: hasRisk ? riskColor : Colors.green,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: isPredicting
+                    ? null
+                    : () => _showPredictionDialog(patient),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                  foregroundColor: Colors.white,
+                ),
+                child: isPredicting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Row(
+                        children: [
+                          Icon(Icons.auto_graph, size: 16),
+                          SizedBox(width: 6),
+                          Text('Predict'),
+                        ],
+                      ),
+              ),
             ],
           ),
         ),
@@ -1236,265 +1310,265 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     );
   }
 
-  // RISK PATIENTS LIST
-  Widget _buildRiskAnalysisList() {
-    if (_riskPatients.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Center(
-            child: Text(
-              'No at-risk patients found.\nAll patients are stable.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-        ),
-      );
-    }
+  // // RISK PATIENTS LIST
+  // Widget _buildRiskAnalysisList() {
+  //   if (_riskPatients.isEmpty) {
+  //     return Padding(
+  //       padding: const EdgeInsets.symmetric(horizontal: 20),
+  //       child: Container(
+  //         padding: const EdgeInsets.all(24),
+  //         decoration: BoxDecoration(
+  //           color: Colors.white,
+  //           borderRadius: BorderRadius.circular(20),
+  //         ),
+  //         child: const Center(
+  //           child: Text(
+  //             'No at-risk patients found.\nAll patients are stable.',
+  //             textAlign: TextAlign.center,
+  //             style: TextStyle(color: Colors.grey),
+  //           ),
+  //         ),
+  //       ),
+  //     );
+  //   }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Identified At-Risk Patients',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
-              ),
-              TextButton(
-                onPressed: _showAllAtRiskPatients,
-                child: const Text(
-                  'See All',
-                  style: TextStyle(color: AppColors.primaryPurple),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _riskPatients.length > 3 ? 3 : _riskPatients.length,
-            itemBuilder: (context, index) {
-              final patient = _riskPatients[index];
-              return _buildPatientRiskCard(patient);
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(horizontal: 20),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             const Text(
+  //               'Identified At-Risk Patients',
+  //               style: TextStyle(
+  //                 fontSize: 18,
+  //                 fontWeight: FontWeight.bold,
+  //                 color: AppColors.textDark,
+  //               ),
+  //             ),
+  //             TextButton(
+  //               onPressed: _showAllAtRiskPatients,
+  //               child: const Text(
+  //                 'See All',
+  //                 style: TextStyle(color: AppColors.primaryPurple),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 8),
+  //         ListView.builder(
+  //           shrinkWrap: true,
+  //           physics: const NeverScrollableScrollPhysics(),
+  //           itemCount: _riskPatients.length > 3 ? 3 : _riskPatients.length,
+  //           itemBuilder: (context, index) {
+  //             final patient = _riskPatients[index];
+  //             return _buildPatientRiskCard(patient);
+  //           },
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  Widget _buildPatientRiskCard(Map<String, dynamic> patient) {
-    final riskLevel = (patient['risk_level'] ?? 'MEDIUM')
-        .toString()
-        .toUpperCase();
-    final isHighRisk = riskLevel == 'HIGH';
-    final riskColor = isHighRisk ? Colors.redAccent : Colors.orange;
-    final forgetProb = _toDouble(
-      patient['forget_probability'],
-      defaultValue: 50.0,
-    );
-    final temporalPattern =
-        patient['temporal_pattern'] ?? 'Irregular pattern detected';
+  // Widget _buildPatientRiskCard(Map<String, dynamic> patient) {
+  //   final riskLevel = (patient['risk_level'] ?? 'MEDIUM')
+  //       .toString()
+  //       .toUpperCase();
+  //   final isHighRisk = riskLevel == 'HIGH';
+  //   final riskColor = isHighRisk ? Colors.redAccent : Colors.orange;
+  //   final forgetProb = _toDouble(
+  //     patient['forget_probability'],
+  //     defaultValue: 50.0,
+  //   );
+  //   final temporalPattern =
+  //       patient['temporal_pattern'] ?? 'Irregular pattern detected';
 
-    final fullPatient = _allPatients.firstWhere(
-      (p) => p['full_name'] == patient['name'],
-      orElse: () => {},
-    );
+  //   final fullPatient = _allPatients.firstWhere(
+  //     (p) => p['full_name'] == patient['name'],
+  //     orElse: () => {},
+  //   );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: riskColor.withOpacity(0.3), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: riskColor.withOpacity(0.1),
-                    child: Text(
-                      (patient['name'] ?? '?')[0],
-                      style: TextStyle(
-                        color: riskColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        patient['name'] ?? 'Unknown',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      Text(
-                        patient['medication'] ?? 'No medication',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: riskColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  riskLevel,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: riskColor,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.scaffoldBackground,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.insights_rounded,
-                  size: 18,
-                  color: AppColors.primaryPurple,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Hybrid AI Assessment:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        temporalPattern,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Probability of missing next dose: ${forgetProb.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: riskColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    if (fullPatient.isNotEmpty) {
-                      _showPredictionDialog(fullPatient);
-                    }
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Refresh Prediction'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    if (fullPatient.isNotEmpty) {
-                      _navigateToPatientProfile(fullPatient);
-                    }
-                  },
-                  icon: const Icon(Icons.person_search_rounded, size: 16),
-                  label: const Text('View Profile'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primaryPurple,
-                    side: const BorderSide(color: AppColors.primaryPurple),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  //   return Container(
+  //     margin: const EdgeInsets.only(bottom: 16),
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(20),
+  //       border: Border.all(color: riskColor.withOpacity(0.3), width: 1.5),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withOpacity(0.02),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, 4),
+  //         ),
+  //       ],
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             Row(
+  //               children: [
+  //                 CircleAvatar(
+  //                   radius: 20,
+  //                   backgroundColor: riskColor.withOpacity(0.1),
+  //                   child: Text(
+  //                     (patient['name'] ?? '?')[0],
+  //                     style: TextStyle(
+  //                       color: riskColor,
+  //                       fontWeight: FontWeight.bold,
+  //                       fontSize: 16,
+  //                     ),
+  //                   ),
+  //                 ),
+  //                 const SizedBox(width: 12),
+  //                 Column(
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: [
+  //                     Text(
+  //                       patient['name'] ?? 'Unknown',
+  //                       style: const TextStyle(
+  //                         fontSize: 16,
+  //                         fontWeight: FontWeight.bold,
+  //                         color: AppColors.textDark,
+  //                       ),
+  //                     ),
+  //                     Text(
+  //                       patient['medication'] ?? 'No medication',
+  //                       style: TextStyle(
+  //                         fontSize: 12,
+  //                         color: Colors.grey.shade600,
+  //                       ),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ],
+  //             ),
+  //             Container(
+  //               padding: const EdgeInsets.symmetric(
+  //                 horizontal: 10,
+  //                 vertical: 4,
+  //               ),
+  //               decoration: BoxDecoration(
+  //                 color: riskColor.withOpacity(0.1),
+  //                 borderRadius: BorderRadius.circular(12),
+  //               ),
+  //               child: Text(
+  //                 riskLevel,
+  //                 style: TextStyle(
+  //                   fontSize: 10,
+  //                   fontWeight: FontWeight.bold,
+  //                   color: riskColor,
+  //                   letterSpacing: 0.5,
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 16),
+  //         Container(
+  //           padding: const EdgeInsets.all(12),
+  //           decoration: BoxDecoration(
+  //             color: AppColors.scaffoldBackground,
+  //             borderRadius: BorderRadius.circular(12),
+  //           ),
+  //           child: Row(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               const Icon(
+  //                 Icons.insights_rounded,
+  //                 size: 18,
+  //                 color: AppColors.primaryPurple,
+  //               ),
+  //               const SizedBox(width: 10),
+  //               Expanded(
+  //                 child: Column(
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: [
+  //                     const Text(
+  //                       'Hybrid AI Assessment:',
+  //                       style: TextStyle(
+  //                         fontSize: 12,
+  //                         fontWeight: FontWeight.bold,
+  //                         color: AppColors.textDark,
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 4),
+  //                     Text(
+  //                       temporalPattern,
+  //                       style: TextStyle(
+  //                         fontSize: 13,
+  //                         color: Colors.grey.shade700,
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     Text(
+  //                       'Probability of missing next dose: ${forgetProb.toStringAsFixed(1)}%',
+  //                       style: TextStyle(
+  //                         fontSize: 12,
+  //                         fontWeight: FontWeight.w600,
+  //                         color: riskColor,
+  //                       ),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //         const SizedBox(height: 12),
+  //         Row(
+  //           children: [
+  //             Expanded(
+  //               child: ElevatedButton.icon(
+  //                 onPressed: () {
+  //                   if (fullPatient.isNotEmpty) {
+  //                     _showPredictionDialog(fullPatient);
+  //                   }
+  //                 },
+  //                 icon: const Icon(Icons.refresh_rounded, size: 16),
+  //                 label: const Text('Refresh Prediction'),
+  //                 style: ElevatedButton.styleFrom(
+  //                   backgroundColor: AppColors.primaryPurple,
+  //                   foregroundColor: Colors.white,
+  //                   elevation: 0,
+  //                   shape: RoundedRectangleBorder(
+  //                     borderRadius: BorderRadius.circular(12),
+  //                   ),
+  //                   padding: const EdgeInsets.symmetric(vertical: 12),
+  //                 ),
+  //               ),
+  //             ),
+  //             const SizedBox(width: 12),
+  //             Expanded(
+  //               child: OutlinedButton.icon(
+  //                 onPressed: () {
+  //                   if (fullPatient.isNotEmpty) {
+  //                     _showPatientPrediction(fullPatient);
+  //                   }
+  //                 },
+  //                 icon: const Icon(Icons.person_search_rounded, size: 16),
+  //                 label: const Text('View Profile'),
+  //                 style: OutlinedButton.styleFrom(
+  //                   foregroundColor: AppColors.primaryPurple,
+  //                   side: const BorderSide(color: AppColors.primaryPurple),
+  //                   shape: RoundedRectangleBorder(
+  //                     borderRadius: BorderRadius.circular(12),
+  //                   ),
+  //                   padding: const EdgeInsets.symmetric(vertical: 12),
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 }
 
 // ==========================================

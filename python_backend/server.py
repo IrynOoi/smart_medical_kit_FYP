@@ -1,5 +1,6 @@
 # server.py
 #backend codes
+from psycopg2 import cursor
 import json 
 import joblib # <--- Add this impor
 from flask import Flask, request, jsonify
@@ -102,9 +103,10 @@ def get_all_recent_logs(caregiver_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT al.adlog_id, u.full_name AS patient_name,
-                       pc.medication_name, al.scheduled_time, al.status
+                       m.medication_name, al.scheduled_time, al.status
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                JOIN medications m ON pc.medication_id = m.medication_id
                 JOIN patient p ON pc.patient_id = p.patient_id
                 JOIN users u ON p.patient_id = u.user_id
                 WHERE p.caregiver_id = %s
@@ -730,7 +732,7 @@ def compute_prediction_for_patient(patient_id):
 
         # 5. Convert to adherence score and risk level
         adherence_score = round((1 - forget_prob) * 100, 2)
-        if forget_prob > 0.6:
+        if forget_prob > 0.5:
             risk_level = "HIGH"
         elif forget_prob > 0.3:
             risk_level = "MEDIUM"
@@ -1134,7 +1136,7 @@ def run_ai_analytics_job():
                     rf_prob = float(rf_model.predict_proba(rf_input_array)[0][1])
                     forget_prob = (lstm_prob * 0.5) + (rf_prob * 0.5)
                 
-                prediction_score_val = forget_prob * 100.0
+                prediction_score_val = (1 - forget_prob) * 100.0
                 risk_level_val = "HIGH" if forget_prob > 0.6 else "MEDIUM" if forget_prob > 0.3 else "LOW"
                 
                 features_used_json = json.dumps({
@@ -1276,39 +1278,40 @@ def get_analytics_overview(caregiver_id):
         print(f"Analytics overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/caregiver/<int:caregiver_id>/at_risk_patients', methods=['GET'])
-def get_at_risk_patients(caregiver_id):
-    """Return list of patients with their latest AI prediction (high/medium risk only)"""
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute('''
-                SELECT 
-                    u.full_name AS name,
-                    pc.medication_name AS medication,
-                    a.risk_level,
-                    a.prediction_score AS forget_probability,
-                    COALESCE(a.features_used->>'temporal_pattern', 'Irregular pattern detected') AS temporal_pattern
-                FROM patient p
-                JOIN users u ON p.patient_id = u.user_id
-                JOIN prescription_config pc ON pc.patient_id = p.patient_id
-                LEFT JOIN (
-                    SELECT DISTINCT ON (patient_id) patient_id, risk_level, prediction_score, features_used
-                    FROM ai_adherence_prediction
-                    ORDER BY patient_id, predicted_at DESC
-                ) a ON p.patient_id = a.patient_id
-                WHERE p.caregiver_id = %s 
-                  AND u.is_active = true
-                  AND a.risk_level IN ('HIGH', 'MEDIUM')
-                ORDER BY a.prediction_score DESC
-                LIMIT 20
-            ''', (caregiver_id,))
-            patients = cursor.fetchall()
-            cursor.close()
-        return jsonify({"success": True, "data": patients})
-    except Exception as e:
-        print(f"At-risk patients error: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+# @app.route('/caregiver/<int:caregiver_id>/at_risk_patients', methods=['GET'])
+# def get_at_risk_patients(caregiver_id):
+#     """Return list of patients with their latest AI prediction (high/medium risk only)"""
+#     try:
+#         with get_db_connection() as conn:
+#             cursor = conn.cursor(cursor_factory=RealDictCursor)
+#             cursor.execute('''
+#                 SELECT 
+#                     u.full_name AS name,
+#                     m.medication_name AS medication,  -- ✅ FIX 1: 使用 m.medication_name
+#                     a.risk_level,
+#                     (100.0 - a.prediction_score) AS forget_probability, -- ✅ FIX 2: 数据库里是服药率，传给前端前转换为忘记率
+#                     COALESCE(a.features_used->>'temporal_pattern', 'Irregular pattern detected') AS temporal_pattern
+#                 FROM patient p
+#                 JOIN users u ON p.patient_id = u.user_id
+#                 JOIN prescription_config pc ON pc.patient_id = p.patient_id
+#                 JOIN medications m ON pc.medication_id = m.medication_id  -- ✅ FIX 3: JOIN medications 表
+#                 LEFT JOIN (
+#                     SELECT DISTINCT ON (patient_id) patient_id, risk_level, prediction_score, features_used
+#                     FROM ai_adherence_prediction
+#                     ORDER BY patient_id, predicted_at DESC
+#                 ) a ON p.patient_id = a.patient_id
+#                 WHERE p.caregiver_id = %s 
+#                   AND u.is_active = true
+#                   AND a.risk_level IN ('HIGH', 'MEDIUM')
+#                 ORDER BY forget_probability DESC -- ✅ FIX 4: 按忘记概率降序排列
+#                 LIMIT 20
+#             ''', (caregiver_id,))
+#             patients = cursor.fetchall()
+#             cursor.close()
+#         return jsonify({"success": True, "data": patients})
+#     except Exception as e:
+#         print(f"At-risk patients error: {e}")
+#         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/patient/<int:patient_id>', methods=['DELETE'])
 def delete_patient(patient_id):
@@ -1341,7 +1344,10 @@ def get_patient_device(patient_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT d.device_id, d.device_serial, d.last_reported_battery AS battery_level, d.last_battery_report AS last_active_timestamp
+                SELECT d.device_id, d.device_serial, 
+                    d.last_reported_battery AS battery_level, 
+                    d.last_battery_report AS last_active_timestamp,
+                    CAST(d.last_known_ip AS TEXT) AS last_known_ip  -- ✅ Add this
                 FROM prescription_config pc
                 JOIN iot_device d ON pc.device_id = d.device_id
                 WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL

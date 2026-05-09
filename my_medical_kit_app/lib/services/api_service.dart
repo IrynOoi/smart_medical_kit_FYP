@@ -507,27 +507,27 @@ class ApiService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/caregiver/$caregiverId/at_risk_patients'),
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-      );
-      if (response.statusCode == 200) {
-        final jsonResponse = jsonDecode(response.body);
-        if (jsonResponse['success']) {
-          return List<Map<String, dynamic>>.from(jsonResponse['data']);
-        }
-      }
-      return [];
-    } catch (e) {
-      print('Error getting at-risk patients: $e');
-      return [];
-    }
-  }
+  // Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse('$baseUrl/caregiver/$caregiverId/at_risk_patients'),
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'ngrok-skip-browser-warning': 'true',
+  //       },
+  //     );
+  //     if (response.statusCode == 200) {
+  //       final jsonResponse = jsonDecode(response.body);
+  //       if (jsonResponse['success']) {
+  //         return List<Map<String, dynamic>>.from(jsonResponse['data']);
+  //       }
+  //     }
+  //     return [];
+  //   } catch (e) {
+  //     print('Error getting at-risk patients: $e');
+  //     return [];
+  //   }
+  // }
 
   // ==========================================
   // 🤖 AI PREDICTION ENDPOINTS

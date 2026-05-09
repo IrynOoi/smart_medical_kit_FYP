@@ -366,7 +366,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: Color(0xFFF4F6FB),
+        backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryPurple),
         ),
@@ -382,7 +382,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final notes = _userData['notes']?.toString();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
       body: Column(
         children: [
           // Fixed Header with Gradient

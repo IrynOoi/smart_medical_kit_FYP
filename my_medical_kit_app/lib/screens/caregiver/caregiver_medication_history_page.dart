@@ -35,30 +35,32 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     });
 
     try {
-      // Fetch the caregiverId from session since this is a Bottom Nav tab
       final prefs = await SharedPreferences.getInstance();
       _caregiverId = prefs.getInt('caregiver_id') ?? 0;
 
       if (_caregiverId == 0) {
         setState(() {
-          _error = 'Session error. Please log in again.';
+          _error = 'Session expired. Please login again.';
           _isLoading = false;
         });
         return;
       }
 
-      // Fetch data using the robust ApiService
       final overview = await _apiService.getCaregiverOverview(_caregiverId);
       final allLogs = await _apiService.getAllRecentLogs(_caregiverId);
 
+      print("✅ Overview: $overview");
+      print("✅ Logs count: ${allLogs.length}");
+
       setState(() {
-        _totalDoses = overview['total_doses'] ?? 0;
-        _alerts = allLogs; // Contains TAKEN + MISSED + PENDING
+        _totalDoses = overview['taken_count'] ?? 0;
+        _alerts = allLogs;
         _isLoading = false;
       });
     } catch (e) {
+      print("❌ Error: $e");
       setState(() {
-        _error = e.toString();
+        _error = 'Failed to load data: $e';
         _isLoading = false;
       });
     }
@@ -151,9 +153,25 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
   }
   */
 
+  String _formatDateTime(String? dateTimeStr) {
+    if (dateTimeStr == null) return '';
+    try {
+      final dt = DateTime.parse(dateTimeStr).toLocal();
+      final hours = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final amPm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minutes = dt.minute.toString().padLeft(2, '0');
+      final day = dt.day.toString().padLeft(2, '0');
+      final month = dt.month.toString().padLeft(2, '0');
+      return '$day/$month/${dt.year} $hours:$minutes $amPm';
+    } catch (e) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
       appBar: AppBar(
         title: const Text(
           'Doses Taken & History',
@@ -161,144 +179,294 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         ),
         backgroundColor: AppColors.primaryPurple,
         iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
       ),
-      body: RefreshIndicator(
-        onRefresh: _initializeData,
-        color: AppColors.primaryPurple,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _error.isNotEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Error: $_error',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _initializeData,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              )
-            : Column(
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primaryPurple),
+            )
+          : _error.isNotEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Total Doses Card
-                  Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(color: Colors.grey.shade200, blurRadius: 4),
-                      ],
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error: $_error',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _initializeData,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryPurple,
+                      foregroundColor: Colors.white,
                     ),
-                    child: Center(
-                      child: Column(
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                // Total Doses Card (fixed header)
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.mainGradient,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.premiumDark.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             'Total Doses Taken',
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             '$_totalDoses',
                             style: const TextStyle(
-                              fontSize: 32,
+                              fontSize: 40,
+                              color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Recent Activity',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.medication,
+                          color: Colors.white,
+                          size: 40,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  // List of Logs
-                  Expanded(
+                ),
+
+                // Recent Activity Title
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.history_rounded,
+                        color: AppColors.primaryPurple,
+                        size: 24,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Recent Activity',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Scrollable list with RefreshIndicator (FIXED)
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _initializeData,
+                    color: AppColors.primaryPurple,
                     child: _alerts.isEmpty
                         ? const Center(
-                            child: Text(
-                              'No recent dose records',
-                              style: TextStyle(fontSize: 16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.history_toggle_off,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No recent dose records',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
                             ),
                           )
                         : ListView.builder(
+                            padding: const EdgeInsets.only(bottom: 24),
                             itemCount: _alerts.length,
-                            itemBuilder: (_, i) {
-                              final act = _alerts[i];
-                              final isTaken = act['status'] == 'TAKEN';
-                              final isMissed = act['status'] == 'MISSED';
+                            itemBuilder: (context, index) {
+                              final act = _alerts[index];
+                              final status =
+                                  act['status']?.toString().toUpperCase() ??
+                                  'UNKNOWN';
+                              final isTaken = status == 'TAKEN';
+                              final isMissed = status == 'MISSED';
 
-                              Color iconColor =
-                                  Colors.orange; // Default pending
-                              IconData iconData = Icons.access_time_filled;
+                              Color statusColor =
+                                  Colors.orange; // default PENDING
+                              Color bgColor = Colors.orange.shade50;
 
                               if (isTaken) {
-                                iconColor = Colors.green;
-                                iconData = Icons.check_circle;
+                                statusColor = Colors.teal;
+                                bgColor = Colors.teal.shade50;
                               } else if (isMissed) {
-                                iconColor = Colors.red;
-                                iconData = Icons.cancel;
+                                statusColor = Colors.redAccent;
+                                bgColor = Colors.red.shade50;
                               }
 
-                              return Card(
-                                elevation: 2,
+                              return Container(
                                 margin: const EdgeInsets.symmetric(
                                   horizontal: 16,
-                                  vertical: 6,
+                                  vertical: 8,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ListTile(
-                                  leading: Icon(
-                                    iconData,
-                                    color: iconColor,
-                                    size: 32,
-                                  ),
-                                  title: Text(
-                                    act['patient_name'] ?? 'Patient',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.grey.withValues(alpha: 0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
                                     ),
+                                  ],
+                                  border: Border.all(
+                                    color: Colors.grey.shade100,
                                   ),
-                                  subtitle: Text(
-                                    '${act['medication_name'] ?? 'Medication'} - ${act['status'] ?? 'Unknown'}',
-                                  ),
-                                  trailing: Text(
-                                    act['scheduled_time'] != null
-                                        ? DateTime.parse(act['scheduled_time'])
-                                              .toLocal()
-                                              .toString()
-                                              .substring(0, 16)
-                                        : '',
-                                    style: const TextStyle(fontSize: 12),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      children: [
+                                        // colored left indicator bar
+                                        Container(width: 6, color: statusColor),
+                                        Expanded(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(16),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        act['patient_name'] ??
+                                                            'Patient',
+                                                        style: const TextStyle(
+                                                          fontSize: 16,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: AppColors
+                                                              .textDark,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 4,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: bgColor,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                      child: Text(
+                                                        status,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: statusColor,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  '${act['medication_name'] ?? 'Medication'}',
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.black87,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.schedule,
+                                                      size: 14,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      _formatDateTime(
+                                                        act['scheduled_time'],
+                                                      ),
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        color: Colors
+                                                            .grey
+                                                            .shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               );
                             },
                           ),
                   ),
-                ],
-              ),
-      ),
+                ),
+              ],
+            ),
     );
   }
 }
