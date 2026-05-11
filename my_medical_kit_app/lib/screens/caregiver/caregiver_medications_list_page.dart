@@ -1,5 +1,4 @@
 //medication list page
-
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
@@ -45,11 +44,15 @@ class CaregiverMedicationsListPageState
   }
 
   // ------------------------------------------------------------------
-  // Add medication (already exists)
+  // Add medication (with inventory, device, motor slot)
   // ------------------------------------------------------------------
   Future<void> _showAddMedicationDialog() async {
-    final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final inventoryController = TextEditingController(text: '0');
+    final thresholdController = TextEditingController(text: '5');
+    final deviceIdController = TextEditingController();
+    final motorSlotController = TextEditingController();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -57,13 +60,58 @@ class CaregiverMedicationsListPageState
         title: const Text('Add New Medication'),
         content: Form(
           key: formKey,
-          child: TextFormField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Medication Name',
-              hintText: 'e.g. Paracetamol 500mg',
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Medication Name *',
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: inventoryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Initial Inventory',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) => v == null || int.tryParse(v) == null
+                      ? 'Number required'
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: thresholdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Refill Threshold',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) => v == null || int.tryParse(v) == null
+                      ? 'Number required'
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: deviceIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Device ID (optional)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: motorSlotController,
+                  decoration: const InputDecoration(
+                    labelText: 'Motor Slot (1-3, optional)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
             ),
-            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
           ),
         ),
         actions: [
@@ -75,7 +123,6 @@ class CaregiverMedicationsListPageState
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white,
             ),
             child: const Text('Add'),
           ),
@@ -85,7 +132,17 @@ class CaregiverMedicationsListPageState
 
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
-      final result = await _apiService.addMedication(controller.text.trim());
+      final result = await _apiService.addMedication(
+        name: nameController.text.trim(),
+        currentInventory: int.tryParse(inventoryController.text) ?? 0,
+        refillThreshold: int.tryParse(thresholdController.text) ?? 5,
+        deviceId: deviceIdController.text.trim().isEmpty
+            ? null
+            : int.tryParse(deviceIdController.text),
+        motorSlot: motorSlotController.text.trim().isEmpty
+            ? null
+            : int.tryParse(motorSlotController.text),
+      );
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Medication added successfully')),
@@ -95,9 +152,7 @@ class CaregiverMedicationsListPageState
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Failed to add medication: ${result['message'] ?? result['error']}',
-            ),
+            content: Text('Failed: ${result['message'] ?? result['error']}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -106,13 +161,25 @@ class CaregiverMedicationsListPageState
   }
 
   // ------------------------------------------------------------------
-  // Edit medication
+  // Edit medication (with all fields)
   // ------------------------------------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> medication) async {
-    final controller = TextEditingController(
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(
       text: medication['medication_name'],
     );
-    final formKey = GlobalKey<FormState>();
+    final inventoryController = TextEditingController(
+      text: (medication['current_inventory'] ?? 0).toString(),
+    );
+    final thresholdController = TextEditingController(
+      text: (medication['refill_threshold'] ?? 5).toString(),
+    );
+    final deviceIdController = TextEditingController(
+      text: medication['device_id']?.toString() ?? '',
+    );
+    final motorSlotController = TextEditingController(
+      text: medication['motor_slot']?.toString() ?? '',
+    );
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -120,10 +187,58 @@ class CaregiverMedicationsListPageState
         title: const Text('Edit Medication'),
         content: Form(
           key: formKey,
-          child: TextFormField(
-            controller: controller,
-            decoration: const InputDecoration(labelText: 'Medication Name'),
-            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Medication Name *',
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: inventoryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Current Inventory',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) => v == null || int.tryParse(v) == null
+                      ? 'Number required'
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: thresholdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Refill Threshold',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) => v == null || int.tryParse(v) == null
+                      ? 'Number required'
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: deviceIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Device ID (optional)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: motorSlotController,
+                  decoration: const InputDecoration(
+                    labelText: 'Motor Slot (1-3, optional)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -135,7 +250,6 @@ class CaregiverMedicationsListPageState
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white,
             ),
             child: const Text('Save'),
           ),
@@ -146,8 +260,16 @@ class CaregiverMedicationsListPageState
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       final result = await _apiService.updateMedication(
-        medication['medication_id'],
-        controller.text.trim(),
+        medicationId: medication['medication_id'],
+        newName: nameController.text.trim(),
+        currentInventory: int.tryParse(inventoryController.text),
+        refillThreshold: int.tryParse(thresholdController.text),
+        deviceId: deviceIdController.text.trim().isEmpty
+            ? null
+            : int.tryParse(deviceIdController.text),
+        motorSlot: motorSlotController.text.trim().isEmpty
+            ? null
+            : int.tryParse(motorSlotController.text),
       );
       if (result['success'] == true) {
         ScaffoldMessenger.of(
@@ -214,9 +336,6 @@ class CaregiverMedicationsListPageState
     }
   }
 
-  // ------------------------------------------------------------------
-  // Build
-  // ------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -285,6 +404,9 @@ class CaregiverMedicationsListPageState
                       title: Text(
                         m['medication_name'] ?? 'Unknown',
                         style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        'Inventory: ${m['current_inventory'] ?? 0}  |  Device: ${m['device_id'] ?? 'None'}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

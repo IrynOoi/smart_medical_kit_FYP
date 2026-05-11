@@ -1,29 +1,30 @@
 // buzzer_control.cpp
 #include "buzzer_control.h"
 
-// Pin changed to 4 because D4 successfully drives your low-level active buzzer
-const int buzzerPin = 2; 
+// Pin is 2, matching your (S) connected to D2
+const int buzzerPin = 4; 
 
 void setupBuzzer() {
   pinMode(buzzerPin, OUTPUT);
-  // Keep it OFF at startup (For low-level trigger, HIGH = OFF)
-  digitalWrite(buzzerPin, HIGH); 
+  // Keep it OFF at startup. For a 3-pin module, LOW = OFF
+  digitalWrite(buzzerPin, LOW); 
 }
 
 void handleBuzzerOn() {
-  Serial.println("Buzzer turned ON (Low-Level Trigger active)");
-  // Pull LOW to make the buzzer sound
-  digitalWrite(buzzerPin, LOW); 
+  Serial.println("Buzzer turned ON (Active-High Trigger)");
+  // Pull HIGH to send a signal to the 'S' pin and make it sound
+  digitalWrite(buzzerPin, HIGH); 
   
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", "BUZZER IS ON");
 }
 
 void handleBuzzerOff() {
-  Serial.println("Buzzer turned OFF (Low-Level Trigger inactive)");
-  // Pull HIGH to turn it off
-  digitalWrite(buzzerPin, HIGH); 
+  Serial.println("Buzzer turned OFF (Active-High Trigger inactive)");
+  // Pull LOW to cut the signal to the 'S' pin and turn it off
+  digitalWrite(buzzerPin, LOW); 
   
+  // 修复了这里的拼写错误：把 }rver 改回 server
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", "BUZZER IS OFF");
 }

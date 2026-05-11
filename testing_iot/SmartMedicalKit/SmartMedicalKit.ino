@@ -1,15 +1,25 @@
 // SmartMedicalKit.ino
 #include <WiFi.h>
 #include <WebServer.h>
+#include <HTTPClient.h>      // ⚠️ Added for Heartbeat functionality
 #include "dispenser_motor.h" 
 #include "buzzer_control.h" 
-#include "display_control.h" // ⚠️ Added new display header
+#include "display_control.h" 
 #include "secrets.h"
 
 const char* ssid = SECRET_SSID; 
 const char* password = SECRET_PASS;
+
+
+const String backendUrl = "http://172.20.10.9:5000/device/heartbeat";
+const String deviceSerial = "DISP-1"; // Must match the serial in your database
+
 WebServer server(80);
 const int ledPin = 18; 
+
+// ⏱️ Timer variables for heartbeat
+unsigned long lastHeartbeatTime = 0;
+const unsigned long heartbeatInterval = 30000; // Send heartbeat every 30 seconds (30,000 ms)
 
 void setup() {
   Serial.begin(115200);
@@ -18,7 +28,7 @@ void setup() {
   pinMode(ledPin, OUTPUT);
   setupStepper(); 
   setupBuzzer(); 
-  setupDisplay(); // ⚠️ Initialize screen
+  setupDisplay(); // Initialize screen
 
   // Setup WiFi
   WiFi.begin(ssid, password);
@@ -48,10 +58,10 @@ void setup() {
   server.on("/buzzer/on", handleBuzzerOn);
   server.on("/buzzer/off", handleBuzzerOff);
 
-// --- Display Routes ---
+  // --- Display Routes ---
   server.on("/display/hello", handleDisplayHello);
   server.on("/display/clear", handleDisplayClear);
-  server.on("/display/sv", handleDisplaySV); // ⚠️ ADD THIS LINE
+  server.on("/display/sv", handleDisplaySV); 
   
   // --- Motor 1 Routes ---
   server.on("/stepper/forward", handleMotorForward);
@@ -75,5 +85,51 @@ void setup() {
 }
 
 void loop() {
+  // 1. Listen for incoming commands from Flutter app (LED, Buzzer, Motors)
   server.handleClient();
+
+  // 2. ⚠️ Send Heartbeat to Flask Backend every 30 seconds
+  if ((millis() - lastHeartbeatTime) > heartbeatInterval) {
+    
+    // Only try to send if we are actually connected to the internet
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      
+      http.begin(backendUrl);
+      http.addHeader("Content-Type", "application/json");
+
+
+      // ⚠️ 1. 加上这行通行证，绕过 Ngrok 的拦截页面
+      http.addHeader("ngrok-skip-browser-warning", "true"); 
+      
+      // ⚠️ 2. 告诉 ESP32 如果 Ngrok 强制把 http 换成 https，请自动跟随跳转
+      http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+      // Replace 100 with real analogRead() logic if you wire up a battery sensor
+      int batteryLevel = 100; 
+      long rssi = WiFi.RSSI(); // Read WiFi signal strength
+
+      // Construct the JSON payload
+      String jsonPayload = "{\"device_serial\":\"" + deviceSerial + "\",\"battery\":" + String(batteryLevel) + ",\"rssi\":" + String(rssi) + "}";
+
+      Serial.println("Sending Heartbeat: " + jsonPayload);
+      
+      // Fire the POST request
+      int httpResponseCode = http.POST(jsonPayload);
+      
+      if (httpResponseCode > 0) {
+        Serial.print("Heartbeat Sent Successfully. DB Updated. Response code: ");
+        Serial.println(httpResponseCode);
+      } else {
+        Serial.print("Error sending heartbeat. Code: ");
+        Serial.println(httpResponseCode);
+      }
+      
+      http.end(); // Free up resources
+    } else {
+      Serial.println("WiFi Disconnected. Skipping heartbeat.");
+    }
+    
+    lastHeartbeatTime = millis(); // Reset the timer
+  }
 }

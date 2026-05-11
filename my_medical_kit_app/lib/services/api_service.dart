@@ -950,22 +950,22 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> addMedication(String name) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/medications'),
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: jsonEncode({'medication_name': name}),
-      );
-      return jsonDecode(response.body);
-    } catch (e) {
-      debugPrint('addMedication error: $e');
-      return {'success': false, 'error': e.toString()};
-    }
-  }
+  // Future<Map<String, dynamic>> addMedication(String name) async {
+  //   try {
+  //     final response = await http.post(
+  //       Uri.parse('$baseUrl/medications'),
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'ngrok-skip-browser-warning': 'true',
+  //       },
+  //       body: jsonEncode({'medication_name': name}),
+  //     );
+  //     return jsonDecode(response.body);
+  //   } catch (e) {
+  //     debugPrint('addMedication error: $e');
+  //     return {'success': false, 'error': e.toString()};
+  //   }
+  // }
 
   // ==========================================
   // 🏭 DEVICE + PRESCRIPTION (combined)
@@ -1034,25 +1034,25 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> updateMedication(
-    int medicationId,
-    String newName,
-  ) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/medications/$medicationId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: jsonEncode({'medication_name': newName}),
-      );
-      return jsonDecode(response.body);
-    } catch (e) {
-      debugPrint('updateMedication error: $e');
-      return {'success': false, 'error': e.toString()};
-    }
-  }
+  // Future<Map<String, dynamic>> updateMedication(
+  //   int medicationId,
+  //   String newName,
+  // ) async {
+  //   try {
+  //     final response = await http.put(
+  //       Uri.parse('$baseUrl/medications/$medicationId'),
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'ngrok-skip-browser-warning': 'true',
+  //       },
+  //       body: jsonEncode({'medication_name': newName}),
+  //     );
+  //     return jsonDecode(response.body);
+  //   } catch (e) {
+  //     debugPrint('updateMedication error: $e');
+  //     return {'success': false, 'error': e.toString()};
+  //   }
+  // }
 
   Future<Map<String, dynamic>> deleteMedication(int medicationId) async {
     try {
@@ -1160,6 +1160,67 @@ class ApiService {
     } catch (e) {
       print('Error getting device prescriptions: $e');
       return [];
+    }
+  }
+
+  // Add medication with extra fields
+  Future<Map<String, dynamic>> addMedication({
+    required String name,
+    int currentInventory = 0,
+    int refillThreshold = 5,
+    int? deviceId,
+    int? motorSlot,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/medications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'medication_name': name,
+          'current_inventory': currentInventory,
+          'refill_threshold': refillThreshold,
+          'device_id': deviceId,
+          'motor_slot': motorSlot,
+        }),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Update medication with all fields
+  Future<Map<String, dynamic>> updateMedication({
+    required int medicationId,
+    String? newName,
+    int? currentInventory,
+    int? refillThreshold,
+    int? deviceId,
+    int? motorSlot,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (newName != null) body['medication_name'] = newName;
+      if (currentInventory != null)
+        body['current_inventory'] = currentInventory;
+      if (refillThreshold != null) body['refill_threshold'] = refillThreshold;
+      if (deviceId != null) body['device_id'] = deviceId;
+      if (motorSlot != null) body['motor_slot'] = motorSlot;
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/medications/$medicationId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode(body),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
     }
   }
 }

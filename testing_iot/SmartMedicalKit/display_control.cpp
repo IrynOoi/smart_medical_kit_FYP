@@ -12,12 +12,13 @@
 Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 void setupDisplay() {
-  delay(1000); // 等待 Serial Monitor 准备好
+  delay(1000); // 留着这个延时，防止启动抢跑
   Serial.println("\n--- Starting OLED Setup ---");
 
-  // 1. 强制唤醒 ESP32 的 I2C 通讯 (SDA=21, SCL=22)
-Wire.begin(32, 33); // SDA=32, SCL=33
-  // 2. 迷你硬件扫描器：检查板子到底有没有连上屏幕
+  // 🌟 核心修复：将针脚改回 21 (SDA) 和 22 (SCL)
+  Wire.begin(21, 22); 
+  
+  // 2. 迷你硬件扫描器
   Serial.println("Scanning I2C bus for OLED...");
   byte error, address;
   int nDevices = 0;
@@ -67,14 +68,6 @@ void handleDisplayHello() {
   server.send(200, "text/plain", "Hello world displayed on OLED");
 }
 
-void handleDisplayClear() {
-  Serial.println("Clearing Display");
-  display.clearDisplay();
-  display.display();
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.send(200, "text/plain", "OLED Display Cleared");
-}
-
 void handleDisplaySV() {
   Serial.println("Displaying SV Name");
   display.clearDisplay();
@@ -85,15 +78,25 @@ void handleDisplaySV() {
   display.println("Supervisor:");
   
   display.setTextSize(1); 
-  display.setCursor(0, 20);
-  display.println("Assoc. Prof. Ts. Dr.");
+  display.setCursor(0, 15);
+  display.println("Dr");
   
-  display.setTextSize(2); 
-  display.setCursor(0, 35);
-  display.println("Sabrina");
-  display.println("Ahmad");
-  
+  // 💡 友情提示：Size 2 的字体非常大，一行大概只能显示 10 个字母左右。
+  // "Noorrezam bin Yusop" 太长了，用 Size 2 肯定会超出屏幕换行，导致排版很难看。
+  // 我建议把名字的字体改回 Size 1，或者分两行写。这里我帮你改成了 Size 1。
+  display.setTextSize(1); 
+  display.setCursor(0, 30);
+  display.println("Noorrezam bin Yusop");
+
   display.display();
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", "SV Name displayed");
+}
+
+void handleDisplayClear() {
+  Serial.println("Clearing Display");
+  display.clearDisplay();
+  display.display();
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "text/plain", "OLED Display Cleared");
 }

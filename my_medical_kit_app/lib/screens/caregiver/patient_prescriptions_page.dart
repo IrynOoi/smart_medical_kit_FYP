@@ -5,7 +5,7 @@ import 'package:my_medical_kit_app/services/api_service.dart';
 
 import 'caregiver_dashboard_page.dart';
 
-import '../../widget/caregiver_wdgt/edit_prescription_sheet.dart';
+import 'edit_prescription_page.dart';
 
 class PatientPrescriptionsPage extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -92,16 +92,18 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
   }
 
   // ---- Edit Prescription ----
-  void _editPrescription(Map<String, dynamic> prescription) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => EditPrescriptionSheet(
-        prescription: prescription,
-        onUpdated: _fetchPrescriptions, // refresh after edit
+  void _editPrescription(Map<String, dynamic> prescription) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditPrescriptionPage(
+          prescription: prescription,
+        ),
       ),
     );
+    if (result == true) {
+      _fetchPrescriptions(); // refresh after edit
+    }
   }
 
   // ---- Delete Prescription ----

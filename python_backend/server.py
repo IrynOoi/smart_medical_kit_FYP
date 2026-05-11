@@ -1,6 +1,5 @@
 # server.py
 #backend codes
-from psycopg2 import cursor
 import json 
 import joblib # <--- Add this impor
 from flask import Flask, request, jsonify
@@ -9,6 +8,7 @@ from flask_cors import CORS
 from flask.json.provider import DefaultJSONProvider
 import numpy as np
 import tensorflow as tf
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import pool
@@ -46,7 +46,7 @@ DB_CONFIG = {
     'port': 5433
 }
 
-# 使用 ThreadedConnectionPool，最大连接数稍微调大一点以防高并发
+
 db_pool = ThreadedConnectionPool(1, 20, **DB_CONFIG)
 
 @contextmanager
@@ -330,16 +330,18 @@ def get_patient_prescriptions(patient_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT pc.prescription_id, pc.patient_id, m.medication_name,
-                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory,
-                       pc.refill_threshold, pc.start_date, pc.end_date,
-                       pc.created_at, pc.updated_at, pc.device_id
-                FROM prescription_config pc
-                JOIN medications m ON pc.medication_id = m.medication_id
-                WHERE pc.patient_id = %s 
-                  AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
-                ORDER BY pc.start_date ASC
-            ''', (patient_id,))
+    SELECT pc.prescription_id, pc.patient_id, m.medication_name,
+           pc.dosage_tablet, pc.dispense_schedule,
+           m.current_inventory, m.refill_threshold,
+           pc.start_date, pc.end_date,
+           pc.created_at, pc.updated_at,
+           m.device_id, m.motor_slot
+    FROM prescription_config pc
+    JOIN medications m ON pc.medication_id = m.medication_id
+    WHERE pc.patient_id = %s 
+      AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+    ORDER BY pc.start_date ASC
+''', (patient_id,))
             prescriptions = cursor.fetchall()
             cursor.close()
         return jsonify({"success": True, "data": prescriptions})
@@ -497,12 +499,13 @@ def get_caregiver_overview(caregiver_id):
 
             # 3. 抓取庫存過低的藥物數量
             cursor.execute('''
-                SELECT COUNT(*) AS low_stock_count
-                FROM prescription_config pc
-                JOIN patient p ON pc.patient_id = p.patient_id
-                WHERE p.caregiver_id = %s
-                  AND pc.current_inventory <= pc.refill_threshold
-            ''', (caregiver_id,))
+    SELECT COUNT(*) AS low_stock_count
+    FROM prescription_config pc
+    JOIN medications m ON pc.medication_id = m.medication_id
+    JOIN patient p ON pc.patient_id = p.patient_id
+    WHERE p.caregiver_id = %s
+      AND m.current_inventory <= m.refill_threshold
+''', (caregiver_id,))
             low = cursor.fetchone()
 
             # 4. 🌟 NEW: Calculate Total Active Prescriptions for this caregiver's patients
@@ -647,15 +650,16 @@ def get_caregiver_alerts(caregiver_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT al.adlog_id, u.full_name AS patient_name,
-                       m.medication_name, al.scheduled_time, al.status,
-                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory
+                    med.medication_name, al.scheduled_time, al.status,
+                    pc.dosage_tablet, pc.dispense_schedule,
+                    med.current_inventory
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
-                JOIN medications m ON pc.medication_id = m.medication_id
+                JOIN medications med ON pc.medication_id = med.medication_id
                 JOIN patient p ON pc.patient_id = p.patient_id
                 JOIN users u ON p.patient_id = u.user_id
                 WHERE p.caregiver_id = %s
-                  AND al.status IN ('MISSED', 'PENDING')
+                AND al.status IN ('MISSED', 'PENDING')
                 ORDER BY al.scheduled_time DESC
                 LIMIT %s
             ''', (caregiver_id, limit))
@@ -785,12 +789,13 @@ def get_caregiver_patients(caregiver_id):
                     d.device_serial,
                     d.last_battery_report AS last_active_timestamp,
                     d.last_known_ip,
-                    pc.current_inventory AS inventory,
-                    pc.refill_threshold AS refill_threshold
+                    m.current_inventory AS inventory,
+                    m.refill_threshold AS refill_threshold
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
-                LEFT JOIN prescription_config pc ON pc.patient_id = p.patient_id AND pc.device_id IS NOT NULL
-                LEFT JOIN iot_device d ON pc.device_id = d.device_id
+                LEFT JOIN prescription_config pc ON pc.patient_id = p.patient_id
+                LEFT JOIN medications m ON pc.medication_id = m.medication_id
+                LEFT JOIN iot_device d ON m.device_id = d.device_id
                 WHERE p.caregiver_id = %s AND u.is_active = true
                 ORDER BY p.patient_id, pc.created_at DESC NULLS LAST
             ''', (caregiver_id,))
@@ -961,18 +966,15 @@ def record_medication():
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
+# First, get medication_id from the prescription
+            cursor.execute('SELECT medication_id FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
+            med_id = cursor.fetchone()[0]
+                        # Then update the medication's inventory
             cursor.execute('''
-                UPDATE adherence_logs 
-                SET status = 'TAKEN', dispensed_time = CURRENT_TIMESTAMP, recorded_at = CURRENT_TIMESTAMP
-                WHERE prescription_id = %s AND device_id = %s AND status = 'PENDING'
-                  AND DATE(scheduled_time) = CURRENT_DATE
-            ''', (prescription_id, device_id))
-
-            cursor.execute('''
-                UPDATE prescription_config 
-                SET current_inventory = current_inventory - 1, updated_at = CURRENT_TIMESTAMP
-                WHERE prescription_id = %s AND current_inventory > 0
-            ''', (prescription_id,))
+                            UPDATE medications
+                            SET current_inventory = current_inventory - 1, updated_at = CURRENT_TIMESTAMP
+                            WHERE medication_id = %s AND current_inventory > 0
+                        ''', (med_id,))
             conn.commit()
             cursor.close()
 
@@ -997,6 +999,7 @@ def add_prescription():
         current_inventory = data.get('current_inventory', 0)
         refill_threshold = data.get('refill_threshold', 5)
         start_date = data.get('start_date')
+        end_date = data.get('end_date')
         device_id = data.get('device_id')
 
         if not all([patient_id, medication_name, dosage_tablet, dispense_schedule, start_date]):
@@ -1012,18 +1015,40 @@ def add_prescription():
                 return jsonify({"success": False, "message": f"Medication '{medication_name}' not found"}), 400
             medication_id = med_row['medication_id']
 
+            # Insert prescription without inventory/device columns
             cursor.execute('''
                 INSERT INTO prescription_config 
-                (patient_id, medication_id, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING prescription_id, patient_id, medication_id, dosage_tablet, 
-                          dispense_schedule, current_inventory, refill_threshold, 
-                          start_date, end_date, created_at, updated_at, device_id
-            ''', (patient_id, medication_id, dosage_tablet, dispense_schedule, current_inventory, refill_threshold, start_date, device_id))
-            
-            new_prescription = cursor.fetchone()
+                (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING prescription_id
+            ''', (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date))
+            new_prescription_id = cursor.fetchone()['prescription_id']
+
+            # If you want to set initial inventory/device for the medication, update medications table
+            if current_inventory is not None:
+                cursor.execute('UPDATE medications SET current_inventory = %s WHERE medication_id = %s',
+                            (current_inventory, medication_id))
+            if device_id is not None:
+                cursor.execute('UPDATE medications SET device_id = %s WHERE medication_id = %s',
+                            (device_id, medication_id))
+            if refill_threshold is not None:
+                cursor.execute('UPDATE medications SET refill_threshold = %s WHERE medication_id = %s',
+                            (refill_threshold, medication_id))
+            # new_prescription = cursor.fetchone()
             # Optionally add the medication_name back for the response
-            new_prescription['medication_name'] = medication_name
+            # After all updates, build response
+            new_prescription = {
+                "prescription_id": new_prescription_id,
+                "patient_id": patient_id,
+                "medication_id": medication_id,
+                "medication_name": medication_name,
+                "dosage_tablet": dosage_tablet,
+                "dispense_schedule": dispense_schedule,
+                "start_date": start_date,
+                "end_date": end_date,
+                "created_at": datetime.datetime.now(),
+                "updated_at": datetime.datetime.now()
+            }
             conn.commit()
             cursor.close()
 
@@ -1040,9 +1065,11 @@ def get_prescription_details(prescription_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT pc.prescription_id, pc.patient_id, m.medication_name,
-                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory,
-                       pc.refill_threshold, pc.start_date, pc.end_date,
-                       pc.created_at, pc.updated_at, pc.device_id
+                       pc.dosage_tablet, pc.dispense_schedule,
+                       m.current_inventory, m.refill_threshold,
+                       pc.start_date, pc.end_date,
+                       pc.created_at, pc.updated_at,
+                       m.device_id, m.motor_slot
                 FROM prescription_config pc
                 JOIN medications m ON pc.medication_id = m.medication_id
                 WHERE pc.prescription_id = %s
@@ -1278,40 +1305,7 @@ def get_analytics_overview(caregiver_id):
         print(f"Analytics overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-# @app.route('/caregiver/<int:caregiver_id>/at_risk_patients', methods=['GET'])
-# def get_at_risk_patients(caregiver_id):
-#     """Return list of patients with their latest AI prediction (high/medium risk only)"""
-#     try:
-#         with get_db_connection() as conn:
-#             cursor = conn.cursor(cursor_factory=RealDictCursor)
-#             cursor.execute('''
-#                 SELECT 
-#                     u.full_name AS name,
-#                     m.medication_name AS medication,  -- ✅ FIX 1: 使用 m.medication_name
-#                     a.risk_level,
-#                     (100.0 - a.prediction_score) AS forget_probability, -- ✅ FIX 2: 数据库里是服药率，传给前端前转换为忘记率
-#                     COALESCE(a.features_used->>'temporal_pattern', 'Irregular pattern detected') AS temporal_pattern
-#                 FROM patient p
-#                 JOIN users u ON p.patient_id = u.user_id
-#                 JOIN prescription_config pc ON pc.patient_id = p.patient_id
-#                 JOIN medications m ON pc.medication_id = m.medication_id  -- ✅ FIX 3: JOIN medications 表
-#                 LEFT JOIN (
-#                     SELECT DISTINCT ON (patient_id) patient_id, risk_level, prediction_score, features_used
-#                     FROM ai_adherence_prediction
-#                     ORDER BY patient_id, predicted_at DESC
-#                 ) a ON p.patient_id = a.patient_id
-#                 WHERE p.caregiver_id = %s 
-#                   AND u.is_active = true
-#                   AND a.risk_level IN ('HIGH', 'MEDIUM')
-#                 ORDER BY forget_probability DESC -- ✅ FIX 4: 按忘记概率降序排列
-#                 LIMIT 20
-#             ''', (caregiver_id,))
-#             patients = cursor.fetchall()
-#             cursor.close()
-#         return jsonify({"success": True, "data": patients})
-#     except Exception as e:
-#         print(f"At-risk patients error: {e}")
-#         return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/patient/<int:patient_id>', methods=['DELETE'])
 def delete_patient(patient_id):
@@ -1326,7 +1320,7 @@ def delete_patient(patient_id):
                 WHERE prescription_id IN (SELECT prescription_id FROM prescription_config WHERE patient_id = %s)
             ''', (patient_id,))
             cursor.execute('DELETE FROM prescription_config WHERE patient_id = %s', (patient_id,))
-            cursor.execute('DELETE FROM iot_device WHERE patient_id = %s', (patient_id,))
+            # cursor.execute('DELETE FROM iot_device WHERE patient_id = %s', (patient_id,))
             cursor.execute('DELETE FROM patient WHERE patient_id = %s', (patient_id,))
             cursor.execute('DELETE FROM users WHERE user_id = %s AND role = %s', (patient_id, 'patient'))
             conn.commit()
@@ -1339,7 +1333,6 @@ def delete_patient(patient_id):
 
 @app.route('/iot_device/patient/<int:patient_id>', methods=['GET'])
 def get_patient_device(patient_id):
-    """Get IoT device info for a patient (via patient_device junction)"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -1347,10 +1340,11 @@ def get_patient_device(patient_id):
                 SELECT d.device_id, d.device_serial, 
                     d.last_reported_battery AS battery_level, 
                     d.last_battery_report AS last_active_timestamp,
-                    CAST(d.last_known_ip AS TEXT) AS last_known_ip  -- ✅ Add this
+                    CAST(d.last_known_ip AS TEXT) AS last_known_ip
                 FROM prescription_config pc
-                JOIN iot_device d ON pc.device_id = d.device_id
-                WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL
+                JOIN medications m ON pc.medication_id = m.medication_id
+                JOIN iot_device d ON m.device_id = d.device_id
+                WHERE pc.patient_id = %s AND m.device_id IS NOT NULL
                 AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
                 LIMIT 1
             ''', (patient_id,))
@@ -1408,6 +1402,11 @@ def update_prescription(prescription_id):
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
         dispense_schedule = data.get('dispense_schedule')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        current_inventory = data.get('current_inventory')
+        refill_threshold = data.get('refill_threshold')
+        device_id = data.get('device_id')
         
         if not all([medication_name, dosage_tablet, dispense_schedule]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
@@ -1424,9 +1423,31 @@ def update_prescription(prescription_id):
             
             cursor.execute('''
                 UPDATE prescription_config 
-                SET medication_id = %s, dosage_tablet = %s, dispense_schedule = %s, updated_at = CURRENT_TIMESTAMP
+                SET medication_id = %s, dosage_tablet = %s, dispense_schedule = %s, 
+                    start_date = %s, end_date = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE prescription_id = %s
-            ''', (medication_id, dosage_tablet, dispense_schedule, prescription_id))
+            ''', (medication_id, dosage_tablet, dispense_schedule, start_date, end_date, prescription_id))
+            
+            # Update medications table for inventory, threshold, device_id
+            updates = []
+            params = []
+            if current_inventory is not None:
+                updates.append('current_inventory = %s')
+                params.append(current_inventory)
+            if refill_threshold is not None:
+                updates.append('refill_threshold = %s')
+                params.append(refill_threshold)
+            if device_id is not None:
+                updates.append('device_id = %s')
+                params.append(device_id)
+            else:
+                if 'device_id' in data: # allow clearing device_id if passed explicitly as null
+                    updates.append('device_id = NULL')
+            
+            if updates:
+                query = f"UPDATE medications SET {', '.join(updates)} WHERE medication_id = %s"
+                params.append(medication_id)
+                cursor.execute(query, tuple(params))
             
             conn.commit()
             cursor.close()
@@ -1522,12 +1543,13 @@ def control_led():
     with get_db_connection() as conn:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute('''
-            SELECT d.last_known_ip
-            FROM iot_device d
-            JOIN prescription_config pc ON d.device_id = pc.device_id
-            WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL
-            LIMIT 1
-        ''', (patient_id,))
+    SELECT d.last_known_ip
+    FROM iot_device d
+    JOIN medications m ON d.device_id = m.device_id
+    JOIN prescription_config pc ON m.medication_id = pc.medication_id
+    WHERE pc.patient_id = %s
+    LIMIT 1
+''', (patient_id,))
         device = cursor.fetchone()
         cursor.close()
 
@@ -1552,12 +1574,13 @@ def control_buzzer():
     with get_db_connection() as conn:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute('''
-            SELECT d.last_known_ip
-            FROM iot_device d
-            JOIN prescription_config pc ON d.device_id = pc.device_id
-            WHERE pc.patient_id = %s AND pc.device_id IS NOT NULL
-            LIMIT 1
-        ''', (patient_id,))
+    SELECT d.last_known_ip
+    FROM iot_device d
+    JOIN medications m ON d.device_id = m.device_id
+    JOIN prescription_config pc ON m.medication_id = pc.medication_id
+    WHERE pc.patient_id = %s
+    LIMIT 1
+''', (patient_id,))
         device = cursor.fetchone()
         cursor.close()
 
@@ -1581,12 +1604,13 @@ def control_display():
     with get_db_connection() as conn:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute('''
-            SELECT d.last_known_ip
-            FROM iot_device d
-            JOIN patient p ON d.patient_id = p.patient_id
-            WHERE p.patient_id = %s
-            LIMIT 1
-        ''', (patient_id,))
+        SELECT d.last_known_ip
+        FROM iot_device d
+        JOIN medications m ON d.device_id = m.device_id
+        JOIN prescription_config pc ON m.medication_id = pc.medication_id
+        WHERE pc.patient_id = %s
+        LIMIT 1
+    ''', (patient_id,))
         device = cursor.fetchone()
         cursor.close()
 
@@ -1611,12 +1635,13 @@ def control_stepper():
     with get_db_connection() as conn:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute('''
-            SELECT d.last_known_ip
-            FROM iot_device d
-            JOIN patient p ON d.patient_id = p.patient_id
-            WHERE p.patient_id = %s
-            LIMIT 1
-        ''', (patient_id,))
+    SELECT d.last_known_ip
+    FROM iot_device d
+    JOIN medications m ON d.device_id = m.device_id
+    JOIN prescription_config pc ON m.medication_id = pc.medication_id
+    WHERE pc.patient_id = %s
+    LIMIT 1
+''', (patient_id,))
         device = cursor.fetchone()
         cursor.close()
 
@@ -1686,7 +1711,11 @@ def get_medications():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute('SELECT medication_id, medication_name FROM medications ORDER BY medication_name')
+            cursor.execute('''
+                SELECT medication_id, medication_name, current_inventory, refill_threshold,
+                       device_id, motor_slot, created_at, updated_at
+                FROM medications ORDER BY medication_name
+            ''')
             meds = cursor.fetchall()
         return jsonify({"success": True, "data": meds})
     except Exception as e:
@@ -1697,26 +1726,41 @@ def add_medication():
     try:
         data = request.get_json()
         medication_name = data.get('medication_name')
-        
+        current_inventory = data.get('current_inventory', 0)
+        refill_threshold = data.get('refill_threshold', 5)
+        device_id = data.get('device_id')
+        motor_slot = data.get('motor_slot')
+
         if not medication_name:
             return jsonify({"success": False, "message": "Medication name is required"}), 400
-            
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Check if medication already exists
             cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
             if cursor.fetchone():
                 return jsonify({"success": False, "message": "Medication already exists"}), 400
-                
+
             cursor.execute('''
-                INSERT INTO medications (medication_name) 
-                VALUES (%s) RETURNING medication_id, medication_name
-            ''', (medication_name,))
+                INSERT INTO medications (medication_name, current_inventory, refill_threshold, device_id, motor_slot)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING medication_id, medication_name, current_inventory, refill_threshold, device_id, motor_slot
+            ''', (medication_name, current_inventory, refill_threshold, device_id, motor_slot))
             new_med = cursor.fetchone()
             conn.commit()
-            
-        return jsonify({"success": True, "data": {"medication_id": new_med[0], "medication_name": new_med[1]}})
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "medication_id": new_med[0],
+                "medication_name": new_med[1],
+                "current_inventory": new_med[2],
+                "refill_threshold": new_med[3],
+                "device_id": new_med[4],
+                "motor_slot": new_med[5]
+            }
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -1743,15 +1787,20 @@ def create_device_with_prescription():
         ''', (device_serial,))
         device_id = cursor.fetchone()[0]
 
-
-
-        # Create prescription
+        # Create prescription (without device/motor/inventory columns)
         cursor.execute('''
             INSERT INTO prescription_config
-            (patient_id, device_id, motor_slot, medication_id, dosage_tablet, dispense_schedule,
-             current_inventory, refill_threshold, start_date)
-            VALUES (%s, %s, %s, %s, 1.0, '0 8 * * *', %s, %s, CURRENT_DATE)
-        ''', (patient_id, device_id, motor_slot, medication_id, inventory, threshold))
+            (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date)
+            VALUES (%s, %s, 1.0, '0 8 * * *', CURRENT_DATE)
+        ''', (patient_id, medication_id))
+
+        # Update medication with device, motor slot, inventory, threshold
+        cursor.execute('''
+            UPDATE medications
+            SET device_id = %s, motor_slot = %s,
+                current_inventory = %s, refill_threshold = %s
+            WHERE medication_id = %s
+        ''', (device_id, motor_slot, inventory, threshold, medication_id))
 
         conn.commit()
     return jsonify({"success": True, "message": "Device and prescription created"})
@@ -1767,27 +1816,21 @@ def update_device_prescription(device_id):
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Ensure patient_device link exists
-        cursor.execute('''
-            INSERT INTO patient_device (patient_id, device_id)
-            VALUES (%s, %s)
-            ON CONFLICT DO NOTHING
-        ''', (patient_id, device_id))
 
-        # Update or insert prescription
+        # Ensure a prescription exists for this patient (or create one)
         cursor.execute('''
-            INSERT INTO prescription_config
-            (patient_id, device_id, motor_slot, medication_id, dosage_tablet, dispense_schedule,
-             current_inventory, refill_threshold, start_date)
-            VALUES (%s, %s, %s, %s, 1.0, '0 8 * * *', %s, %s, CURRENT_DATE)
-            ON CONFLICT (patient_id, device_id)  -- need a unique constraint; fallback to update
-            DO UPDATE SET
-                motor_slot = EXCLUDED.motor_slot,
-                medication_id = EXCLUDED.medication_id,
-                current_inventory = EXCLUDED.current_inventory,
-                refill_threshold = EXCLUDED.refill_threshold,
-                updated_at = CURRENT_TIMESTAMP
-        ''', (patient_id, device_id, motor_slot, medication_id, inventory, threshold))
+            INSERT INTO prescription_config (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date)
+            VALUES (%s, %s, 1.0, '0 8 * * *', CURRENT_DATE)
+            ON CONFLICT (prescription_id) DO NOTHING
+        ''', (patient_id, medication_id))
+
+        # Update medication with device, motor slot, inventory, threshold
+        cursor.execute('''
+            UPDATE medications
+            SET device_id = %s, motor_slot = %s,
+                current_inventory = %s, refill_threshold = %s
+            WHERE medication_id = %s
+        ''', (device_id, motor_slot, inventory, threshold, medication_id))
 
         conn.commit()
     return jsonify({"success": True, "message": "Prescription updated"})
@@ -1796,57 +1839,79 @@ def update_device_prescription(device_id):
 
 @app.route('/device/<int:device_id>/patient/<int:patient_id>/prescription', methods=['GET'])
 def get_prescription_for_device_patient(device_id, patient_id):
-    """Fetch prescription details for a given device and patient."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT prescription_id, motor_slot, medication_id,
-                       current_inventory, refill_threshold
-                FROM prescription_config
-                WHERE patient_id = %s AND device_id = %s
+                SELECT pc.prescription_id, m.motor_slot, m.medication_id,
+                       m.current_inventory, m.refill_threshold
+                FROM prescription_config pc
+                JOIN medications m ON pc.medication_id = m.medication_id
+                WHERE pc.patient_id = %s AND m.device_id = %s
                 LIMIT 1
             ''', (patient_id, device_id))
             result = cursor.fetchone()
-            if result:
-                return jsonify({"success": True, "data": result})
-            else:
-                return jsonify({"success": True, "data": None})
+            return jsonify({"success": True, "data": result})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/medications/<int:medication_id>', methods=['PUT'])
 def update_medication(medication_id):
-    """Update an existing medication name."""
     try:
         data = request.get_json()
         new_name = data.get('medication_name')
-        if not new_name:
-            return jsonify({"success": False, "message": "Medication name required"}), 400
+        current_inventory = data.get('current_inventory')
+        refill_threshold = data.get('refill_threshold')
+        device_id = data.get('device_id')
+        motor_slot = data.get('motor_slot')
+
+        if not new_name and current_inventory is None and refill_threshold is None and device_id is None and motor_slot is None:
+            return jsonify({"success": False, "message": "No fields to update"}), 400
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            # Check if name already exists (exclude current)
-            cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s AND medication_id != %s', (new_name, medication_id))
-            if cursor.fetchone():
-                return jsonify({"success": False, "message": "Medication name already exists"}), 400
+            # Build dynamic SET clause
+            updates = []
+            params = []
+            if new_name:
+                updates.append("medication_name = %s")
+                params.append(new_name)
+            if current_inventory is not None:
+                updates.append("current_inventory = %s")
+                params.append(current_inventory)
+            if refill_threshold is not None:
+                updates.append("refill_threshold = %s")
+                params.append(refill_threshold)
+            if device_id is not None:
+                updates.append("device_id = %s")
+                params.append(device_id)
+            if motor_slot is not None:
+                updates.append("motor_slot = %s")
+                params.append(motor_slot)
 
-            cursor.execute('''
-                UPDATE medications
-                SET medication_name = %s
-                WHERE medication_id = %s
-                RETURNING medication_id, medication_name
-            ''', (new_name, medication_id))
+            params.append(medication_id)
+            query = f"UPDATE medications SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s RETURNING medication_id, medication_name, current_inventory, refill_threshold, device_id, motor_slot"
+            cursor.execute(query, tuple(params))
             updated = cursor.fetchone()
             conn.commit()
+
             if updated:
-                return jsonify({"success": True, "data": {"medication_id": updated[0], "medication_name": updated[1]}})
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "medication_id": updated[0],
+                        "medication_name": updated[1],
+                        "current_inventory": updated[2],
+                        "refill_threshold": updated[3],
+                        "device_id": updated[4],
+                        "motor_slot": updated[5]
+                    }
+                })
             else:
                 return jsonify({"success": False, "message": "Medication not found"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/medications/<int:medication_id>', methods=['DELETE'])
 def delete_medication(medication_id):
@@ -1904,10 +1969,11 @@ def get_patient_by_device(device_id):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
                 SELECT p.patient_id, u.full_name
-                FROM prescription_config pc
+                FROM medications m
+                JOIN prescription_config pc ON m.medication_id = pc.medication_id
                 JOIN patient p ON pc.patient_id = p.patient_id
                 JOIN users u ON p.patient_id = u.user_id
-                WHERE pc.device_id = %s
+                WHERE m.device_id = %s
                 ORDER BY pc.created_at DESC
                 LIMIT 1
             ''', (device_id,))
@@ -1944,21 +2010,22 @@ def get_all_devices():
 
 @app.route('/device/<int:device_id>/prescriptions', methods=['GET'])
 def get_device_prescriptions(device_id):
-    """Get all prescriptions for a given device."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute('''
-                SELECT pc.prescription_id, pc.patient_id, m.medication_name,
-                       pc.dosage_tablet, pc.dispense_schedule, pc.current_inventory,
-                       pc.refill_threshold, pc.start_date, pc.end_date,
-                       pc.created_at, pc.updated_at, pc.device_id, pc.motor_slot
-                FROM prescription_config pc
-                JOIN medications m ON pc.medication_id = m.medication_id
-                WHERE pc.device_id = %s
-                  AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
-                ORDER BY pc.motor_slot ASC
-            ''', (device_id,))
+        SELECT pc.prescription_id, pc.patient_id, med.medication_name,
+            pc.dosage_tablet, pc.dispense_schedule,
+            med.current_inventory, med.refill_threshold,
+            pc.start_date, pc.end_date,
+            pc.created_at, pc.updated_at,
+            med.device_id, med.motor_slot
+        FROM prescription_config pc
+        JOIN medications med ON pc.medication_id = med.medication_id
+        WHERE med.device_id = %s
+        AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+        ORDER BY med.motor_slot ASC
+    ''', (device_id,))
             prescriptions = cursor.fetchall()
             cursor.close()
         return jsonify({"success": True, "data": prescriptions})
