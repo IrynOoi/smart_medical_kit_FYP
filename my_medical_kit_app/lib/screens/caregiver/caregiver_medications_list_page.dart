@@ -1,5 +1,6 @@
 //medication list page
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 
@@ -43,6 +44,30 @@ class CaregiverMedicationsListPageState
     }
   }
 
+  InputDecoration _inputDecoration(String label, IconData icon, {String? prefixText}) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: AppColors.primaryPurple),
+      prefixText: prefixText,
+      prefixStyle: const TextStyle(color: AppColors.primaryPurple, fontWeight: FontWeight.bold, fontSize: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.primaryPurple, width: 2),
+      ),
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    );
+  }
+
   // ------------------------------------------------------------------
   // Add medication (with inventory, device, motor slot)
   // ------------------------------------------------------------------
@@ -57,7 +82,11 @@ class CaregiverMedicationsListPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Medication'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Add New Medication',
+          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPurple),
+        ),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -66,63 +95,63 @@ class CaregiverMedicationsListPageState
               children: [
                 TextFormField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Medication Name *',
-                  ),
+                  decoration: _inputDecoration('Medication Name *', Icons.medical_services),
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: inventoryController,
-                  decoration: const InputDecoration(
-                    labelText: 'Initial Inventory',
-                  ),
+                  decoration: _inputDecoration('Initial Inventory', Icons.inventory),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) => v == null || int.tryParse(v) == null
                       ? 'Number required'
                       : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: thresholdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Refill Threshold',
-                  ),
+                  decoration: _inputDecoration('Refill Threshold', Icons.warning_amber),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) => v == null || int.tryParse(v) == null
                       ? 'Number required'
                       : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: deviceIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Device ID (optional)',
-                  ),
+                  decoration: _inputDecoration('Device ID (optional)', Icons.memory, prefixText: 'DISP '),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: motorSlotController,
-                  decoration: const InputDecoration(
-                    labelText: 'Motor Slot (1-3, optional)',
-                  ),
+                  decoration: _inputDecoration('Motor Slot (1-3, optional)', Icons.settings_applications),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
               ],
             ),
           ),
         ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: const Text('Add'),
           ),
@@ -184,7 +213,11 @@ class CaregiverMedicationsListPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Medication'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Edit Medication',
+          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPurple),
+        ),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -193,63 +226,63 @@ class CaregiverMedicationsListPageState
               children: [
                 TextFormField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Medication Name *',
-                  ),
+                  decoration: _inputDecoration('Medication Name *', Icons.medical_services),
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: inventoryController,
-                  decoration: const InputDecoration(
-                    labelText: 'Current Inventory',
-                  ),
+                  decoration: _inputDecoration('Current Inventory', Icons.inventory),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) => v == null || int.tryParse(v) == null
                       ? 'Number required'
                       : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: thresholdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Refill Threshold',
-                  ),
+                  decoration: _inputDecoration('Refill Threshold', Icons.warning_amber),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) => v == null || int.tryParse(v) == null
                       ? 'Number required'
                       : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: deviceIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Device ID (optional)',
-                  ),
+                  decoration: _inputDecoration('Device ID (optional)', Icons.memory, prefixText: 'DISP '),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: motorSlotController,
-                  decoration: const InputDecoration(
-                    labelText: 'Motor Slot (1-3, optional)',
-                  ),
+                  decoration: _inputDecoration('Motor Slot (1-3, optional)', Icons.settings_applications),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
               ],
             ),
           ),
         ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: const Text('Save'),
           ),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'caregiver_alerts_details_page.dart';
+// import 'caregiver_alerts_details_page.dart';
 import 'caregiver_patients_list_page.dart';
 import 'caregiver_devices_list_page.dart';
 import 'caregiver_adherence_details_page.dart';
@@ -213,14 +213,14 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
-  void _navigateToAlertsDetails() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CaregiverAlertsDetailsPage(caregiverId: _caregiverId),
-      ),
-    );
-  }
+  // void _navigateToAlertsDetails() {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (_) => CaregiverAlertsDetailsPage(caregiverId: _caregiverId),
+  //     ),
+  //   );
+  // }
 
   void _navigateToPerformanceDetails() {
     Navigator.push(
@@ -297,8 +297,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                 _buildStatsGrid(),
                 const SizedBox(height: 16),
                 _buildChartSection(),
-                const SizedBox(height: 16),
-                _buildRecentActivities(),
+                // const SizedBox(height: 16),
+                // _buildRecentActivities(),
                 const SizedBox(height: 24),
               ],
             ),
@@ -811,75 +811,75 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
-  Widget _buildRecentActivities() {
-    /* unchanged */
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Recent Alerts',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
-              ),
-              TextButton(
-                onPressed:
-                    _navigateToAlertsDetails, // ✅ FIX: Add the navigation function here
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                ),
-                child: const Text(
-                  'View All',
-                  style: TextStyle(
-                    color: AppColors.primaryPurple,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_recentActivities.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(
-                child: Text(
-                  'All good! No recent alerts 🎉',
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
-            )
-          else
-            ..._recentActivities.map(
-              (activity) => _buildActivityItem(activity),
-            ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildRecentActivities() {
+  //   /* unchanged */
+  //   return Container(
+  //     margin: const EdgeInsets.symmetric(horizontal: 16),
+  //     padding: const EdgeInsets.all(20),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(24),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withOpacity(0.04),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, 3),
+  //         ),
+  //       ],
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //           children: [
+  //             const Text(
+  //               'Recent Alerts',
+  //               style: TextStyle(
+  //                 fontSize: 16,
+  //                 fontWeight: FontWeight.bold,
+  //                 color: AppColors.textDark,
+  //               ),
+  //             ),
+  //             TextButton(
+  //               onPressed:
+  //                   _navigateToAlertsDetails, // ✅ FIX: Add the navigation function here
+  //               style: TextButton.styleFrom(
+  //                 padding: const EdgeInsets.symmetric(
+  //                   horizontal: 8,
+  //                   vertical: 4,
+  //                 ),
+  //               ),
+  //               child: const Text(
+  //                 'View All',
+  //                 style: TextStyle(
+  //                   color: AppColors.primaryPurple,
+  //                   fontSize: 12,
+  //                   fontWeight: FontWeight.w600,
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 16),
+  //         if (_recentActivities.isEmpty)
+  //           const Padding(
+  //             padding: EdgeInsets.all(20),
+  //             child: Center(
+  //               child: Text(
+  //                 'All good! No recent alerts 🎉',
+  //                 style: TextStyle(fontSize: 14),
+  //               ),
+  //             ),
+  //           )
+  //         else
+  //           ..._recentActivities.map(
+  //             (activity) => _buildActivityItem(activity),
+  //           ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Widget _buildActivityItem(Map<String, dynamic> activity) {
     /* unchanged */
