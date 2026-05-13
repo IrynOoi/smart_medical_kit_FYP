@@ -21,6 +21,9 @@ const int ledPin = 18;
 unsigned long lastHeartbeatTime = 0;
 const unsigned long heartbeatInterval = 30000; // Send heartbeat every 30 seconds (30,000 ms)
 
+void setupTouch();  // 声明外部触摸初始化函数
+void handleTouch(); // 声明外部触摸处理函数
+
 void setup() {
   Serial.begin(115200);
   
@@ -29,6 +32,7 @@ void setup() {
   setupStepper(); 
   setupBuzzer(); 
   setupDisplay(); // Initialize screen
+  setupTouch();
 
   // Setup WiFi
   WiFi.begin(ssid, password);
@@ -85,6 +89,8 @@ void setup() {
 }
 
 void loop() {
+
+  handleTouch();
   // 1. Listen for incoming commands from Flutter app (LED, Buzzer, Motors)
   server.handleClient();
 

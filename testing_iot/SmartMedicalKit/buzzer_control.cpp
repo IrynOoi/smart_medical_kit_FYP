@@ -2,7 +2,7 @@
 #include "buzzer_control.h"
 
 // Pin is 2, matching your (S) connected to D2
-const int buzzerPin = 4; 
+const int buzzerPin = 19; 
 
 void setupBuzzer() {
   pinMode(buzzerPin, OUTPUT);
