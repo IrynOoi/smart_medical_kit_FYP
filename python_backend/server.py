@@ -1,5 +1,6 @@
 # server.py
 #backend codes
+from flask.json import provider
 import json 
 import joblib # <--- Add this impor
 from flask import Flask, request, jsonify
@@ -9,9 +10,9 @@ from flask.json.provider import DefaultJSONProvider
 import numpy as np
 import tensorflow as tf
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from psycopg2 import pool
+import mysql.connector # type: ignore
+from mysql.connector.pooling import MySQLConnectionPool # type: ignore
+
 import datetime
 import os
 import secrets
@@ -33,35 +34,38 @@ class CustomJSONProvider(DefaultJSONProvider):
 app = Flask(__name__)
 app.json = CustomJSONProvider(app)
 CORS(app)
-from psycopg2.pool import ThreadedConnectionPool # 改用线程安全的连接池
 
 # ==========================================
-# 💾 Database Configuration
+# 💾 Database Configuration (MySQL)
 # ==========================================
 DB_CONFIG = {
-    'host': 'localhost',
-    'database': 'fyp_db',
-    'user': 'postgres',
-    'password': '123456',
-    'port': 5433
+    'host': 'servernew.syokdc.com', # Use 'localhost' if server.py is hosted on the same cPanel server
+    'database': 'mytrusth_medsmart_db',
+    'user': 'mytrusth',
+    'password': '[-q7N5Gx9L3yEd',
+    'port': 3306
 }
 
-
-db_pool = ThreadedConnectionPool(1, 20, **DB_CONFIG)
+# Create a connection pool for MySQL
+db_pool = mysql.connector.pooling.MySQLConnectionPool(
+    pool_name="mypool",
+    pool_size=10,
+    **DB_CONFIG
+)
 
 @contextmanager
 def get_db_connection():
     conn = None
     try:
-        conn = db_pool.getconn()
+        conn = db_pool.get_connection()
         yield conn
     except Exception as e:
         if conn:
-            conn.rollback() # 【关键修复】如果发生错误，必须回滚清洗这个连接，防止“毒化”！
+            conn.rollback()
         raise e
     finally:
-        if conn:
-            db_pool.putconn(conn)
+        if conn and conn.is_connected():
+            conn.close() # In mysql-connector, close() returns it to the pool
 def init_db():
     """Test database connection"""
     try:
@@ -100,7 +104,7 @@ def get_all_recent_logs(caregiver_id):
     try:
         limit = request.args.get('limit', default=20, type=int)
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT al.adlog_id, u.full_name AS patient_name,
                        m.medication_name, al.scheduled_time, al.status
@@ -128,7 +132,6 @@ def clean_string(s):
     if isinstance(s, str):
         return s.replace('\x00', '').replace('\u0000', '')
     return s
-
 # 2. 修改你的 /login 接口
 @app.route('/login', methods=['POST'])
 def login():
@@ -143,7 +146,8 @@ def login():
             return jsonify({"success": False, "message": "Email and password are required"}), 400
 
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            # ✅ CHANGED: MySQL syntax for dictionary cursor
+            cursor = conn.cursor(dictionary=True) 
             cursor.execute('''
                 SELECT user_id as id, email, full_name as name, role
                 FROM users 
@@ -160,7 +164,6 @@ def login():
     except Exception as e:
         print(f"Login error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -187,7 +190,7 @@ def register():
                 RETURNING user_id
             ''', (email, password, role, name, phone, address, gender, dob))
             
-            user_id = cursor.fetchone()[0]
+            user_id = cursor.lastrowid
             
             if role == 'caregiver':
                 cursor.execute('INSERT INTO caregiver (caregiver_id) VALUES (%s)', (user_id,))
@@ -204,7 +207,7 @@ def register():
 
         return jsonify({"success": True, "message": f"Registration successful as {role.capitalize()}!"})
 
-    except psycopg2.IntegrityError:
+    except mysql.connector.errors.IntegrityError:
         return jsonify({"success": False, "error": "Email already exists"}), 409
     except Exception as e:
         print(f"Registration error: {e}")
@@ -258,7 +261,7 @@ def reset_password():
 def get_patient(patient_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT 
                     p.patient_id, p.caregiver_id, p.medical_notes,
@@ -328,7 +331,7 @@ def get_patient(patient_id):
 def get_patient_prescriptions(patient_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
     SELECT pc.prescription_id, pc.patient_id, m.medication_name,
            pc.dosage_tablet, pc.dispense_schedule,
@@ -360,7 +363,7 @@ def get_patient_prescriptions(patient_id):
 def get_adherence_stats(patient_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT 
                     COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) as taken_count,
@@ -369,7 +372,7 @@ def get_adherence_stats(patient_id):
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 WHERE pc.patient_id = %s 
-                AND al.scheduled_time >= CURRENT_DATE - INTERVAL '7 days'
+                AND al.scheduled_time >= CURRENT_DATE - INTERVAL 7 DAY
             ''', (patient_id,))
             stats = cursor.fetchone()
             cursor.close()
@@ -393,7 +396,7 @@ def get_adherence_logs(patient_id):
     try:
         limit = request.args.get('limit', default=20, type=int)
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT al.adlog_id, al.prescription_id, al.device_id, 
                        al.scheduled_time, al.dispensed_time, al.status, al.recorded_at,
@@ -417,7 +420,7 @@ def get_adherence_logs(patient_id):
 def get_notifications(patient_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT notification_id, patient_id, title, message, is_read, created_at
                 FROM notifications WHERE patient_id = %s
@@ -438,7 +441,7 @@ def get_ai_prediction(patient_id):
     """
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
                 FROM ai_adherence_prediction
@@ -471,9 +474,9 @@ def get_ai_prediction(patient_id):
 def get_caregiver_overview(caregiver_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             
-    
+            # 👇 REMOVED THE 7-DAY INTERVAL FILTER 👇
             cursor.execute('''
                 SELECT
                     COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken_count,
@@ -483,7 +486,6 @@ def get_caregiver_overview(caregiver_id):
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 JOIN patient p ON pc.patient_id = p.patient_id
                 WHERE p.caregiver_id = %s
-                  AND al.scheduled_time >= CURRENT_DATE - INTERVAL '7 days'
             ''', (caregiver_id,))
             stats = cursor.fetchone()
 
@@ -553,7 +555,7 @@ def get_chart_data(caregiver_id):
         period = request.args.get('period', 'Week')
         
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             
             if period == 'Day':
                 # 4‑hour blocks today
@@ -576,14 +578,14 @@ def get_chart_data(caregiver_id):
                 # 4 weekly buckets over last 28 days
                 cursor.execute('''
                     SELECT 
-                        WIDTH_BUCKET(CURRENT_DATE - DATE(al.scheduled_time), 0, 28, 4) AS week_ago,
+                        CEIL(DATEDIFF(CURDATE(), DATE(al.scheduled_time)) / 7) AS week_ago,
                         COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
                         COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                     FROM adherence_logs al
                     JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                     JOIN patient p ON pc.patient_id = p.patient_id
                     WHERE p.caregiver_id = %s 
-                      AND al.scheduled_time >= CURRENT_DATE - INTERVAL '28 days'
+                      AND al.scheduled_time >= CURRENT_DATE - INTERVAL 28 DAY
                       AND al.status IN ('TAKEN', 'MISSED')
                     GROUP BY week_ago
                     ORDER BY week_ago
@@ -592,14 +594,14 @@ def get_chart_data(caregiver_id):
             else:  # Week
                 cursor.execute('''
                     SELECT 
-                        EXTRACT(ISODOW FROM al.scheduled_time) AS dow,
+                        (WEEKDAY(al.scheduled_time) + 1) AS dow,
                         COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
                         COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                     FROM adherence_logs al
                     JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                     JOIN patient p ON pc.patient_id = p.patient_id
                     WHERE p.caregiver_id = %s 
-                      AND al.scheduled_time >= CURRENT_DATE - INTERVAL '7 days'
+                      AND al.scheduled_time >= CURRENT_DATE - INTERVAL 7 DAY
                       AND al.status IN ('TAKEN', 'MISSED')
                     GROUP BY dow
                     ORDER BY dow
@@ -647,7 +649,7 @@ def get_caregiver_alerts(caregiver_id):
     try:
         limit = request.args.get('limit', default=20, type=int)
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT al.adlog_id, u.full_name AS patient_name,
                     med.medication_name, al.scheduled_time, al.status,
@@ -677,11 +679,11 @@ def compute_prediction_for_patient(patient_id):
     Compute HYBRID prediction using LSTM and Random Forest, store in DB.
     """
     with get_db_connection() as conn:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(dictionary=True)
 
         # 1. Get patient age
         cursor.execute('''
-            SELECT EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth)) AS age
+            SELECT TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) AS age
             FROM users WHERE user_id = %s
         ''', (patient_id,))
         age_row = cursor.fetchone()
@@ -755,15 +757,19 @@ def compute_prediction_for_patient(patient_id):
         # 6. Save to database (UPSERT)
         cursor.execute('''
             INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, predicted_at, features_used)
-            VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s::jsonb)
-            ON CONFLICT (patient_id) DO UPDATE SET
-                prediction_score = EXCLUDED.prediction_score,
-                risk_level = EXCLUDED.risk_level,
-                predicted_at = EXCLUDED.predicted_at,
-                features_used = EXCLUDED.features_used
-            RETURNING ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP, CAST(%s AS JSON))
+            ON DUPLICATE KEY UPDATE
+                prediction_score = VALUES(prediction_score),
+                risk_level = VALUES(risk_level),
+                predicted_at = VALUES(predicted_at),
+                features_used = VALUES(features_used)
         ''', (patient_id, adherence_score, risk_level, json.dumps(features_used)))
         
+        cursor.execute('''
+            SELECT ad_id, patient_id, prediction_score, risk_level, predicted_at, features_used
+            FROM ai_adherence_prediction
+            WHERE patient_id = %s
+        ''', (patient_id,))
         new_pred = cursor.fetchone()
         conn.commit()
         return new_pred
@@ -772,32 +778,38 @@ def compute_prediction_for_patient(patient_id):
 def get_caregiver_patients(caregiver_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
-                SELECT DISTINCT ON (p.patient_id)
-                    u.user_id as patient_id,
-                    u.email,
-                    u.full_name,
-                    u.date_of_birth,
-                    u.gender,
-                    u.phone_no,
-                    u.address,
-                    p.medical_notes,
-                    u.profile_photo,
-                    d.device_id,
-                    d.last_reported_battery AS battery_level,
-                    d.device_serial,
-                    d.last_battery_report AS last_active_timestamp,
-                    d.last_known_ip,
-                    m.current_inventory AS inventory,
-                    m.refill_threshold AS refill_threshold
-                FROM patient p
-                JOIN users u ON p.patient_id = u.user_id
-                LEFT JOIN prescription_config pc ON pc.patient_id = p.patient_id
-                LEFT JOIN medications m ON pc.medication_id = m.medication_id
-                LEFT JOIN iot_device d ON m.device_id = d.device_id
-                WHERE p.caregiver_id = %s AND u.is_active = true
-                ORDER BY p.patient_id, pc.created_at DESC NULLS LAST
+                WITH RankedPatients AS (
+                    SELECT 
+                        u.user_id as patient_id,
+                        u.email,
+                        u.full_name,
+                        u.date_of_birth,
+                        u.gender,
+                        u.phone_no,
+                        u.address,
+                        p.medical_notes,
+                        u.profile_photo,
+                        d.device_id,
+                        d.last_reported_battery AS battery_level,
+                        d.device_serial,
+                        d.last_battery_report AS last_active_timestamp,
+                        d.last_known_ip,
+                        m.current_inventory AS inventory,
+                        m.refill_threshold AS refill_threshold,
+                        ROW_NUMBER() OVER (PARTITION BY p.patient_id ORDER BY pc.created_at DESC) as rn
+                    FROM patient p
+                    JOIN users u ON p.patient_id = u.user_id
+                    LEFT JOIN prescription_config pc ON pc.patient_id = p.patient_id
+                    LEFT JOIN medications m ON pc.medication_id = m.medication_id
+                    LEFT JOIN iot_device d ON m.device_id = d.device_id
+                    WHERE p.caregiver_id = %s AND u.is_active = true
+                )
+                SELECT patient_id, email, full_name, date_of_birth, gender, phone_no, address,
+                       medical_notes, profile_photo, device_id, battery_level, device_serial,
+                       last_active_timestamp, last_known_ip, inventory, refill_threshold
+                FROM RankedPatients WHERE rn = 1
             ''', (caregiver_id,))
             patients = cursor.fetchall()
             cursor.close()
@@ -810,7 +822,7 @@ def get_caregiver_patients(caregiver_id):
 def get_caregiver_profile(caregiver_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT u.user_id as caregiver_id, u.email, u.full_name, u.phone_no, u.address, 
                        u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at,u.profile_photo
@@ -1006,7 +1018,7 @@ def add_prescription():
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             
             # Get medication_id from medications table
             cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
@@ -1020,9 +1032,8 @@ def add_prescription():
                 INSERT INTO prescription_config 
                 (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING prescription_id
             ''', (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date))
-            new_prescription_id = cursor.fetchone()['prescription_id']
+            new_prescription_id = cursor.lastrowid
 
             # If you want to set initial inventory/device for the medication, update medications table
             if current_inventory is not None:
@@ -1062,7 +1073,7 @@ def add_prescription():
 def get_prescription_details(prescription_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT pc.prescription_id, pc.patient_id, m.medication_name,
                        pc.dosage_tablet, pc.dispense_schedule,
@@ -1108,7 +1119,7 @@ def run_ai_analytics_job():
     """Batch run AI predictions for all active patients and store results in DB."""
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             
             cursor.execute('''
                 SELECT p.patient_id, u.date_of_birth
@@ -1177,12 +1188,12 @@ def run_ai_analytics_job():
                 # ✅ FIX: Use ON CONFLICT to update existing records
                 cursor.execute('''
                     INSERT INTO ai_adherence_prediction (patient_id, prediction_score, risk_level, predicted_at, features_used)
-                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s::jsonb)
-                    ON CONFLICT (patient_id) DO UPDATE SET
-                        prediction_score = EXCLUDED.prediction_score,
-                        risk_level = EXCLUDED.risk_level,
-                        predicted_at = EXCLUDED.predicted_at,
-                        features_used = EXCLUDED.features_used
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
+                    ON DUPLICATE KEY UPDATE
+                        prediction_score = VALUES(prediction_score),
+                        risk_level = VALUES(risk_level),
+                        predicted_at = VALUES(predicted_at),
+                        features_used = VALUES(features_used)
                 ''', (pid, round(prediction_score_val, 2), risk_level_val, features_used_json))
                 
                 inserted_count += 1
@@ -1218,7 +1229,7 @@ def add_log():
 def get_logs():
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('SELECT * FROM medication_logs ORDER BY timestamp DESC LIMIT 20')
             logs = cursor.fetchall()
             cursor.close()
@@ -1233,7 +1244,7 @@ def mark_notification_read(notification_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('UPDATE notifications SET is_read = TRUE WHERE notification_id = %s', (notification_id,))
+            cursor.execute('UPDATE notifications SET is_read = 1 WHERE notification_id = %s', (notification_id,))
             conn.commit()
             cursor.close()
         return jsonify({"success": True, "message": "Notification marked as read"})
@@ -1256,7 +1267,7 @@ def health_check():
 def get_analytics_overview(caregiver_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             
             # First, get total number of patients under this caregiver
             cursor.execute('''
@@ -1276,9 +1287,13 @@ def get_analytics_overview(caregiver_id):
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
                 LEFT JOIN (
-                    SELECT DISTINCT ON (patient_id) patient_id, risk_level, prediction_score
-                    FROM ai_adherence_prediction
-                    ORDER BY patient_id, predicted_at DESC
+                    SELECT patient_id, risk_level, prediction_score
+                    FROM (
+                        SELECT patient_id, risk_level, prediction_score,
+                               ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY predicted_at DESC) as rn
+                        FROM ai_adherence_prediction
+                    ) ranked
+                    WHERE rn = 1
                 ) a ON p.patient_id = a.patient_id
                 WHERE p.caregiver_id = %s AND u.is_active = true
             ''', (caregiver_id,))
@@ -1335,12 +1350,12 @@ def delete_patient(patient_id):
 def get_patient_device(patient_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT d.device_id, d.device_serial, 
                     d.last_reported_battery AS battery_level, 
                     d.last_battery_report AS last_active_timestamp,
-                    CAST(d.last_known_ip AS TEXT) AS last_known_ip
+                    d.last_known_ip AS last_known_ip
                 FROM prescription_config pc
                 JOIN medications m ON pc.medication_id = m.medication_id
                 JOIN iot_device d ON m.device_id = d.device_id
@@ -1488,7 +1503,6 @@ def device_heartbeat():
         battery = data.get('battery', 100)
         wifi_rssi = data.get('rssi')
         # Get the device's public IP as seen by the server
-        # (If ESP32 sends its local IP, use that instead)
         device_ip = request.remote_addr
 
         if not device_serial:
@@ -1496,14 +1510,15 @@ def device_heartbeat():
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # 👇 CHANGED TO MYSQL SYNTAX 👇
             cursor.execute('''
                 INSERT INTO iot_device (device_serial, last_reported_battery, last_known_ip, last_battery_report, wifi_rssi)
                 VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
-                ON CONFLICT (device_serial) DO UPDATE SET
-                    last_reported_battery = EXCLUDED.last_reported_battery,
-                    last_known_ip = EXCLUDED.last_known_ip,
-                    last_battery_report = EXCLUDED.last_battery_report,
-                    wifi_rssi = EXCLUDED.wifi_rssi
+                ON DUPLICATE KEY UPDATE 
+                    last_reported_battery = VALUES(last_reported_battery),
+                    last_known_ip = VALUES(last_known_ip),
+                    last_battery_report = VALUES(last_battery_report),
+                    wifi_rssi = VALUES(wifi_rssi)
             ''', (device_serial, battery, device_ip, wifi_rssi))
             conn.commit()
             cursor.close()
@@ -1512,7 +1527,6 @@ def device_heartbeat():
     except Exception as e:
         print(f"Heartbeat error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 
 # ==========================================
@@ -1541,7 +1555,7 @@ def control_led():
         return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
 
     with get_db_connection() as conn:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(dictionary=True)
         cursor.execute('''
     SELECT d.last_known_ip
     FROM iot_device d
@@ -1572,7 +1586,7 @@ def control_buzzer():
         return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
 
     with get_db_connection() as conn:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(dictionary=True)
         cursor.execute('''
     SELECT d.last_known_ip
     FROM iot_device d
@@ -1602,7 +1616,7 @@ def control_display():
         return jsonify({"success": False, "message": "patient_id and command (hello/clear/sv) required"}), 400
 
     with get_db_connection() as conn:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(dictionary=True)
         cursor.execute('''
         SELECT d.last_known_ip
         FROM iot_device d
@@ -1633,7 +1647,7 @@ def control_stepper():
         return jsonify({"success": False, "message": "patient_id, motor(1-3), action(forward/backward/90/180) required"}), 400
 
     with get_db_connection() as conn:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(dictionary=True)
         cursor.execute('''
     SELECT d.last_known_ip
     FROM iot_device d
@@ -1699,9 +1713,8 @@ def add_device():
         cursor.execute('''
             INSERT INTO iot_device (device_serial, last_known_ip, last_reported_battery, last_battery_report)
             VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-            RETURNING device_id
         ''', (device_serial, last_known_ip, battery))
-        new_id = cursor.fetchone()[0]
+        new_id = cursor.lastrowid
         conn.commit()
     return jsonify({"success": True, "message": "Device added", "device_id": new_id})
 
@@ -1710,7 +1723,7 @@ def add_device():
 def get_medications():
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT medication_id, medication_name, current_inventory, refill_threshold,
                        device_id, motor_slot, created_at, updated_at
@@ -1745,20 +1758,19 @@ def add_medication():
             cursor.execute('''
                 INSERT INTO medications (medication_name, current_inventory, refill_threshold, device_id, motor_slot)
                 VALUES (%s, %s, %s, %s, %s)
-                RETURNING medication_id, medication_name, current_inventory, refill_threshold, device_id, motor_slot
             ''', (medication_name, current_inventory, refill_threshold, device_id, motor_slot))
-            new_med = cursor.fetchone()
+            medication_id = cursor.lastrowid
             conn.commit()
 
         return jsonify({
             "success": True,
             "data": {
-                "medication_id": new_med[0],
-                "medication_name": new_med[1],
-                "current_inventory": new_med[2],
-                "refill_threshold": new_med[3],
-                "device_id": new_med[4],
-                "motor_slot": new_med[5]
+                "medication_id": medication_id,
+                "medication_name": medication_name,
+                "current_inventory": current_inventory,
+                "refill_threshold": refill_threshold,
+                "device_id": device_id,
+                "motor_slot": motor_slot
             }
         })
     except Exception as e:
@@ -1783,9 +1795,8 @@ def create_device_with_prescription():
         cursor.execute('''
             INSERT INTO iot_device (device_serial, last_reported_battery, last_battery_report)
             VALUES (%s, 100, CURRENT_TIMESTAMP)
-            RETURNING device_id
         ''', (device_serial,))
-        device_id = cursor.fetchone()[0]
+        device_id = cursor.lastrowid
 
         # Create prescription (without device/motor/inventory columns)
         cursor.execute('''
@@ -1841,7 +1852,7 @@ def update_device_prescription(device_id):
 def get_prescription_for_device_patient(device_id, patient_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT pc.prescription_id, m.motor_slot, m.medication_id,
                        m.current_inventory, m.refill_threshold
@@ -1891,12 +1902,13 @@ def update_medication(medication_id):
                 params.append(motor_slot)
 
             params.append(medication_id)
-            query = f"UPDATE medications SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s RETURNING medication_id, medication_name, current_inventory, refill_threshold, device_id, motor_slot"
+            query = f"UPDATE medications SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s"
             cursor.execute(query, tuple(params))
-            updated = cursor.fetchone()
-            conn.commit()
-
-            if updated:
+            
+            if cursor.rowcount > 0:
+                cursor.execute('SELECT medication_id, medication_name, current_inventory, refill_threshold, device_id, motor_slot FROM medications WHERE medication_id = %s', (medication_id,))
+                updated = cursor.fetchone()
+                conn.commit()
                 return jsonify({
                     "success": True,
                     "data": {
@@ -1909,6 +1921,7 @@ def update_medication(medication_id):
                     }
                 })
             else:
+                conn.commit()
                 return jsonify({"success": False, "message": "Medication not found"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1925,10 +1938,10 @@ def delete_medication(medication_id):
             if count > 0:
                 return jsonify({"success": False, "message": f"Cannot delete: medication is used in {count} prescription(s)"}), 400
 
-            cursor.execute('DELETE FROM medications WHERE medication_id = %s RETURNING medication_id', (medication_id,))
-            deleted = cursor.fetchone()
+            cursor.execute('DELETE FROM medications WHERE medication_id = %s', (medication_id,))
+            deleted_count = cursor.rowcount
             conn.commit()
-            if deleted:
+            if deleted_count > 0:
                 return jsonify({"success": True, "message": "Medication deleted"})
             else:
                 return jsonify({"success": False, "message": "Medication not found"}), 404
@@ -1945,7 +1958,7 @@ def get_device_by_id(device_id):
     """Return device details for a given device_id."""
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT device_id, device_serial, last_reported_battery AS battery_level,
                        last_battery_report AS last_active_timestamp, last_known_ip
@@ -1966,7 +1979,7 @@ def get_device_by_id(device_id):
 def get_patient_by_device(device_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT p.patient_id, u.full_name
                 FROM medications m
@@ -1993,7 +2006,7 @@ def get_all_devices():
     """Return all IoT devices (for dropdown)."""
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT device_id, device_serial, last_reported_battery AS battery_level,
                        last_battery_report AS last_active_timestamp, last_known_ip
@@ -2012,7 +2025,7 @@ def get_all_devices():
 def get_device_prescriptions(device_id):
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
         SELECT pc.prescription_id, pc.patient_id, med.medication_name,
             pc.dosage_tablet, pc.dispense_schedule,
@@ -2029,6 +2042,74 @@ def get_device_prescriptions(device_id):
             prescriptions = cursor.fetchall()
             cursor.close()
         return jsonify({"success": True, "data": prescriptions})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route('/device/<device_serial>/pending_dose', methods=['GET'])
+def get_pending_dose(device_serial):
+    """ESP32 calls this when the touch button is pressed to see which motor to spin."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            # Find the oldest PENDING log for this specific physical box 
+            # We allow dispensing if the scheduled time is within the next 60 minutes
+            cursor.execute('''
+                SELECT al.adlog_id, al.prescription_id, m.motor_slot, m.medication_name
+                FROM adherence_logs al
+                JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                JOIN medications m ON pc.medication_id = m.medication_id
+                JOIN iot_device d ON m.device_id = d.device_id
+                WHERE d.device_serial = %s 
+                  AND al.status = 'PENDING' 
+                  AND al.scheduled_time <= CURRENT_TIMESTAMP + INTERVAL 60 MINUTE
+                ORDER BY al.scheduled_time ASC
+                LIMIT 1
+            ''', (device_serial,))
+            dose = cursor.fetchone()
+            cursor.close()
+        
+        if dose:
+            return jsonify({"success": True, "has_pending": True, "data": dose})
+        else:
+            return jsonify({"success": True, "has_pending": False})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/device/dispense_success', methods=['POST'])
+def dispense_success():
+    """ESP32 calls this AFTER the motor finishes rotating to update the DB."""
+    try:
+        data = request.get_json()
+        adlog_id = data.get('adlog_id')
+        prescription_id = data.get('prescription_id')
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # 1. Mark the adherence log as TAKEN and record the exact physical dispense time
+            cursor.execute('''
+                UPDATE adherence_logs 
+                SET status = 'TAKEN', dispensed_time = CURRENT_TIMESTAMP 
+                WHERE adlog_id = %s
+            ''', (adlog_id,))
+            
+            # 2. Deduct the inventory based on the dosage required
+            cursor.execute('''
+                UPDATE medications m
+                JOIN prescription_config pc ON m.medication_id = pc.medication_id
+                SET m.current_inventory = m.current_inventory - pc.dosage_tablet, 
+                    m.updated_at = CURRENT_TIMESTAMP
+                WHERE pc.prescription_id = %s AND m.current_inventory > 0
+            ''', (prescription_id,))
+            
+            conn.commit()
+            cursor.close()
+            
+        return jsonify({"success": True, "message": "Dispense recorded successfully!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

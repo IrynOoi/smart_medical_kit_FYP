@@ -53,7 +53,13 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
       print("✅ Logs count: ${allLogs.length}");
 
       setState(() {
-        _totalDoses = overview['taken_count'] ?? 0;
+        // overview IS already the data map — access keys directly
+        final rawCount = overview['taken_count'];
+        _totalDoses = rawCount is int
+            ? rawCount
+            : int.tryParse(rawCount?.toString() ?? '0') ?? 0;
+
+        // allLogs IS already List<Map<String,dynamic>>
         _alerts = allLogs;
         _isLoading = false;
       });
@@ -65,7 +71,6 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
       });
     }
   }
-
   /*
   Future<void> _askAIDoctor() async {
     final String apiUrl = "http://$serverIp:5000/predict";
