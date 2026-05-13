@@ -1,6 +1,7 @@
 // lib/screens/smart_reminder_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
 import 'package:my_medical_kit_app/models/prescription.dart';
@@ -163,6 +164,19 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0FF), // 浅紫色背景
+
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          // 按下去直接强行触发通知！
+          ReminderService.showNotification("Aspirin (Test)", 1.0);
+        },
+        backgroundColor: AppColors.primaryPurple,
+        icon: const Icon(Icons.notifications_active, color: Colors.white),
+        label: const Text(
+          "Test Notification",
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
       body: Column(
         children: [
           _buildHeader(),

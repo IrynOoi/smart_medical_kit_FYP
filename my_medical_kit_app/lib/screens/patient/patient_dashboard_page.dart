@@ -9,6 +9,7 @@ import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class PatientDashboardPage extends StatefulWidget {
   const PatientDashboardPage({super.key});
@@ -45,6 +46,13 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   void initState() {
     super.initState();
     _loadPatientId();
+    _requestNotificationPermission();
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
   }
 
   String _formatFullTime(DateTime dt) {

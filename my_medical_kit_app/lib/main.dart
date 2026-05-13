@@ -1,12 +1,20 @@
-//main.dart
+// main.dart
 import 'package:flutter/material.dart';
 import 'theme/colors.dart';
 import 'screens/splash_screen.dart';
 import 'package:my_medical_kit_app/screens/landing_page.dart';
 import 'package:my_medical_kit_app/screens/login_page.dart';
 
-void main() {
+// 👇 1. 导入你的 ReminderService
+import 'package:my_medical_kit_app/services/reminder_service.dart';
+
+// 👇 2. 把 void main() 改成 Future<void> main() async
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 👇 3. 加上这一行！这会唤醒你的后台任务和通知系统
+  await ReminderService.init();
+
   debugPrint('🚀 App started: WidgetsFlutterBinding initialized.');
   runApp(const MyApp());
 }

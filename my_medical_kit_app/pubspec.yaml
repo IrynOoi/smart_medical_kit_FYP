@@ -31,10 +31,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  flutter_local_notifications: ^17.0.0
+  workmanager: ^0.9.0+3 # for background scheduling
+  # cron: ^0.6.0          # to parse cron strings
   image_picker: ^1.0.7
-    
-
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -43,6 +43,8 @@ dependencies:
   intl: ^0.20.2
 
   shared_preferences: ^2.2.0
+  permission_handler: ^12.0.1
+  # timezone: ^0.9.4
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +71,11 @@ flutter:
   assets:
     - assets/images/
     - assets/icon/
+
+
+  # Add this at the very bottom of your pubspec.yaml
+dependency_overrides:
+  timezone: ^0.9.4
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

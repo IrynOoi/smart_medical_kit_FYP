@@ -4,6 +4,7 @@
 #include <HTTPClient.h>      // ⚠️ Added for Heartbeat functionality
 #include "dispenser_motor.h" 
 #include "buzzer_control.h" 
+#include <ArduinoJson.h>
 #include "display_control.h" 
 #include "secrets.h"
 
@@ -23,6 +24,74 @@ const unsigned long heartbeatInterval = 30000; // Send heartbeat every 30 second
 
 void setupTouch();  // 声明外部触摸初始化函数
 void handleTouch(); // 声明外部触摸处理函数
+
+
+// --- NEW FUNCTION TO HANDLE THE DISPENSE LOGIC ---
+void markDoseAsTaken(int adlogId, int prescriptionId) {
+  HTTPClient http;
+  String url = "http://172.20.10.9:5000/device/dispense_success";
+  
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("ngrok-skip-browser-warning", "true");
+  
+  String payload = "{\"adlog_id\":" + String(adlogId) + ",\"prescription_id\":" + String(prescriptionId) + "}";
+  int httpCode = http.POST(payload);
+  
+  if(httpCode == 200) {
+     Serial.println("✅ Database Updated: Medication marked as TAKEN and inventory deducted.");
+  } else {
+     Serial.println("❌ Failed to update database.");
+  }
+  http.end();
+}
+
+void checkAndDispenseDose() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = "http://172.20.10.9:5000/device/" + deviceSerial + "/pending_dose";
+    
+    http.begin(url);
+    http.addHeader("ngrok-skip-browser-warning", "true");
+    int httpCode = http.GET();
+    
+    if (httpCode == 200) {
+      String payload = http.getString();
+      
+      // Parse the JSON response
+      DynamicJsonDocument doc(1024);
+      deserializeJson(doc, payload);
+      
+      if (doc["success"] == true && doc["has_pending"] == true) {
+        int motorSlot = doc["data"]["motor_slot"];
+        int adlogId = doc["data"]["adlog_id"];
+        int prescriptionId = doc["data"]["prescription_id"];
+        String medName = doc["data"]["medication_name"].as<String>();
+        
+        Serial.println("🚨 Pending Dose Found: " + medName);
+        Serial.println("⚙️ Rotating Motor Slot: " + String(motorSlot));
+        
+        // 1. ROTATE THE CORRECT MOTOR
+        if (motorSlot == 1) handleMotorForward();
+        else if (motorSlot == 2) handleMotor2Forward();
+        else if (motorSlot == 3) handleMotor3Forward();
+        else Serial.println("Error: Invalid Motor Slot!");
+        
+        // 2. TELL BACKEND IT WAS DISPENSED
+        markDoseAsTaken(adlogId, prescriptionId);
+        
+      } else {
+        Serial.println("ℹ️ Button pressed, but no pending doses right now.");
+        // Optional: Beep twice quickly to tell the patient nothing is due
+        // handleBuzzerOn(); delay(100); handleBuzzerOff(); delay(100);
+        // handleBuzzerOn(); delay(100); handleBuzzerOff();
+      }
+    } else {
+      Serial.println("❌ Failed to connect to server. HTTP Code: " + String(httpCode));
+    }
+    http.end();
+  }
+}
 
 void setup() {
   Serial.begin(115200);
