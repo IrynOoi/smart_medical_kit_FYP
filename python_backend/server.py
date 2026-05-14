@@ -72,10 +72,11 @@ def init_db():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT 1')
+            cursor.fetchone()  # 🌟 关键修复：把结果读取出来，解决 "Unread result found" 报错
             cursor.close()
-        print("PostgreSQL connected successfully!")
+        print("✅ MySQL (cPanel) connected successfully!") # 把名字改对，不再自己吓自己
     except Exception as e:
-        print(f"Failed to connect to PostgreSQL: {e}")
+        print(f"❌ Failed to connect to MySQL: {e}")
 
 
 # ==========================================
@@ -1020,14 +1021,14 @@ def add_prescription():
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
             
-            # Get medication_id from medications table
+            # 1. Get medication_id from medications table
             cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
             med_row = cursor.fetchone()
             if not med_row:
                 return jsonify({"success": False, "message": f"Medication '{medication_name}' not found"}), 400
             medication_id = med_row['medication_id']
 
-            # Insert prescription without inventory/device columns
+            # 2. Insert prescription 
             cursor.execute('''
                 INSERT INTO prescription_config 
                 (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date)
@@ -1035,7 +1036,7 @@ def add_prescription():
             ''', (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date))
             new_prescription_id = cursor.lastrowid
 
-            # If you want to set initial inventory/device for the medication, update medications table
+            # 3. Update medication inventory/device if provided
             if current_inventory is not None:
                 cursor.execute('UPDATE medications SET current_inventory = %s WHERE medication_id = %s',
                             (current_inventory, medication_id))
@@ -1045,9 +1046,19 @@ def add_prescription():
             if refill_threshold is not None:
                 cursor.execute('UPDATE medications SET refill_threshold = %s WHERE medication_id = %s',
                             (refill_threshold, medication_id))
-            # new_prescription = cursor.fetchone()
-            # Optionally add the medication_name back for the response
-            # After all updates, build response
+            
+            # ==========================================
+            # 🌟 NEW: AUTO-GENERATE NOTIFICATION
+            # ==========================================
+            notification_title = "New Prescription Added"
+            notification_message = f"Your caregiver has added a new prescription for {medication_name}. Please check your updated schedule."
+            
+            cursor.execute('''
+                INSERT INTO notifications (patient_id, title, message)
+                VALUES (%s, %s, %s)
+            ''', (patient_id, notification_title, notification_message))
+            # ==========================================
+
             new_prescription = {
                 "prescription_id": new_prescription_id,
                 "patient_id": patient_id,
@@ -1067,7 +1078,6 @@ def add_prescription():
     except Exception as e:
         print(f"Add prescription error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/prescription/<int:prescription_id>', methods=['GET'])
 def get_prescription_details(prescription_id):
@@ -1474,21 +1484,45 @@ def update_prescription(prescription_id):
 
 @app.route('/prescription/<int:prescription_id>', methods=['DELETE'])
 def delete_prescription(prescription_id):
-    """Delete a prescription and its associated logs"""
+    """Delete a prescription and its associated logs, and notify the patient"""
     try:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             
-            # 1. Delete associated adherence logs first (to avoid foreign key constraint errors)
+            # 1. Fetch the patient_id and medication_name BEFORE we delete it
+            cursor.execute('''
+                SELECT pc.patient_id, m.medication_name 
+                FROM prescription_config pc
+                JOIN medications m ON pc.medication_id = m.medication_id
+                WHERE pc.prescription_id = %s
+            ''', (prescription_id,))
+            rx_data = cursor.fetchone()
+            
+            # 2. Delete associated adherence logs first
             cursor.execute('DELETE FROM adherence_logs WHERE prescription_id = %s', (prescription_id,))
             
-            # 2. Delete the prescription itself
+            # 3. Delete the prescription itself
             cursor.execute('DELETE FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
             
+            # ==========================================
+            # 🌟 NEW: AUTO-GENERATE DELETION NOTIFICATION
+            # ==========================================
+            if rx_data:
+                patient_id = rx_data['patient_id']
+                med_name = rx_data['medication_name']
+                notification_title = "Prescription Removed"
+                notification_message = f"Your caregiver has removed your prescription for {med_name}."
+                
+                cursor.execute('''
+                    INSERT INTO notifications (patient_id, title, message)
+                    VALUES (%s, %s, %s)
+                ''', (patient_id, notification_title, notification_message))
+            # ==========================================
+
             conn.commit()
             cursor.close()
 
-        return jsonify({"success": True, "message": "Prescription and related logs deleted!"})
+        return jsonify({"success": True, "message": "Prescription deleted and patient notified!"})
     except Exception as e:
         print(f"Delete prescription error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
