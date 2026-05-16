@@ -1,47 +1,155 @@
 // lib/services/reminder_service.dart
+
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_service.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:workmanager/workmanager.dart';
+
 import '../models/prescription.dart';
+import 'api_service.dart';
+import 'app_navigator.dart';
+
+@pragma('vm:entry-point')
+void reminderCallbackDispatcher() {
+  ReminderService.callbackDispatcher();
+}
+
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse notificationResponse) {}
 
 class ReminderService {
-  static const String reminderTask = "medicationReminderTask";
+  static const String reminderTask = 'medicationReminderTask';
+  static const String _payloadSmartReminder = 'smart_reminder';
+  static const String _channelId = 'medication_channel';
+  static const String _channelName = 'Medication Reminders';
+  static const String _channelDescription = 'Reminders to take your medicine';
+  static const String _askedExactAlarmPermissionKey =
+      'asked_exact_alarm_permission';
+
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  static bool _notificationsInitialized = false;
+  static bool _timeZoneInitialized = false;
+
   static Future<void> init() async {
-    // Initialize notifications
+    await _initializeTimeZone();
+    await _initializeNotifications();
+
+    await Workmanager().initialize(reminderCallbackDispatcher);
+    await Workmanager().registerPeriodicTask(
+      'reminderCheck',
+      reminderTask,
+      frequency: const Duration(minutes: 15),
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    final patientId = prefs.getInt('patient_id');
+    if (patientId != null && patientId > 0) {
+      unawaited(scheduleUpcomingMedicationReminders(patientId));
+    }
+  }
+
+  static Future<void> _initializeTimeZone() async {
+    if (_timeZoneInitialized) return;
+    tz_data.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Kuala_Lumpur'));
+    _timeZoneInitialized = true;
+  }
+
+  static Future<void> _initializeNotifications() async {
+    if (_notificationsInitialized) return;
+
     const AndroidInitializationSettings android = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
-    const DarwinInitializationSettings ios = DarwinInitializationSettings();
+    const DarwinInitializationSettings ios = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     const InitializationSettings settings = InitializationSettings(
       android: android,
       iOS: ios,
     );
-    await _notifications.initialize(settings);
 
-    // Register background task
-    await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-    await Workmanager().registerPeriodicTask(
-      "reminderCheck",
-      reminderTask,
-      frequency: const Duration(minutes: 15),
-      constraints: Constraints(networkType: NetworkType.connected),
+    await _notifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _handleNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
+
+    final launchDetails = await _notifications
+        .getNotificationAppLaunchDetails();
+    final response = launchDetails?.notificationResponse;
+    if ((launchDetails?.didNotificationLaunchApp ?? false) &&
+        response != null) {
+      _handleNotificationResponse(response);
+    }
+
+    _notificationsInitialized = true;
   }
 
+  static Future<bool> requestNotificationPermissions({
+    bool requestExactAlarms = false,
+  }) async {
+    await _initializeNotifications();
+    bool granted = true;
+
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android != null) {
+      granted = await android.requestNotificationsPermission() ?? true;
+
+      if (requestExactAlarms) {
+        final prefs = await SharedPreferences.getInstance();
+        final alreadyAsked =
+            prefs.getBool(_askedExactAlarmPermissionKey) ?? false;
+        if (!alreadyAsked) {
+          await android.requestExactAlarmsPermission();
+          await prefs.setBool(_askedExactAlarmPermissionKey, true);
+        }
+      }
+    }
+    return granted;
+  }
+
+  // ✅ FIX: 删除了原本导致多次重复写入数据库的 _createInAppNotificationFromResponse！
+  static void _handleNotificationResponse(NotificationResponse response) {
+    if (response.payload != _payloadSmartReminder) return;
+    unawaited(_openSmartReminderWhenReady());
+  }
+
+  static Future<void> _openSmartReminderWhenReady() async {
+    for (int i = 0; i < 12; i++) {
+      if (openSmartReminderPage()) return;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+  }
+
+  @pragma('vm:entry-point')
   static void callbackDispatcher() {
     Workmanager().executeTask((taskName, inputData) async {
+      WidgetsFlutterBinding.ensureInitialized();
+      await _initializeTimeZone();
+      await _initializeNotifications();
+
       if (taskName == reminderTask) {
-        await _checkAndSendReminders();
+        await checkAndSendReminders();
       }
       return Future.value(true);
     });
   }
 
-  static Future<void> _checkAndSendReminders() async {
+  static Future<void> checkAndSendReminders() async {
+    await _initializeNotifications();
+
     final prefs = await SharedPreferences.getInstance();
     final patientId = prefs.getInt('patient_id');
     if (patientId == null || patientId <= 0) return;
@@ -50,86 +158,366 @@ class ReminderService {
     final prescriptions = await api.getPatientMedications(patientId);
     final now = DateTime.now();
 
+    // 只检查未来 15 分钟内或者刚刚错过的药物
+    final windowStart = now.subtract(const Duration(minutes: 5));
+    final windowEnd = now.add(const Duration(minutes: 15));
+
     for (final p in prescriptions) {
-      if (p.currentInventory <= 0) continue; // skip if out of stock
+      if (p.currentInventory <= 0) continue;
 
-      final nextTime = _parseNextDoseTime(p.dispenseSchedule, now);
-      if (nextTime != null) {
-        final diff = nextTime.difference(now);
+      final dueTimes = _doseTimesBetween(p, windowStart, windowEnd);
+      for (final scheduledAt in dueTimes) {
+        final recordedKey = _recordedCacheKey(p.prescriptionId, scheduledAt);
+        final systemShownKey = _systemShownCacheKey(
+          p.prescriptionId,
+          scheduledAt,
+        );
 
-        // 🚨 防止重复发送通知！
-        // 只有当距离吃药时间 45~60 分钟内时，才触发一次提醒。
-        // if (diff.inMinutes <= 60 && diff.inMinutes > 45) {
-        //   await _showNotification(p.medicationName, p.dosageTablet);
-        // }
+        final alreadyRecorded = prefs.getBool(recordedKey) ?? false;
+        final alreadyShown = prefs.getBool(systemShownKey) ?? false;
 
-        if (diff.inMinutes <= 10 && diff.inMinutes >= 0) {
-          await _showNotification(p.medicationName, p.dosageTablet);
+        // 如果 WorkManager 抓到了，并且系统还没弹正点通知，补弹一次
+        if (!alreadyShown &&
+            scheduledAt.isBefore(now.add(const Duration(minutes: 1)))) {
+          await _showNotification(
+            p.medicationName,
+            p.dosageTablet,
+            isFrenzy: false,
+          );
+          await prefs.setBool(systemShownKey, true);
+        }
+
+        // ✅ 核心：保证每天每顿药【只写入一次】MySQL 数据库！这就是铃铛里的那个红点！
+        if (!alreadyRecorded) {
+          final saved = await api.createNotification(
+            patientId: patientId,
+            title: 'Medication Reminder',
+            message: _inAppReminderMessage(p),
+            type: 'REMINDER',
+          );
+          if (saved) {
+            await prefs.setBool(recordedKey, true);
+            print("✅ 成功写入一条干干净净的数据库红点！");
+          }
         }
       }
     }
   }
 
-  static Future<void> _showNotification(String medName, double dosage) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-          'medication_channel',
-          'Medication Reminders',
-          channelDescription: 'Reminders to take your medicine',
-          importance: Importance.high,
-          priority: Priority.high,
-          playSound: true,
+  static Future<int> scheduleUpcomingMedicationReminders(
+    int patientId, {
+    List<Prescription>? medications,
+    int daysAhead = 7,
+  }) async {
+    await _initializeTimeZone();
+    await _initializeNotifications();
+    var notificationsAllowed = true;
+    try {
+      notificationsAllowed = await requestNotificationPermissions(
+        requestExactAlarms: true,
+      );
+    } catch (e) {
+      debugPrint('Reminder permission request failed: $e');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final scheduledIdsKey = _scheduledIdsKey(patientId);
+    final previousIds = prefs.getStringList(scheduledIdsKey) ?? <String>[];
+    for (final idText in previousIds) {
+      final id = int.tryParse(idText);
+      if (id != null) {
+        await _notifications.cancel(id);
+      }
+    }
+
+    final meds =
+        medications ?? await ApiService().getPatientMedications(patientId);
+    final now = DateTime.now();
+    final scheduledIds = <String>[];
+
+    for (final med in meds) {
+      if (med.currentInventory <= 0) continue;
+
+      final times = _upcomingDoseTimesFor(med, now, daysAhead: daysAhead);
+
+      for (final scheduledAt in times) {
+        // 1. 安排准确时间的通知（正点）
+        final exactId = _notificationIdFor(med.prescriptionId, scheduledAt);
+        final exactScheduled = tz.TZDateTime.from(scheduledAt, tz.local);
+        final exactScheduledOk = await _scheduleZonedNotification(
+          id: exactId,
+          title: '💊 Time to take your medicine NOW!',
+          body: _systemReminderMessage(med.medicationName, med.dosageTablet),
+          scheduledDate: exactScheduled,
         );
-    const NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-    );
+        if (exactScheduledOk) {
+          scheduledIds.add(exactId.toString());
+          await prefs.setBool(
+            _localScheduledCacheKey(med.prescriptionId, scheduledAt),
+            true,
+          );
+        }
+
+        // 🚀 2. 夺命连环 Call（提前 3、2、1 分钟狂 Push）
+        for (int minutesBefore in [3, 2, 1]) {
+          final advanceTime = scheduledAt.subtract(
+            Duration(minutes: minutesBefore),
+          );
+
+          if (advanceTime.isAfter(now)) {
+            final advId = _notificationIdFor(med.prescriptionId, advanceTime);
+            final advScheduled = tz.TZDateTime.from(advanceTime, tz.local);
+
+            // 不同的警告标题
+            String pushTitle = minutesBefore == 1
+                ? '🚨 Get Ready! 1 min left for ${med.medicationName}!'
+                : '⚠️ Upcoming Dose in $minutesBefore mins!';
+
+            final wasScheduledAdv = await _scheduleZonedNotification(
+              id: advId,
+              title: pushTitle,
+              body: 'Please get closer to your MedSmart Kit.',
+              scheduledDate: advScheduled,
+            );
+            if (wasScheduledAdv) {
+              scheduledIds.add(advId.toString());
+            }
+          }
+        }
+      }
+    }
+
+    await prefs.setStringList(scheduledIdsKey, scheduledIds);
+    return scheduledIds.length;
+  }
+
+  static Future<bool> _scheduleZonedNotification({
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime scheduledDate,
+  }) async {
+    try {
+      await _notifications.zonedSchedule(
+        id,
+        title,
+        body,
+        scheduledDate,
+        _notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: _payloadSmartReminder,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Exact reminder schedule failed, using inexact mode: $e');
+      return false;
+    }
+  }
+
+  static Future<void> _showNotification(
+    String medName,
+    double dosage, {
+    bool isFrenzy = false,
+  }) async {
     await _notifications.show(
       DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      '💊 Time to take your medicine',
-      'Take ${dosage.toStringAsFixed(0)} tablet(s) of $medName.\nPress the button on your medical kit.',
-      details,
+      isFrenzy
+          ? '🚨 URGENT: Medication Reminder'
+          : '💊 Time to take your medicine',
+      _systemReminderMessage(medName, dosage),
+      _notificationDetails,
+      payload: _payloadSmartReminder,
     );
   }
 
-  static Future<void> showNotification(String medName, double dosage) async {
-    await _showNotification(medName, dosage);
+  static Future<void> triggerTestDualNotification(BuildContext context) async {
+    await _initializeNotifications();
+
+    final prefs = await SharedPreferences.getInstance();
+    final patientId = prefs.getInt('patient_id');
+
+    if (patientId == null || patientId <= 0) return;
+
+    await _showNotification('Test Aspirin (Debug)', 2.0);
+
+    final api = ApiService();
+    final success = await api.createNotification(
+      patientId: patientId,
+      title: 'Debug Reminder Test',
+      message:
+          'This is a test notification generated at ${DateTime.now().toString().substring(11, 16)}',
+      type: 'REMINDER',
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? '✅ Debug Notification Sent & Saved!' : '❌ DB save failed.',
+        ),
+        backgroundColor: success ? Colors.green : Colors.redAccent,
+      ),
+    );
   }
 
-  // ✅ 为 FYP 定制的专属 Cron 解析器 (完美处理 "0 8 * * *")
-  static DateTime? _parseNextDoseTime(String cronExpr, DateTime from) {
-    try {
-      // 切割 Cron 字符串: "分钟 小时 日 月 星期"
-      List<String> parts = cronExpr.trim().split(RegExp(r'\s+'));
-      if (parts.length != 5) return null;
+  static List<DateTime> _doseTimesBetween(
+    Prescription prescription,
+    DateTime start,
+    DateTime end,
+  ) {
+    return _upcomingDoseTimesFor(
+      prescription,
+      start,
+      daysAhead: end.difference(start).inDays + 1,
+    ).where((time) => !time.isAfter(end)).toList();
+  }
 
-      String minuteStr = parts[0];
-      String hourStr = parts[1];
+  static List<DateTime> _upcomingDoseTimesFor(
+    Prescription prescription,
+    DateTime from, {
+    int daysAhead = 7,
+  }) {
+    final parts = prescription.dispenseSchedule.trim().split(RegExp(r'\s+'));
+    if (parts.length != 5) return <DateTime>[];
 
-      // 处理日常吃药时间 (例如: 分钟和小时都有具体数字)
-      if (minuteStr != '*' && hourStr != '*') {
-        int minute = int.parse(minuteStr);
-        int hour = int.parse(hourStr);
+    final minutes = _parseCronField(parts[0], min: 0, max: 59);
+    final hours = _parseCronField(parts[1], min: 0, max: 23);
+    final daysOfMonth = _parseCronField(parts[2], min: 1, max: 31);
+    final months = _parseCronField(parts[3], min: 1, max: 12);
+    final daysOfWeek = _parseCronField(
+      parts[4],
+      min: 0,
+      max: 7,
+      normalizeSunday: true,
+    );
 
-        // 用手机本地时间构建今天的预定吃药时间
-        DateTime scheduledToday = DateTime(
-          from.year,
-          from.month,
-          from.day,
-          hour,
-          minute,
-        );
+    if (minutes.isEmpty ||
+        hours.isEmpty ||
+        daysOfMonth.isEmpty ||
+        months.isEmpty ||
+        daysOfWeek.isEmpty) {
+      return <DateTime>[];
+    }
 
-        // 如果今天的时间已经过了，那下一次吃药就是明天同一时间
-        if (scheduledToday.isBefore(from)) {
-          return scheduledToday.add(const Duration(days: 1));
-        } else {
-          return scheduledToday;
+    final result = <DateTime>[];
+    final firstDay = DateTime(from.year, from.month, from.day);
+    final prescriptionStart = DateTime(
+      prescription.startDate.year,
+      prescription.startDate.month,
+      prescription.startDate.day,
+    );
+    final prescriptionEnd = prescription.endDate == null
+        ? null
+        : DateTime(
+            prescription.endDate!.year,
+            prescription.endDate!.month,
+            prescription.endDate!.day,
+            23,
+            59,
+            59,
+          );
+
+    for (int dayOffset = 0; dayOffset <= daysAhead; dayOffset++) {
+      final day = firstDay.add(Duration(days: dayOffset));
+      final cronWeekday = day.weekday % 7;
+
+      if (!months.contains(day.month) ||
+          !daysOfMonth.contains(day.day) ||
+          !daysOfWeek.contains(cronWeekday))
+        continue;
+
+      for (final hour in hours) {
+        for (final minute in minutes) {
+          final candidate = DateTime(
+            day.year,
+            day.month,
+            day.day,
+            hour,
+            minute,
+          );
+          if (!candidate.isAfter(from)) continue;
+          if (candidate.isBefore(prescriptionStart)) continue;
+          if (prescriptionEnd != null && candidate.isAfter(prescriptionEnd))
+            continue;
+          result.add(candidate);
         }
       }
-      return null;
-    } catch (e) {
-      print("Error manually parsing cron '$cronExpr': $e");
-      return null;
     }
+    result.sort();
+    return result;
   }
+
+  static Set<int> _parseCronField(
+    String field, {
+    required int min,
+    required int max,
+    bool normalizeSunday = false,
+  }) {
+    if (field == '*') {
+      if (normalizeSunday) return <int>{0, 1, 2, 3, 4, 5, 6};
+      return {for (int i = min; i <= max; i++) i};
+    }
+    final values = <int>{};
+    for (final rawPart in field.split(',')) {
+      final value = int.tryParse(rawPart.trim());
+      if (value == null) continue;
+      final normalized = normalizeSunday && value == 7 ? 0 : value;
+      if (normalized >= min && normalized <= max) values.add(normalized);
+    }
+    if (normalizeSunday) values.remove(7);
+    return values;
+  }
+
+  static int _notificationIdFor(int prescriptionId, DateTime scheduledAt) {
+    final minuteBucket = scheduledAt.millisecondsSinceEpoch ~/ 60000;
+    return ((prescriptionId * 1000003) + minuteBucket) & 0x7fffffff;
+  }
+
+  static String _scheduledIdsKey(int patientId) =>
+      'scheduled_reminder_ids_$patientId';
+
+  static String _recordedCacheKey(int prescriptionId, DateTime scheduledAt) =>
+      'recorded_${prescriptionId}_${_scheduleKey(scheduledAt)}';
+
+  static String _systemShownCacheKey(
+    int prescriptionId,
+    DateTime scheduledAt,
+  ) => 'system_shown_${prescriptionId}_${_scheduleKey(scheduledAt)}';
+
+  static String _localScheduledCacheKey(
+    int prescriptionId,
+    DateTime scheduledAt,
+  ) => 'local_scheduled_${prescriptionId}_${_scheduleKey(scheduledAt)}';
+
+  static String _scheduleKey(DateTime scheduledAt) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${scheduledAt.year}${two(scheduledAt.month)}${two(scheduledAt.day)}_${two(scheduledAt.hour)}${two(scheduledAt.minute)}';
+  }
+
+  static String _inAppReminderMessage(Prescription prescription) {
+    return 'Time to take ${prescription.dosageTablet.toStringAsFixed(0)} tablet(s) of ${prescription.medicationName}.';
+  }
+
+  static String _systemReminderMessage(String medName, double dosage) {
+    return 'Take ${dosage.toStringAsFixed(0)} tablet(s) of $medName.\nPress the button on your medical kit.';
+  }
+
+  static const NotificationDetails _notificationDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      ticker: 'Medication reminder',
+    ),
+    iOS: DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    ),
+  );
 }

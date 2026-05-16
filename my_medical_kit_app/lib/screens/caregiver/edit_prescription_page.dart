@@ -20,9 +20,8 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
   List<Map<String, dynamic>> _medications = [];
   String? _selectedMedicationName;
   late TextEditingController _dosageController;
-  late TextEditingController _inventoryController;
-  late TextEditingController _thresholdController;
-  late TextEditingController _deviceIdController;
+
+  // 🚫 Removed: _inventoryController, _thresholdController, _deviceIdController
 
   TimeOfDay _selectedTime = const TimeOfDay(hour: 8, minute: 0);
   final List<String> _selectedDays = [];
@@ -56,15 +55,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     _dosageController = TextEditingController(
       text: (rx['dosage_tablet'] ?? 1.0).toString(),
     );
-    _inventoryController = TextEditingController(
-      text: (rx['current_inventory'] ?? 0).toString(),
-    );
-    _thresholdController = TextEditingController(
-      text: (rx['refill_threshold'] ?? 5).toString(),
-    );
-    _deviceIdController = TextEditingController(
-      text: (rx['device_id'] ?? '').toString(),
-    );
+    // 🚫 No inventory, threshold, device ID controllers
 
     if (rx['start_date'] != null) {
       _startDate =
@@ -82,35 +73,38 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       _selectedTime = TimeOfDay(hour: hour, minute: minute);
     }
 
-    if (parts.length >= 5 && parts[4] != '*') {
-      final dayNumbers = parts[4].split(',');
-      final dayMap = {
-        '1': 'Mon',
-        '2': 'Tue',
-        '3': 'Wed',
-        '4': 'Thu',
-        '5': 'Fri',
-        '6': 'Sat',
-        '0': 'Sun',
-        '7': 'Sun',
-      };
-      for (var d in dayNumbers) {
-        final dayName = dayMap[d];
-        if (dayName != null && !_selectedDays.contains(dayName)) {
-          _selectedDays.add(dayName);
+    if (parts.length >= 5) {
+      final dayOfWeekField = parts[4];
+      if (dayOfWeekField != '*') {
+        final dayNumbers = dayOfWeekField.split(',');
+        final dayMap = {
+          '1': 'Mon',
+          '2': 'Tue',
+          '3': 'Wed',
+          '4': 'Thu',
+          '5': 'Fri',
+          '6': 'Sat',
+          '0': 'Sun',
+          '7': 'Sun',
+        };
+        _selectedDays.clear();
+        for (var d in dayNumbers) {
+          final dayName = dayMap[d];
+          if (dayName != null && !_selectedDays.contains(dayName)) {
+            _selectedDays.add(dayName);
+          }
         }
+      } else {
+        _selectedDays.clear();
+        _selectedDays.addAll(_daysOfWeek);
       }
-    } else {
-      // If '*', we can add all days or leave empty. Leaving empty is our convention for 'every day'
     }
   }
 
   @override
   void dispose() {
     _dosageController.dispose();
-    _inventoryController.dispose();
-    _thresholdController.dispose();
-    _deviceIdController.dispose();
+    // 🚫 No other controllers to dispose
     super.dispose();
   }
 
@@ -123,7 +117,6 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       final meds = await _apiService.getMedications();
       setState(() {
         _medications = meds;
-        // Verify selected medication still exists in list
         if (_selectedMedicationName != null) {
           final exists = _medications.any(
             (m) => m['medication_name'] == _selectedMedicationName,
@@ -228,11 +221,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       'dispense_schedule': cronSchedule,
       'start_date': formatter.format(_startDate),
       'end_date': _endDate != null ? formatter.format(_endDate!) : null,
-      'current_inventory': int.tryParse(_inventoryController.text) ?? 0,
-      'refill_threshold': int.tryParse(_thresholdController.text) ?? 5,
-      'device_id': _deviceIdController.text.isNotEmpty
-          ? int.tryParse(_deviceIdController.text)
-          : null,
+      // 🚫 Do NOT send inventory, threshold, device_id – backend keeps existing values
     };
 
     final success = await _apiService.updatePrescription(
@@ -249,7 +238,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context, true); // Return true to indicate success
+      Navigator.pop(context, true);
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -264,6 +253,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           'Edit Prescription',
@@ -396,11 +386,10 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                           checkmarkColor: AppColors.primaryPurple,
                           onSelected: (selected) {
                             setState(() {
-                              if (selected) {
+                              if (selected)
                                 _selectedDays.add(day);
-                              } else {
+                              else
                                 _selectedDays.remove(day);
-                              }
                             });
                           },
                         );
@@ -507,60 +496,6 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Inventory & Threshold
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _inventoryController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Current Inventory *',
-                              prefixIcon: const Icon(Icons.inventory_2),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            validator: (v) => v == null || v.isEmpty
-                                ? 'Required'
-                                : (int.tryParse(v) == null ? 'Invalid' : null),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _thresholdController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Refill Threshold *',
-                              prefixIcon: const Icon(Icons.warning_amber),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            validator: (v) => v == null || v.isEmpty
-                                ? 'Required'
-                                : (int.tryParse(v) == null ? 'Invalid' : null),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Device ID
-                    TextFormField(
-                      controller: _deviceIdController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Device ID (Optional)',
-                        prefixIcon: const Icon(Icons.memory),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 32),
 

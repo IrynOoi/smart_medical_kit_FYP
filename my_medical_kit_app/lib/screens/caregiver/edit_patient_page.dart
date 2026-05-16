@@ -140,6 +140,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // 👈 add this
       appBar: AppBar(
         title: const Text(
           'Edit Patient',

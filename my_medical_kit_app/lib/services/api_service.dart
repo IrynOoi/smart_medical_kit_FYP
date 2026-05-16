@@ -247,6 +247,7 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/patient/$patientId/notifications'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
       );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
@@ -262,10 +263,39 @@ class ApiService {
     }
   }
 
+  Future<bool> createNotification({
+    required int patientId,
+    required String title,
+    required String message,
+    String type = 'REMINDER',
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/notifications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'patient_id': patientId,
+          'title': title,
+          'message': message,
+          'type': type,
+        }),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error creating notification: $e');
+      return false;
+    }
+  }
+
   Future<bool> markNotificationRead(int notificationId) async {
     try {
       final response = await http.put(
         Uri.parse('$baseUrl/notification/$notificationId/read'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
       );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
@@ -1221,6 +1251,42 @@ class ApiService {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Add this inside your ApiService class
+  Future<bool> markSingleReminderRead(
+    int patientId,
+    String medicationName,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/patient/$patientId/reminders/read_single'),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({'medication_name': medicationName}),
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error marking single reminder read: $e');
+      return false;
+    }
+  }
+
+  Future<bool> markAllRemindersRead(int patientId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/patient/$patientId/reminders/read'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      print('Error marking all reminders read: $e');
+      return false;
     }
   }
 }

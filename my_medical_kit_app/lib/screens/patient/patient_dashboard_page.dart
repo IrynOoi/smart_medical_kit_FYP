@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient/smart_reminder_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/models/patient.dart';
 import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class PatientDashboardPage extends StatefulWidget {
   const PatientDashboardPage({super.key});
@@ -50,9 +50,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   }
 
   Future<void> _requestNotificationPermission() async {
-    if (await Permission.notification.isDenied) {
-      await Permission.notification.request();
-    }
+    await ReminderService.requestNotificationPermissions();
   }
 
   String _formatFullTime(DateTime dt) {
@@ -156,6 +154,104 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     });
   }
 
+  // ──────────────────────────────────────────
+  // IN-APP NOTIFICATION BOTTOM SHEET
+  // ──────────────────────────────────────────
+  void _showNotificationsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          height: MediaQuery.of(sheetContext).size.height * 0.5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'Notifications',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              const Divider(height: 30),
+              // Inside _showNotificationsSheet, replace the existing Expanded child with:
+              Expanded(
+                child: _notifications.where((n) => !n.isRead).isEmpty
+                    ? Center(
+                        child: Text(
+                          'No unread notifications.',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _notifications
+                            .where((n) => !n.isRead)
+                            .length,
+                        itemBuilder: (context, index) {
+                          final notif = _notifications
+                              .where((n) => !n.isRead)
+                              .toList()[index];
+                          return Card(
+                            elevation: 0,
+                            color: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: AppColors.primaryPurple.withOpacity(0.2),
+                              ),
+                            ),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.primaryPurple,
+                                child: Icon(
+                                  Icons.medication_liquid_rounded,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              title: Text(
+                                notif.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(notif.message),
+                              ),
+                              onTap: () async {
+                                final success = await _apiService
+                                    .markNotificationRead(notif.notificationId);
+                                if (!mounted) return;
+                                if (success) {
+                                  await _loadAll(); // refresh dashboard data
+                                  if (sheetContext.mounted) {
+                                    Navigator.pop(sheetContext); // close sheet
+                                  }
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _redirectToLogin() {
     Navigator.pushReplacementNamed(context, '/login');
   }
@@ -177,11 +273,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         _apiService.getNotifications(_currentPatientId),
       ]);
 
+      final meds = results[1] as List<Prescription>;
       final logs = results[2] as List<AdherenceLog>;
 
       setState(() {
         _patient = results[0] as Patient?;
-        _medications = results[1] as List<Prescription>;
+        _medications = meds;
         _recentLogs = logs;
         _adherenceStats = results[3] as Map<String, dynamic>;
         _notifications = results[4] as List<NotificationModel>;
@@ -189,6 +286,14 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         _isLoading = false;
       });
       _updateChartPeriod(_selectedPeriod);
+      try {
+        await ReminderService.scheduleUpcomingMedicationReminders(
+          _currentPatientId,
+          medications: meds,
+        );
+      } catch (scheduleError) {
+        debugPrint('Reminder scheduling skipped: $scheduleError');
+      }
     } catch (e, stack) {
       debugPrint('❌ ERROR: $e');
       debugPrint('❌ STACK: $stack');
@@ -462,27 +567,90 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   letterSpacing: 1.2,
                 ),
               ),
-              // Reminder icon (PNG)
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SmartReminderPage(),
+
+              // 🔔 新增：右侧图标组合 (铃铛 + 原本的日历)
+              Row(
+                children: [
+                  // 1. 通知铃铛 🔔
+                  GestureDetector(
+                    onTap: _showNotificationsSheet, // 点击弹出消息列表
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(
+                          Icons.notifications_none_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                        // 如果有未读消息，显示小红点！🔴
+                        if (_unreadNotifications > 0)
+                          Positioned(
+                            right: 0,
+                            top: 2,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$_unreadNotifications',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Image.asset(
-                    'assets/icon/reminder.png',
-                    // 🚀 FIXED: Scaled up to 40x40. This enlarges the icon
-                    // and naturally makes the PNG's outlines look thicker on screen.
-                    height: 40,
-                    width: 40,
-                    color: Colors.white,
                   ),
-                ),
+                  const SizedBox(width: 20), // 两个图标的间距
+                  // 2. 原本的 Reminder icon (PNG)
+                  // 2. 原本的 Reminder icon (PNG) – 加上红点
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SmartReminderPage(),
+                        ),
+                      );
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Image.asset(
+                          'assets/icon/reminder.png',
+                          height: 36,
+                          width: 36,
+                          color: Colors.white,
+                        ),
+                        if (_unreadNotifications > 0)
+                          Positioned(
+                            right: 0,
+                            top: 2,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$_unreadNotifications',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

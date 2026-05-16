@@ -45,6 +45,14 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
         _medications = meds;
         _isLoading = false;
       });
+      try {
+        await ReminderService.scheduleUpcomingMedicationReminders(
+          _patientId,
+          medications: meds,
+        );
+      } catch (scheduleError) {
+        debugPrint('Reminder scheduling skipped: $scheduleError');
+      }
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -133,7 +141,60 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 38),
+
+              // 把右边的按钮组合起来
+              Row(
+                children: [
+                  // 🐛 1. 开发者测试按钮 (一键发通知)
+                  GestureDetector(
+                    onTap: () async {
+                      // 直接触发我们的 Debug 函数
+                      await ReminderService.triggerTestDualNotification(
+                        context,
+                      );
+                      // 顺便刷新一下列表，让你能马上在 App 里看到新通知
+                      _loadMedications();
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 10), // 和刷新按钮隔开一点
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orangeAccent.withOpacity(
+                          0.8,
+                        ), // 设成橘色，提示这是测试按钮
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.bug_report,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+
+                  // 🔄 2. 真实的时间检查按钮 (Sync)
+                  GestureDetector(
+                    onTap: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Checking schedule...')),
+                      );
+                      await ReminderService.checkAndSendReminders();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.sync,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -148,7 +209,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Medication Timeline',
+            'Medication Reminder',
             style: TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.bold,
@@ -164,19 +225,18 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0FF), // 浅紫色背景
-
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // 按下去直接强行触发通知！
-          ReminderService.showNotification("Aspirin (Test)", 1.0);
-        },
-        backgroundColor: AppColors.primaryPurple,
-        icon: const Icon(Icons.notifications_active, color: Colors.white),
-        label: const Text(
-          "Test Notification",
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
+      // floatingActionButton: FloatingActionButton.extended(
+      //   onPressed: () {
+      //     // 按下去直接强行触发通知！
+      //     ReminderService.showNotification("Aspirin (Test)", 1.0);
+      //   },
+      //   backgroundColor: AppColors.primaryPurple,
+      //   icon: const Icon(Icons.notifications_active, color: Colors.white),
+      //   label: const Text(
+      //     "Test Notification",
+      //     style: TextStyle(color: Colors.white),
+      //   ),
+      // ),
       body: Column(
         children: [
           _buildHeader(),
@@ -310,8 +370,15 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                Row(
+                                const SizedBox(height: 12),
+                                // 💡 修复 Overflow：用 Wrap 代替 Row，让空间不够时自动换行
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8.0,
+                                  runSpacing: 12.0,
                                   children: [
+                                    // 1. Stock Status
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
@@ -351,36 +418,144 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                         ],
                                       ),
                                     ),
-                                    const Spacer(),
-                                    ElevatedButton.icon(
-                                      onPressed: canTake
-                                          ? () => _markTaken(
-                                              med.prescriptionId,
-                                              med.deviceId,
-                                            )
-                                          : null,
-                                      icon: const Icon(
-                                        Icons.check_circle_outline,
-                                        size: 18,
-                                      ),
-                                      label: const Text('Take'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            AppColors.primaryPurple,
-                                        foregroundColor: Colors.white,
-                                        disabledBackgroundColor:
-                                            Colors.grey.shade300,
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
+
+                                    // 2. Actions (Press Kit + Mark as Read)
+                                    Wrap(
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      spacing: 8.0,
+                                      children: [
+                                        // Press Kit hint
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryPurple
+                                                .withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.touch_app,
+                                                size: 16,
+                                                color: AppColors.primaryPurple,
+                                              ),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Press Kit to Dispense',
+                                                style: TextStyle(
+                                                  color:
+                                                      AppColors.primaryPurple,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 14,
+
+                                        // Mark as Read button
+                                        // Replace your existing Mark as Read ElevatedButton (around line 290) with this:
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            final confirm = await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: Text(
+                                                  'Dismiss ${med.medicationName} reminder',
+                                                ),
+                                                content: Text(
+                                                  'This will clear the unread reminder for ${med.medicationName}. Are you sure?',
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                          ctx,
+                                                          false,
+                                                        ),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                          ctx,
+                                                          true,
+                                                        ),
+                                                    style:
+                                                        ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              AppColors
+                                                                  .primaryPurple,
+                                                        ),
+                                                    child: const Text('Yes'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            if (confirm != true) return;
+
+                                            // Call the new single-read API
+                                            final success = await _apiService
+                                                .markSingleReminderRead(
+                                                  _patientId,
+                                                  med.medicationName,
+                                                );
+
+                                            if (!mounted) return;
+
+                                            if (success) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    '${med.medicationName} reminder marked as read',
+                                                  ),
+                                                  backgroundColor: Colors.teal,
+                                                ),
+                                              );
+                                              // Refresh the list to update UI
+                                              _loadMedications();
+                                            } else {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Failed to mark as read',
+                                                  ),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                AppColors.primaryPurple,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Mark as Read', // Updated text
+                                            style: TextStyle(fontSize: 12),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
                                   ],
                                 ),

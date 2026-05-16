@@ -354,7 +354,36 @@ def get_patient_prescriptions(patient_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# Add this new route near your other notification endpoints
+@app.route('/patient/<int:patient_id>/reminders/read_single', methods=['PUT'])
+def mark_single_reminder_read(patient_id):
+    """Mark unread REMINDER notifications for a SPECIFIC medication as read."""
+    try:
+        data = request.get_json()
+        medication_name = data.get('medication_name')
+        
+        if not medication_name:
+            return jsonify({"success": False, "message": "medication_name required"}), 400
 
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Use LIKE to match the specific medication name in the message
+            search_term = f"%{medication_name}%"
+            cursor.execute('''
+                UPDATE notifications
+                SET is_read = 1
+                WHERE patient_id = %s 
+                  AND type = 'REMINDER' 
+                  AND is_read = 0
+                  AND message LIKE %s
+            ''', (patient_id, search_term))
+            conn.commit()
+            cursor.close()
+            
+        return jsonify({"success": True, "message": f"Reminders for {medication_name} marked as read"})
+    except Exception as e:
+        print(f"Error marking single reminder read: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 
@@ -422,8 +451,9 @@ def get_notifications(patient_id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
+            # 👇 注意这里：SELECT 语句里加上了 type
             cursor.execute('''
-                SELECT notification_id, patient_id, title, message, is_read, created_at
+                SELECT notification_id, patient_id, title, message, type, is_read, created_at
                 FROM notifications WHERE patient_id = %s
                 ORDER BY created_at DESC LIMIT 20
             ''', (patient_id,))
@@ -433,7 +463,6 @@ def get_notifications(patient_id):
     except Exception as e:
         print(f"Get notifications error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/patient/<int:patient_id>/ai_prediction', methods=['GET'])
 def get_ai_prediction(patient_id):
@@ -979,19 +1008,34 @@ def record_medication():
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-# First, get medication_id from the prescription
-            cursor.execute('SELECT medication_id FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
-            med_id = cursor.fetchone()[0]
-                        # Then update the medication's inventory
+            # 1. 获取 medication_id
+            cursor.execute('SELECT medication_id, patient_id FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"success": False, "message": "Prescription not found"}), 404
+            med_id = row[0]
+            patient_id = row[1]
+
+            # 2. 扣减库存
             cursor.execute('''
-                            UPDATE medications
-                            SET current_inventory = current_inventory - 1, updated_at = CURRENT_TIMESTAMP
-                            WHERE medication_id = %s AND current_inventory > 0
-                        ''', (med_id,))
+                UPDATE medications
+                SET current_inventory = current_inventory - 1, updated_at = CURRENT_TIMESTAMP
+                WHERE medication_id = %s AND current_inventory > 0
+            ''', (med_id,))
+            
+            # 3. 🌟 将与该处方相关的未读提醒通知标记为已读
+            cursor.execute('''
+                UPDATE notifications
+                SET is_read = 1
+                WHERE patient_id = %s
+                  AND type = 'REMINDER'
+                  AND is_read = 0
+            ''', (patient_id,))
+            
             conn.commit()
             cursor.close()
 
-        return jsonify({"success": True, "message": "Medication recorded successfully!"})
+        return jsonify({"success": True, "message": "Medication recorded and reminders cleared!"})
     except Exception as e:
         print(f"Record medication error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -2115,7 +2159,6 @@ def get_pending_dose(device_serial):
 
 @app.route('/device/dispense_success', methods=['POST'])
 def dispense_success():
-    """ESP32 calls this AFTER the motor finishes rotating to update the DB."""
     try:
         data = request.get_json()
         adlog_id = data.get('adlog_id')
@@ -2124,14 +2167,19 @@ def dispense_success():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Mark the adherence log as TAKEN and record the exact physical dispense time
+            # 1. 获取 patient_id
+            cursor.execute('SELECT patient_id FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
+            row = cursor.fetchone()
+            patient_id = row[0] if row else None
+
+            # 2. 标记 adherence_logs 为 TAKEN
             cursor.execute('''
                 UPDATE adherence_logs 
                 SET status = 'TAKEN', dispensed_time = CURRENT_TIMESTAMP 
                 WHERE adlog_id = %s
             ''', (adlog_id,))
             
-            # 2. Deduct the inventory based on the dosage required
+            # 3. 扣减库存
             cursor.execute('''
                 UPDATE medications m
                 JOIN prescription_config pc ON m.medication_id = pc.medication_id
@@ -2140,10 +2188,66 @@ def dispense_success():
                 WHERE pc.prescription_id = %s AND m.current_inventory > 0
             ''', (prescription_id,))
             
+            # 4. 🌟 将该患者的未读提醒通知标记为已读
+            if patient_id:
+                cursor.execute('''
+                    UPDATE notifications
+                    SET is_read = 1
+                    WHERE patient_id = %s
+                      AND type = 'REMINDER'
+                      AND is_read = 0
+                ''', (patient_id,))
+            
             conn.commit()
             cursor.close()
             
-        return jsonify({"success": True, "message": "Dispense recorded successfully!"})
+        return jsonify({"success": True, "message": "Dispense recorded and reminders cleared!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/notifications', methods=['POST'])
+def create_notification():
+    """Receive requests from Flutter and save the notification record into the database"""
+    try:
+        data = request.get_json()
+        patient_id = data.get('patient_id')
+        title = data.get('title')
+        message = data.get('message')
+        notif_type = data.get('type', 'REMINDER')
+
+        if not all([patient_id, title, message]):
+            return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Note: Your table already includes the 'type' field
+            cursor.execute('''
+                INSERT INTO notifications (patient_id, title, message, type)
+                VALUES (%s, %s, %s, %s)
+            ''', (patient_id, title, message, notif_type))
+            conn.commit()
+            cursor.close()
+
+        return jsonify({"success": True, "message": "In-app notification saved successfully!"})
+    except Exception as e:
+        print(f"Create notification error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/patient/<int:patient_id>/reminders/read', methods=['PUT'])
+def mark_all_reminders_read(patient_id):
+    """Mark all unread REMINDER notifications for this patient as read."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE notifications
+                SET is_read = 1
+                WHERE patient_id = %s AND type = 'REMINDER' AND is_read = 0
+            ''', (patient_id,))
+            conn.commit()
+            cursor.close()
+        return jsonify({"success": True, "message": "All reminders marked as read"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
