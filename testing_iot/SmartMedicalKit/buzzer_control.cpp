@@ -19,6 +19,11 @@ void handleBuzzerOn() {
   server.send(200, "text/plain", "BUZZER IS ON");
 }
 
+void triggerBuzzerHardware(bool turnOn) {
+  // If turnOn is true, pull HIGH. If false, pull LOW.
+  digitalWrite(buzzerPin, turnOn ? HIGH : LOW);
+}
+
 void handleBuzzerOff() {
   Serial.println("Buzzer turned OFF (Active-High Trigger inactive)");
   // Pull LOW to cut the signal to the 'S' pin and turn it off

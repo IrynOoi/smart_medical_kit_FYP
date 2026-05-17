@@ -147,6 +147,19 @@ void handleMotor390() {
   server.send(200, "text/plain", "Motor 3 Rotated 90 Degrees & Powered Off");
 }
 
+void rotateMotorHardware(int slot) {
+  if (slot == 1) {
+    myStepper1.step(stepsPerRevolution);
+    disableMotor1();
+  } else if (slot == 2) {
+    myStepper2.step(stepsPerRevolution);
+    disableMotor2();
+  } else if (slot == 3) {
+    myStepper3.step(stepsPerRevolution);
+    disableMotor3();
+  }
+}
+
 void handleMotor3180() {
   Serial.println("Motor 3 rotating 180 degrees...");
   myStepper3.step(1024); 

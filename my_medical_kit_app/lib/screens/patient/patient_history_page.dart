@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +14,7 @@ class PatientHistoryPage extends StatefulWidget {
 }
 
 class _PatientHistoryPageState extends State<PatientHistoryPage> {
-  final ApiService _apiService = ApiService();
+  
   bool _isLoading = true;
   List<AdherenceLog> _logs = [];
   int _patientId = 0;
@@ -41,7 +41,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   Future<void> _loadLogs() async {
     setState(() => _isLoading = true);
     try {
-      final logs = await _apiService.getAdherenceLogs(_patientId, limit: 50);
+      final logs = await PatientService().getAdherenceLogs(_patientId, limit: 50);
       setState(() {
         _logs = logs;
         _isLoading = false;
@@ -135,7 +135,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.premiumLight.withOpacity(0.1),
+      backgroundColor: AppColors.premiumLight.withValues(alpha: 0.1),
       body: Column(
         children: [
           _buildHeader(),
@@ -159,7 +159,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
+                                  color: Colors.black.withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -263,7 +263,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
+                                color: Colors.black.withValues(alpha: 0.03),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -279,7 +279,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                                   top: 8,
                                 ),
                                 leading: CircleAvatar(
-                                  backgroundColor: statusColor.withOpacity(0.1),
+                                  backgroundColor: statusColor.withValues(alpha: 0.1),
                                   child: Icon(
                                     isTaken
                                         ? Icons.check_circle
@@ -303,7 +303,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.1),
+                                    color: statusColor.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(

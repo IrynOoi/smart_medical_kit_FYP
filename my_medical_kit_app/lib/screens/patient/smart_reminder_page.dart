@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
 import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +16,7 @@ class SmartReminderPage extends StatefulWidget {
 }
 
 class _SmartReminderPageState extends State<SmartReminderPage> {
-  final ApiService _apiService = ApiService();
+  
   bool _isLoading = true;
   List<Prescription> _medications = [];
   int _patientId = 0;
@@ -40,15 +41,34 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
   Future<void> _loadMedications() async {
     setState(() => _isLoading = true);
     try {
-      final meds = await _apiService.getPatientMedications(_patientId);
+      // 1. Fetch all prescriptions (the schedule)
+      final allMeds = await MedicationService().getPatientMedications(_patientId);
+
+      // 2. Fetch notifications to see which ones are actually unread
+      final notifications = await PatientService().getNotifications(_patientId);
+
+      // Filter to keep only unread notifications (isRead == false or 0 depending on your model)
+      // We assume your NotificationModel uses a boolean or int for isRead.
+      final unreadNotifications = notifications
+          .where((n) => n.isRead == false)
+          .toList();
+
+      // 3. Filter the medications: only keep the card if its name is in an unread notification
+      final activeReminders = allMeds.where((med) {
+        return unreadNotifications.any(
+          (notif) => notif.message.contains(med.medicationName),
+        );
+      }).toList();
+
       setState(() {
-        _medications = meds;
+        _medications = activeReminders; // <-- Display the filtered list!
         _isLoading = false;
       });
+
       try {
         await ReminderService.scheduleUpcomingMedicationReminders(
           _patientId,
-          medications: meds,
+          medications: allMeds, // Keep scheduling based on the full schedule
         );
       } catch (scheduleError) {
         debugPrint('Reminder scheduling skipped: $scheduleError');
@@ -65,7 +85,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
 
   Future<void> _markTaken(int prescriptionId, int? deviceId) async {
     final actualDeviceId = deviceId ?? 0;
-    final success = await _apiService.recordMedicationTaken(
+    final success = await MedicationService().recordMedicationTaken(
       prescriptionId,
       actualDeviceId,
     );
@@ -123,7 +143,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -183,7 +203,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -286,7 +306,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.primaryPurple.withOpacity(0.1),
+                                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                                 blurRadius: 20,
                                 offset: const Offset(0, 6),
                               ),
@@ -303,7 +323,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                       padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(
                                         color: AppColors.primaryPurple
-                                            .withOpacity(0.1),
+                                            .withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(18),
                                       ),
                                       child: Icon(
@@ -433,7 +453,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: AppColors.primaryPurple
-                                                .withOpacity(0.1),
+                                                .withValues(alpha: 0.1),
                                             borderRadius: BorderRadius.circular(
                                               20,
                                             ),
@@ -493,6 +513,8 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                                           backgroundColor:
                                                               AppColors
                                                                   .primaryPurple,
+                                                          foregroundColor:
+                                                              Colors.white,
                                                         ),
                                                     child: const Text('Yes'),
                                                   ),
@@ -503,7 +525,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             if (confirm != true) return;
 
                                             // Call the new single-read API
-                                            final success = await _apiService
+                                            final success = await PatientService()
                                                 .markSingleReminderRead(
                                                   _patientId,
                                                   med.medicationName,

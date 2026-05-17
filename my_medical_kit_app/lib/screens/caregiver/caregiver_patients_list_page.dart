@@ -1,7 +1,9 @@
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 //caregiver_patients_list_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 
 import 'patient_detail_page.dart';
 import 'add_patient_page.dart';
@@ -16,7 +18,7 @@ class CaregiverPatientsListPage extends StatefulWidget {
 }
 
 class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _patients = [];
   bool _isLoading = true;
   String _error = '';
@@ -52,7 +54,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     if (confirm == true) {
       // Show loading indicator (optional)
       setState(() => _isLoading = true);
-      final success = await _apiService.deletePatient(patientId);
+      final success = await PatientService().deletePatient(patientId);
       setState(() => _isLoading = false);
 
       if (success) {
@@ -79,7 +81,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     if (photoUrl != null && photoUrl.toString().isNotEmpty) {
       final imageUrl = photoUrl.toString().startsWith('http')
           ? photoUrl.toString()
-          : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
+          : '${ApiClient.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
       return CircleAvatar(
         radius: 24,
         backgroundImage: NetworkImage(imageUrl),
@@ -89,7 +91,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
     return CircleAvatar(
       radius: 24,
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.1),
       child: Text(
         patient['full_name']?.substring(0, 1).toUpperCase() ?? '?',
         style: const TextStyle(
@@ -107,7 +109,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
       _error = '';
     });
     try {
-      final patients = await _apiService.getCaregiverPatients(
+      final patients = await CaregiverService().getCaregiverPatients(
         widget.caregiverId,
       );
       setState(() {

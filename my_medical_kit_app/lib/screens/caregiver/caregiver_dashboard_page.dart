@@ -1,9 +1,10 @@
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 // lib/screens/caregiver_dashboard_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// import 'caregiver_alerts_details_page.dart';
+
 import 'caregiver_patients_list_page.dart';
 import 'caregiver_devices_list_page.dart';
 import 'caregiver_adherence_details_page.dart';
@@ -27,7 +28,7 @@ class CaregiverDashboardPage extends StatefulWidget {
 }
 
 class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
-  final ApiService _apiService = ApiService();
+  
 
   String _caregiverPhotoUrl = '';
 
@@ -54,7 +55,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   Future<void> _fetchChartData(String period) async {
     setState(() => _selectedPeriod = period);
     try {
-      final data = await _apiService.getChartData(_caregiverId, period);
+      final data = await CaregiverService().getChartData(_caregiverId, period);
       setState(() {
         _chartData = data['taken'] ?? []; // 🌟 只取 'taken' 的數據來畫圖表
 
@@ -85,7 +86,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       _caregiverId = savedId;
       _caregiverName = prefs.getString('user_name') ?? 'Caregiver';
 
-      final profile = await _apiService.getCaregiverProfile(_caregiverId);
+      final profile = await CaregiverService().getCaregiverProfile(_caregiverId);
       if (profile['success'] == true) {
         setState(() {
           _caregiverPhotoUrl = profile['data']['profile_photo'] ?? '';
@@ -108,9 +109,9 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     });
     try {
       final results = await Future.wait([
-        _apiService.getCaregiverOverview(_caregiverId),
-        _apiService.getCaregiverPatients(_caregiverId),
-        _apiService.getCaregiverAlerts(_caregiverId),
+        CaregiverService().getCaregiverOverview(_caregiverId),
+        CaregiverService().getCaregiverPatients(_caregiverId),
+        CaregiverService().getCaregiverAlerts(_caregiverId),
       ]);
       final overview = results[0] as Map<String, dynamic>;
       final patients = results[1] as List<Map<String, dynamic>>;
@@ -243,7 +244,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+        backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryPurple),
         ),
@@ -251,7 +252,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     }
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
-        backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+        backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -279,7 +280,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       );
     }
     return Scaffold(
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -373,7 +374,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
+                      color: Colors.black.withValues(alpha: 0.15),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -386,7 +387,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                       ? (_caregiverPhotoUrl.startsWith('http')
                             ? NetworkImage(_caregiverPhotoUrl)
                             : NetworkImage(
-                                '${ApiService.baseUrl}${_caregiverPhotoUrl.startsWith('/') ? '' : '/'}$_caregiverPhotoUrl',
+                                '${ApiClient.baseUrl}${_caregiverPhotoUrl.startsWith('/') ? '' : '/'}$_caregiverPhotoUrl',
                               ))
                       : null,
                   child: _caregiverPhotoUrl.isEmpty
@@ -409,7 +410,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Row(
@@ -443,7 +444,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -480,7 +481,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryPurple.withOpacity(0.1),
+                    color: AppColors.primaryPurple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -622,7 +623,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -639,7 +640,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: color, size: 20),
@@ -722,7 +723,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
+                                    color: Colors.black.withValues(alpha: 0.05),
                                     blurRadius: 4,
                                   ),
                                 ]
@@ -757,7 +758,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 15,
                     offset: const Offset(0, 5),
                   ),
@@ -821,7 +822,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   //       borderRadius: BorderRadius.circular(24),
   //       boxShadow: [
   //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.04),
+  //           color: Colors.black.withValues(alpha: 0.04),
   //           blurRadius: 10,
   //           offset: const Offset(0, 3),
   //         ),
@@ -912,7 +913,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(icon, color: color, size: 24),

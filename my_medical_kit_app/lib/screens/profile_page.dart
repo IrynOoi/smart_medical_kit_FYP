@@ -1,3 +1,4 @@
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 // lib/screens/profile_page.dart
 
 import 'dart:convert';
@@ -7,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:my_medical_kit_app/screens/landing_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,7 +19,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final ApiService _apiService = ApiService();
+  
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true;
@@ -91,7 +92,7 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint('🔵 Loading profile - Role: $_userRole, ID: $_userId');
 
       if (_userRole == 'patient') {
-        final patient = await _apiService.getPatient(_userId);
+        final patient = await PatientService().getPatient(_userId);
         if (patient != null) {
           _userData = {
             'name': patient.user.fullName,
@@ -189,7 +190,7 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
 
     try {
-      var uri = Uri.parse('${ApiService.baseUrl}/update_$_userRole/$_userId');
+      var uri = Uri.parse('${ApiClient.baseUrl}/update_$_userRole/$_userId');
       var request = http.MultipartRequest('PUT', uri);
 
       request.headers['ngrok-skip-browser-warning'] = 'true';
@@ -344,7 +345,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<Map<String, dynamic>> _getCaregiverProfile(int caregiverId) async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/caregiver/$caregiverId'),
+        Uri.parse('${ApiClient.baseUrl}/caregiver/$caregiverId'),
       );
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -366,7 +367,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+        backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primaryPurple),
         ),
@@ -382,7 +383,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final notes = _userData['notes']?.toString();
 
     return Scaffold(
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
       body: Column(
         children: [
           // Fixed Header with Gradient
@@ -422,7 +423,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.9),
+                        color: Colors.orange.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
@@ -799,7 +800,7 @@ class _ProfilePageState extends State<ProfilePage> {
       } else {
         // Prepend base URL from ApiService
         fullPhotoUrl =
-            '${ApiService.baseUrl}${existingPhotoUrl.startsWith('/') ? '' : '/'}$existingPhotoUrl';
+            '${ApiClient.baseUrl}${existingPhotoUrl.startsWith('/') ? '' : '/'}$existingPhotoUrl';
       }
     }
 
@@ -810,7 +811,7 @@ class _ProfilePageState extends State<ProfilePage> {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 blurRadius: 30,
                 spreadRadius: 5,
                 offset: const Offset(0, 10),
@@ -851,7 +852,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 8,
                         ),
                       ],
@@ -880,7 +881,7 @@ class _ProfilePageState extends State<ProfilePage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -909,7 +910,7 @@ class _ProfilePageState extends State<ProfilePage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),

@@ -16,11 +16,12 @@ class MyApp extends StatelessWidget {
       title: 'Smart Medical Kit Dashboard',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const MainMenu(),
-    );
+    );1
   }
 }
 
 class MainMenu extends StatelessWidget {
+
   const MainMenu({super.key});
 
   @override

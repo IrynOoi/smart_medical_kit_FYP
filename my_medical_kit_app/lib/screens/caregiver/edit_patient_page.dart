@@ -1,9 +1,10 @@
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 //edit_patient_page.dart
 
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
 
 class EditPatientPage extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -15,7 +16,7 @@ class EditPatientPage extends StatefulWidget {
 
 class _EditPatientPageState extends State<EditPatientPage> {
   final _formKey = GlobalKey<FormState>();
-  final ApiService _apiService = ApiService();
+  
 
   late TextEditingController _fullNameController;
   late TextEditingController _emailController;
@@ -98,7 +99,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
       'medical_notes': _medicalNotesController.text.trim(),
     };
 
-    final result = await _apiService.updatePatient(
+    final result = await PatientService().updatePatient(
       widget.patient['patient_id'],
       formData,
       photoPath: _photoPath,
@@ -166,7 +167,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 15,
                         offset: const Offset(0, 5),
                       ),
@@ -174,7 +175,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
                   ),
                   child: CircleAvatar(
                     radius: 55,
-                    backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+                    backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
                     backgroundImage:
                         widget.patient['profile_photo'] != null &&
                             widget.patient['profile_photo'].isNotEmpty
@@ -249,7 +250,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPurple.withOpacity(0.3),
+                      color: AppColors.primaryPurple.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -315,7 +316,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -332,7 +333,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: AppColors.primaryPurple, size: 20),
@@ -370,7 +371,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -387,7 +388,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -432,7 +433,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -450,7 +451,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -478,5 +479,5 @@ class _EditPatientPageState extends State<EditPatientPage> {
 
   String _buildImageUrl(String url) => url.startsWith('http')
       ? url
-      : '${ApiService.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
+      : '${ApiClient.baseUrl}${url.startsWith('/') ? '' : '/'}$url';
 }

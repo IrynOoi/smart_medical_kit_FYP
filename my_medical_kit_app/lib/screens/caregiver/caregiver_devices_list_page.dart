@@ -1,7 +1,9 @@
 //caregiver_devices_list_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
+import 'package:my_medical_kit_app/services/api/device_service.dart';
 
 class CaregiverDevicesListPage extends StatefulWidget {
   final int caregiverId;
@@ -13,7 +15,7 @@ class CaregiverDevicesListPage extends StatefulWidget {
 }
 
 class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _devices = [];
   bool _isLoading = true;
   String _error = '';
@@ -35,7 +37,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       _error = '';
     });
     try {
-      final patients = await _apiService.getCaregiverPatients(
+      final patients = await CaregiverService().getCaregiverPatients(
         widget.caregiverId,
       );
       final devices = patients
@@ -54,9 +56,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   }
 
   Future<void> _fetchMedications() async {
-    final meds = await _apiService.getMedications();
+    final meds = await MedicationService().getMedications();
     setState(() {
-      _medications = meds;
+      _medications = meds.cast<Map<String, dynamic>>();
     });
   }
 
@@ -82,7 +84,8 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     final thresholdController = TextEditingController(text: '10');
     final formKey = GlobalKey<FormState>();
 
-    final patients = await _apiService.getCaregiverPatients(widget.caregiverId);
+    final patients = await CaregiverService().getCaregiverPatients(widget.caregiverId);
+    if (!mounted) return;
     if (patients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -212,14 +215,14 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
 
     if (confirmed == true && formKey.currentState!.validate()) {
       // All-in-one API call expected: create device, link to patient, create prescription
-      final success = await _apiService.createDeviceWithPrescription(
-        serial: serialController.text,
-        patientId: selectedPatientId!,
-        motorSlot: selectedMotorSlot,
-        medicationId: selectedMedicationId!,
-        inventory: int.parse(inventoryController.text),
-        threshold: int.parse(thresholdController.text),
-      );
+      final success = await DeviceService().createDeviceWithPrescription({
+        'serial': serialController.text,
+        'patient_id': selectedPatientId!,
+        'motor_slot': selectedMotorSlot,
+        'medication_id': selectedMedicationId!,
+        'inventory': int.parse(inventoryController.text),
+        'threshold': int.parse(thresholdController.text),
+      });
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Device and prescription added')),
@@ -237,7 +240,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   // Edit Device (assignment + prescription details)
   // ------------------------------------------------------------------
   Future<void> _showEditAssignmentDialog(Map<String, dynamic> device) async {
-    final patients = await _apiService.getCaregiverPatients(widget.caregiverId);
+    final patients = await CaregiverService().getCaregiverPatients(widget.caregiverId);
 
     final patientOptions = patients.map((p) {
       return <String, dynamic>{
@@ -266,7 +269,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     // Fetch existing prescription if any
     if (selectedPatientId != null) {
       try {
-        final prescription = await _apiService.getPrescriptionForDevicePatient(
+        final prescription = await DeviceService().getPrescriptionForDevicePatient(
           device['device_id'] as int,
           selectedPatientId,
         );
@@ -368,13 +371,15 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     );
 
     if (confirmed == true && selectedPatientId != null) {
-      final success = await _apiService.updateDevicePrescription(
-        deviceId: device['device_id'] as int,
-        patientId: selectedPatientId!,
-        motorSlot: selectedMotorSlot,
-        medicationId: selectedMedicationId,
-        inventory: int.parse(inventoryController.text),
-        threshold: int.parse(thresholdController.text),
+      final success = await DeviceService().updateDevicePrescription(
+        device['device_id'] as int,
+        {
+          'patient_id': selectedPatientId!,
+          'motor_slot': selectedMotorSlot,
+          'medication_id': selectedMedicationId,
+          'current_inventory': int.parse(inventoryController.text),
+          'refill_threshold': int.parse(thresholdController.text),
+        },
       );
       if (success) {
         ScaffoldMessenger.of(
@@ -423,9 +428,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       ),
     );
     if (confirmed == true && formKey.currentState!.validate()) {
-      final success = await _apiService.updateDevice(
+      final success = await DeviceService().updateDevice(
         device['device_id'],
-        controller.text,
+        {'device_serial': controller.text},
       );
       if (success && mounted) {
         ScaffoldMessenger.of(
@@ -465,7 +470,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       ),
     );
     if (confirm == true) {
-      final success = await _apiService.deleteDevice(device['device_id']);
+      final success = await DeviceService().deleteDevice(device['device_id']);
       if (success && mounted) {
         ScaffoldMessenger.of(
           context,
@@ -486,7 +491,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Color.alphaBlend(
-        AppColors.primaryPurple.withOpacity(0.10),
+        AppColors.primaryPurple.withValues(alpha: 0.10),
         Colors.white,
       ),
       appBar: AppBar(

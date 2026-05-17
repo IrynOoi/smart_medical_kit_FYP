@@ -10,9 +10,12 @@ import 'package:my_medical_kit_app/screens/patient/smart_reminder_page.dart';
 import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/services/app_navigator.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 // 👇 2. 把 void main() 改成 Future<void> main() async
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
 
   await ReminderService.init();
 

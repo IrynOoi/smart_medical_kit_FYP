@@ -1,7 +1,7 @@
 //caregiver_alerts_details_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 
 import 'caregiver_dashboard_page.dart';
 
@@ -16,7 +16,7 @@ class CaregiverAlertsDetailsPage extends StatefulWidget {
 
 class CaregiverAlertsDetailsPageState
     extends State<CaregiverAlertsDetailsPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _alerts = [];
   bool _isLoading = true;
   String _error = '';
@@ -34,7 +34,7 @@ class CaregiverAlertsDetailsPageState
     });
     try {
       // 這裡的 API 現在會支援回傳更多警告（透過後端設定 limit=50）
-      final data = await _apiService.getCaregiverAlerts(widget.caregiverId);
+      final data = await CaregiverService().getCaregiverAlerts(widget.caregiverId);
       setState(() {
         _alerts = data;
         _isLoading = false;
@@ -107,7 +107,7 @@ class CaregiverAlertsDetailsPageState
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
       body: RefreshIndicator(
         onRefresh: _fetchAlerts,
         color: AppColors.primaryPurple,
@@ -159,7 +159,7 @@ class CaregiverAlertsDetailsPageState
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: iconColor.withOpacity(0.1),
+                          color: iconColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(

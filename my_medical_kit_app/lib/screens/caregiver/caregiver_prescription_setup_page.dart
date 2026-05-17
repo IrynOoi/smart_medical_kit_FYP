@@ -1,7 +1,7 @@
 //caregiver_prescription_setup_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'patient_prescriptions_page.dart';
 import 'add_prescription_page.dart';
 class CaregiverPrescriptionSetupPage extends StatefulWidget {
@@ -15,7 +15,7 @@ class CaregiverPrescriptionSetupPage extends StatefulWidget {
 
 class _CaregiverPrescriptionSetupPageState
     extends State<CaregiverPrescriptionSetupPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _patients = [];
   bool _isLoading = true;
   String _error = '';
@@ -32,7 +32,7 @@ class _CaregiverPrescriptionSetupPageState
       _error = '';
     });
     try {
-      final patients = await _apiService.getCaregiverPatients(
+      final patients = await CaregiverService().getCaregiverPatients(
         widget.caregiverId,
       );
       setState(() {
@@ -114,7 +114,7 @@ class _CaregiverPrescriptionSetupPageState
                           CircleAvatar(
                             radius: 26,
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             child: Text(
                               p['full_name']?.substring(0, 1).toUpperCase() ??
                                   '?',

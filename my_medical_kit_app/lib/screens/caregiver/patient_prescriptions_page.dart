@@ -1,7 +1,7 @@
 //patient_prescriptions_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 import 'caregiver_dashboard_page.dart';
 
@@ -18,7 +18,7 @@ class PatientPrescriptionsPage extends StatefulWidget {
 }
 
 class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _prescriptions = [];
   bool _isLoading = true;
   String _error = '';
@@ -76,7 +76,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       _error = '';
     });
     try {
-      final prescriptions = await _apiService.getPatientPrescriptions(
+      final prescriptions = await MedicationService().getPatientPrescriptions(
         widget.patient['patient_id'],
       );
       setState(() {
@@ -131,7 +131,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     if (confirm != true) return;
 
     setState(() => _isLoading = true);
-    final success = await _apiService.deletePrescription(
+    final success = await MedicationService().deletePrescription(
       prescription['prescription_id'],
     );
     setState(() => _isLoading = false);

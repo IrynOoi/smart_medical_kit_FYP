@@ -10,6 +10,7 @@ extern WebServer server;
 void setupDisplay();
 void handleDisplayHello();
 void handleDisplayClear();
-void handleDisplaySV(); // ⚠️ 新增：用来显示 SV 名字的函数
+void handleDisplaySV();
+void updateDisplayState(String title, String subtitle);
 
 #endif

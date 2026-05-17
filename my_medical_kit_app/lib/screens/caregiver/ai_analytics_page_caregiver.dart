@@ -2,7 +2,9 @@
 import '../../models/ai_prediction.dart';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
+import 'package:my_medical_kit_app/services/api/prediction_service.dart';
 
 class AiAnalyticsPage extends StatefulWidget {
   final int caregiverId;
@@ -14,7 +16,7 @@ class AiAnalyticsPage extends StatefulWidget {
 }
 
 class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
-  final ApiService _apiService = ApiService();
+  
   bool _isLoading = true;
   bool _isRefreshing = false;
   String _errorMessage = '';
@@ -47,10 +49,10 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       _errorMessage = '';
     });
     try {
-      final overview = await _apiService.getAnalyticsOverview(
+      final overview = await CaregiverService().getAnalyticsOverview(
         widget.caregiverId,
       );
-      final allPatients = await _apiService.getCaregiverPatients(
+      final allPatients = await CaregiverService().getCaregiverPatients(
         widget.caregiverId,
       );
 
@@ -59,7 +61,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       await Future.wait(
         allPatients.map((patient) async {
           final pid = patient['patient_id'];
-          final pred = await _apiService.getAIPrediction(pid);
+          final pred = await PredictionService().getAIPrediction(pid);
           predictions[pid] = pred;
         }),
       );
@@ -82,7 +84,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   Future<List<int>> _fetchPatientHistory(int patientId) async {
     try {
       // Fetch a larger limit in case the top 3 are all 'PENDING'
-      final logs = await _apiService.getAdherenceLogs(patientId, limit: 10);
+      final logs = await PatientService().getAdherenceLogs(patientId, limit: 10);
       final history = <int>[];
 
       for (var log in logs) {
@@ -174,7 +176,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               () => isPredicting = true,
             ); // Show spinner in current dialog
             try {
-              final result = await _apiService.predictAndSaveForPatient(
+              final result = await PredictionService().predictAndSaveForPatient(
                 patientId: patientId,
                 age: age,
                 dayOfWeek: dayOfWeek,
@@ -231,7 +233,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                   ),
                 );
               }
-              final freshPred = await _apiService.getAIPrediction(patientId);
+              final freshPred = await PredictionService().getAIPrediction(patientId);
               if (mounted) {
                 setState(() {
                   _patientPredictions[patientId] = freshPred;
@@ -403,12 +405,12 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [riskColor.withOpacity(0.1), Colors.white],
+          colors: [riskColor.withValues(alpha: 0.1), Colors.white],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: riskColor.withOpacity(0.3)),
+        border: Border.all(color: riskColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         mainAxisSize:
@@ -518,7 +520,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     });
 
     try {
-      final success = await _apiService.predictAndSave(
+      final success = await PredictionService().predictAndSave(
         patientId: patientId,
         age: age,
         dayOfWeek: dayOfWeek,
@@ -565,7 +567,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     });
 
     try {
-      final success = await _apiService.runBatchPrediction();
+      final success = await PredictionService().runBatchPrediction();
 
       if (success) {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -625,7 +627,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     await Future.delayed(const Duration(milliseconds: 200));
 
     try {
-      final prediction = await _apiService.getAIPrediction(patientId);
+      final prediction = await PredictionService().getAIPrediction(patientId);
 
       if (mounted) {
         // 🔴 FIX: Use rootNavigator to safely close the loading spinner without crashing
@@ -747,7 +749,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   //                           (patient['risk_level'] == 'HIGH'
   //                                   ? Colors.redAccent
   //                                   : Colors.orange)
-  //                               .withOpacity(0.1),
+  //                               .withValues(alpha: 0.1),
   //                       child: Text(
   //                         (patient['name'] ?? '?')[0],
   //                         style: TextStyle(
@@ -766,7 +768,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   //                           (patient['risk_level'] == 'HIGH'
   //                                   ? Colors.redAccent
   //                                   : Colors.orange)
-  //                               .withOpacity(0.2),
+  //                               .withValues(alpha: 0.2),
   //                       labelStyle: TextStyle(
   //                         color: patient['risk_level'] == 'HIGH'
   //                             ? Colors.redAccent
@@ -835,7 +837,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -975,7 +977,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         borderRadius: BorderRadius.circular(16),
         // Draw border ONLY if it's HIGH or MEDIUM, otherwise no border
         side: hasRisk
-            ? BorderSide(color: riskColor.withOpacity(0.6), width: 1.5)
+            ? BorderSide(color: riskColor.withValues(alpha: 0.6), width: 1.5)
             : BorderSide.none,
       ),
       child: InkWell(
@@ -988,7 +990,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               CircleAvatar(
                 radius: 24,
                 // Neutral purple background for the avatar instead of the risk color
-                backgroundColor: AppColors.primaryPurple.withOpacity(0.15),
+                backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.15),
                 child: Text(
                   patient['full_name']?[0]?.toUpperCase() ?? '?',
                   style: const TextStyle(
@@ -1029,8 +1031,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                         ),
                         decoration: BoxDecoration(
                           color: hasRisk
-                              ? riskColor.withOpacity(0.1)
-                              : Colors.green.withOpacity(0.1),
+                              ? riskColor.withValues(alpha: 0.1)
+                              : Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -1107,7 +1109,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -1154,7 +1156,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               Container(
                 width: 1,
                 height: 50,
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
               ),
               _buildHeaderStat(
                 label: 'Patients Analyzed',
@@ -1261,7 +1263,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -1276,7 +1278,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 20),
@@ -1396,10 +1398,10 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   //     decoration: BoxDecoration(
   //       color: Colors.white,
   //       borderRadius: BorderRadius.circular(20),
-  //       border: Border.all(color: riskColor.withOpacity(0.3), width: 1.5),
+  //       border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 1.5),
   //       boxShadow: [
   //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.02),
+  //           color: Colors.black.withValues(alpha: 0.02),
   //           blurRadius: 10,
   //           offset: const Offset(0, 4),
   //         ),
@@ -1415,7 +1417,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   //               children: [
   //                 CircleAvatar(
   //                   radius: 20,
-  //                   backgroundColor: riskColor.withOpacity(0.1),
+  //                   backgroundColor: riskColor.withValues(alpha: 0.1),
   //                   child: Text(
   //                     (patient['name'] ?? '?')[0],
   //                     style: TextStyle(
@@ -1454,7 +1456,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   //                 vertical: 4,
   //               ),
   //               decoration: BoxDecoration(
-  //                 color: riskColor.withOpacity(0.1),
+  //                 color: riskColor.withValues(alpha: 0.1),
   //                 borderRadius: BorderRadius.circular(12),
   //               ),
   //               child: Text(

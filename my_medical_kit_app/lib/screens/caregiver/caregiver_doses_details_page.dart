@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 
 class CaregiverDosesDetailsPage extends StatefulWidget {
   final int caregiverId;
@@ -14,7 +14,7 @@ class CaregiverDosesDetailsPage extends StatefulWidget {
 }
 
 class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _alerts = [];
   int _totalDoses = 0;
   bool _isLoading = true;
@@ -32,10 +32,10 @@ class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
       _error = '';
     });
     try {
-      final overview = await _apiService.getCaregiverOverview(
+      final overview = await CaregiverService().getCaregiverOverview(
         widget.caregiverId,
       );
-      final allLogs = await _apiService.getAllRecentLogs(widget.caregiverId);
+      final allLogs = await CaregiverService().getAllRecentLogs(widget.caregiverId);
       setState(() {
         _totalDoses = overview['total_doses'] ?? 0;
         _alerts = allLogs; // now contains TAKEN + MISSED + PENDING

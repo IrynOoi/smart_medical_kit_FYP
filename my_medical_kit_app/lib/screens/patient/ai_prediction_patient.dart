@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/prediction_service.dart';
 import 'package:my_medical_kit_app/models/ai_prediction.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
@@ -17,7 +17,7 @@ class AIPredictionPatientPage extends StatefulWidget {
 
 class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     with SingleTickerProviderStateMixin {
-  final ApiService _apiService = ApiService();
+  
   bool _isLoading = true;
   AIPrediction? _prediction;
   int _patientId = 0;
@@ -54,7 +54,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   Future<void> _loadPrediction() async {
     setState(() => _isLoading = true);
     try {
-      final prediction = await _apiService.getAIPrediction(_patientId);
+      final prediction = await PredictionService().getAIPrediction(_patientId);
       setState(() {
         _prediction = prediction;
         _isLoading = false;
@@ -76,7 +76,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   Future<void> _recalculatePrediction() async {
     setState(() => _isLoading = true);
     try {
-      final newPrediction = await _apiService.recalculatePrediction(_patientId);
+      final newPrediction = await PredictionService().recalculatePrediction(_patientId);
       setState(() {
         _prediction = newPrediction;
         _isLoading = false;
@@ -140,7 +140,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.premiumLight.withOpacity(0.1),
+      backgroundColor: AppColors.premiumLight.withValues(alpha: 0.1),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -235,7 +235,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -281,7 +281,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(24),
             ),
             // 🌟 FIXED: Overflows by removing mainAxisSize: min and using Expanded
@@ -318,7 +318,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -329,7 +329,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withOpacity(0.1),
+                  color: AppColors.primaryPurple.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -384,12 +384,12 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [AppColors.primaryPurple.withOpacity(0.05), Colors.white],
+              colors: [AppColors.primaryPurple.withValues(alpha: 0.05), Colors.white],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.primaryPurple.withOpacity(0.1)),
+            border: Border.all(color: AppColors.primaryPurple.withValues(alpha: 0.1)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,7 +399,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withOpacity(0.1),
+                      color: AppColors.primaryPurple.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -527,7 +527,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -608,7 +608,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: riskColor.withOpacity(0.05),
+              color: riskColor.withValues(alpha: 0.05),
               borderRadius: const BorderRadius.vertical(
                 bottom: Radius.circular(24),
               ),
@@ -655,12 +655,12 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryPurple.withOpacity(0.05), Colors.white],
+          colors: [AppColors.primaryPurple.withValues(alpha: 0.05), Colors.white],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.primaryPurple.withOpacity(0.1)),
+        border: Border.all(color: AppColors.primaryPurple.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,7 +670,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withOpacity(0.1),
+                  color: AppColors.primaryPurple.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -721,7 +721,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -824,7 +824,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 20),

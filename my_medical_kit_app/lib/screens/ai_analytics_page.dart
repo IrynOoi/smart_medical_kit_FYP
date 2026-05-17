@@ -1,7 +1,9 @@
 // // lib/screens/ai_analytics_page.dart
 // import 'package:flutter/material.dart';
 // import 'package:my_medical_kit_app/theme/colors.dart';
-// import 'package:my_medical_kit_app/services/api_service.dart';
+// import 'package:my_medical_kit_app/services/api/patient_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
+import 'package:my_medical_kit_app/services/api/prediction_service.dart';
 
 // class AiAnalyticsPage extends StatefulWidget {
 //   final int caregiverId;
@@ -13,7 +15,7 @@
 // }
 
 // class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
-//   final ApiService _apiService = ApiService();
+//   
 //   bool _isLoading = true;
 //   bool _isRefreshing = false;
 //   String _errorMessage = '';
@@ -45,11 +47,11 @@
 //     });
 
 //     try {
-//       final overview = await _apiService.getAnalyticsOverview(
+//       final overview = await CaregiverService().getAnalyticsOverview(
 //         widget.caregiverId,
 //       );
-//       final patients = await _apiService.getAtRiskPatients(widget.caregiverId);
-//       final allPatients = await _apiService.getCaregiverPatients(
+//       final patients = await CaregiverService().getAtRiskPatients(widget.caregiverId);
+//       final allPatients = await CaregiverService().getCaregiverPatients(
 //         widget.caregiverId,
 //       );
 
@@ -70,7 +72,7 @@
 //   // Fetch patient's recent adherence history
 //   Future<List<int>> _fetchPatientHistory(int patientId) async {
 //     try {
-//       final logs = await _apiService.getAdherenceLogs(patientId, limit: 3);
+//       final logs = await PatientService().getAdherenceLogs(patientId, limit: 3);
 //       final history = <int>[];
 //       for (var log in logs) {
 //         history.add(log.isTaken ? 1 : 0);
@@ -145,7 +147,7 @@
 //             setStateDialog(() => isPredicting = true);
 
 //             try {
-//               final result = await _apiService.predictAndSaveForPatient(
+//               final result = await PredictionService().predictAndSaveForPatient(
 //                 patientId: patientId,
 //                 age: age,
 //                 dayOfWeek: dayOfWeek,
@@ -353,12 +355,12 @@
 //       padding: const EdgeInsets.all(16),
 //       decoration: BoxDecoration(
 //         gradient: LinearGradient(
-//           colors: [riskColor.withOpacity(0.1), Colors.white],
+//           colors: [riskColor.withValues(alpha: 0.1), Colors.white],
 //           begin: Alignment.topLeft,
 //           end: Alignment.bottomRight,
 //         ),
 //         borderRadius: BorderRadius.circular(12),
-//         border: Border.all(color: riskColor.withOpacity(0.3)),
+//         border: Border.all(color: riskColor.withValues(alpha: 0.3)),
 //       ),
 //       child: Column(
 //         children: [
@@ -466,7 +468,7 @@
 //     });
 
 //     try {
-//       final success = await _apiService.predictAndSave(
+//       final success = await PredictionService().predictAndSave(
 //         patientId: patientId,
 //         age: age,
 //         dayOfWeek: dayOfWeek,
@@ -513,7 +515,7 @@
 //     });
 
 //     try {
-//       final success = await _apiService.runBatchPrediction();
+//       final success = await PredictionService().runBatchPrediction();
 
 //       if (success) {
 //         await Future.delayed(const Duration(milliseconds: 500));
@@ -603,7 +605,7 @@
 //                             (patient['risk_level'] == 'HIGH'
 //                                     ? Colors.redAccent
 //                                     : Colors.orange)
-//                                 .withOpacity(0.1),
+//                                 .withValues(alpha: 0.1),
 //                         child: Text(
 //                           (patient['name'] ?? '?')[0],
 //                           style: TextStyle(
@@ -622,7 +624,7 @@
 //                             (patient['risk_level'] == 'HIGH'
 //                                     ? Colors.redAccent
 //                                     : Colors.orange)
-//                                 .withOpacity(0.2),
+//                                 .withValues(alpha: 0.2),
 //                         labelStyle: TextStyle(
 //                           color: patient['risk_level'] == 'HIGH'
 //                               ? Colors.redAccent
@@ -854,7 +856,7 @@
 //       shape: RoundedRectangleBorder(
 //         borderRadius: BorderRadius.circular(16),
 //         side: hasRiskLevel
-//             ? BorderSide(color: riskColor.withOpacity(0.5), width: 1.5)
+//             ? BorderSide(color: riskColor.withValues(alpha: 0.5), width: 1.5)
 //             : BorderSide.none,
 //       ),
 //       child: InkWell(
@@ -869,7 +871,7 @@
 //                 children: [
 //                   CircleAvatar(
 //                     radius: 24,
-//                     backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
+//                     backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.1),
 //                     child: Text(
 //                       patientName.isNotEmpty
 //                           ? patientName[0].toUpperCase()
@@ -947,7 +949,7 @@
 //                 Container(
 //                   padding: const EdgeInsets.all(10),
 //                   decoration: BoxDecoration(
-//                     color: riskColor.withOpacity(0.1),
+//                     color: riskColor.withValues(alpha: 0.1),
 //                     borderRadius: BorderRadius.circular(10),
 //                   ),
 //                   child: Row(
@@ -955,7 +957,7 @@
 //                       Container(
 //                         padding: const EdgeInsets.all(6),
 //                         decoration: BoxDecoration(
-//                           color: riskColor.withOpacity(0.2),
+//                           color: riskColor.withValues(alpha: 0.2),
 //                           shape: BoxShape.circle,
 //                         ),
 //                         child: Icon(
@@ -1033,7 +1035,7 @@
 //               Container(
 //                 padding: const EdgeInsets.all(8),
 //                 decoration: BoxDecoration(
-//                   color: Colors.white.withOpacity(0.2),
+//                   color: Colors.white.withValues(alpha: 0.2),
 //                   borderRadius: BorderRadius.circular(12),
 //                 ),
 //                 child: const Icon(
@@ -1080,7 +1082,7 @@
 //               Container(
 //                 width: 1,
 //                 height: 50,
-//                 color: Colors.white.withOpacity(0.3),
+//                 color: Colors.white.withValues(alpha: 0.3),
 //               ),
 //               _buildHeaderStat(
 //                 label: 'Patients Analyzed',
@@ -1187,7 +1189,7 @@
 //         borderRadius: BorderRadius.circular(20),
 //         boxShadow: [
 //           BoxShadow(
-//             color: color.withOpacity(0.1),
+//             color: color.withValues(alpha: 0.1),
 //             blurRadius: 15,
 //             offset: const Offset(0, 5),
 //           ),
@@ -1202,7 +1204,7 @@
 //               Container(
 //                 padding: const EdgeInsets.all(8),
 //                 decoration: BoxDecoration(
-//                   color: color.withOpacity(0.15),
+//                   color: color.withValues(alpha: 0.15),
 //                   borderRadius: BorderRadius.circular(12),
 //                 ),
 //                 child: Icon(icon, color: color, size: 20),
@@ -1322,10 +1324,10 @@
 //       decoration: BoxDecoration(
 //         color: Colors.white,
 //         borderRadius: BorderRadius.circular(20),
-//         border: Border.all(color: riskColor.withOpacity(0.3), width: 1.5),
+//         border: Border.all(color: riskColor.withValues(alpha: 0.3), width: 1.5),
 //         boxShadow: [
 //           BoxShadow(
-//             color: Colors.black.withOpacity(0.02),
+//             color: Colors.black.withValues(alpha: 0.02),
 //             blurRadius: 10,
 //             offset: const Offset(0, 4),
 //           ),
@@ -1341,7 +1343,7 @@
 //                 children: [
 //                   CircleAvatar(
 //                     radius: 20,
-//                     backgroundColor: riskColor.withOpacity(0.1),
+//                     backgroundColor: riskColor.withValues(alpha: 0.1),
 //                     child: Text(
 //                       (patient['name'] ?? '?')[0],
 //                       style: TextStyle(
@@ -1380,7 +1382,7 @@
 //                   vertical: 4,
 //                 ),
 //                 decoration: BoxDecoration(
-//                   color: riskColor.withOpacity(0.1),
+//                   color: riskColor.withValues(alpha: 0.1),
 //                   borderRadius: BorderRadius.circular(12),
 //                 ),
 //                 child: Text(

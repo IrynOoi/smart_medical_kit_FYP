@@ -6,7 +6,7 @@ import 'package:my_medical_kit_app/widget/bottom_nav_bar.dart';
 import 'package:my_medical_kit_app/screens/register_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,7 +18,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final ApiService _apiService = ApiService();
+  
 
   bool _isPasswordVisible = false;
 
@@ -32,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
 
-      final result = await _apiService.login(
+      final result = await AuthService().login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
@@ -318,7 +318,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
-  final ApiService _apiService = ApiService();
+  
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
@@ -359,7 +359,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await _apiService.resetPassword(email, newPassword);
+      final result = await AuthService().resetPassword(email, newPassword);
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -443,7 +443,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       // ✅ FIX: Wrap the body in a Container to apply the translucent purple safely
       body: Container(
         height: double.infinity,
-        color: AppColors.premiumLight.withOpacity(0.15),
+        color: AppColors.premiumLight.withValues(alpha: 0.15),
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),

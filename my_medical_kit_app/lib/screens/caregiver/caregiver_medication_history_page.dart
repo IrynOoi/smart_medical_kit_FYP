@@ -1,7 +1,7 @@
 //caregiver_medication_history_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MedicationHistoryScreen extends StatefulWidget {
@@ -13,7 +13,7 @@ class MedicationHistoryScreen extends StatefulWidget {
 }
 
 class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
-  final ApiService _apiService = ApiService();
+  
   final String serverIp = "172.20.10.9";
 
   List<Map<String, dynamic>> _alerts = [];
@@ -46,8 +46,8 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         return;
       }
 
-      final overview = await _apiService.getCaregiverOverview(_caregiverId);
-      final allLogs = await _apiService.getAllRecentLogs(_caregiverId);
+      final overview = await CaregiverService().getCaregiverOverview(_caregiverId);
+      final allLogs = await CaregiverService().getAllRecentLogs(_caregiverId);
 
       print("✅ Overview: $overview");
       print("✅ Logs count: ${allLogs.length}");
@@ -176,7 +176,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.05),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
       appBar: AppBar(
         title: const Text(
           'Doses Taken & History',

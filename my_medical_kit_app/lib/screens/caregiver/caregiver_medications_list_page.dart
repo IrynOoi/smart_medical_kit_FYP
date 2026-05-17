@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 class CaregiverMedicationsListPage extends StatefulWidget {
   const CaregiverMedicationsListPage({super.key});
@@ -14,7 +14,7 @@ class CaregiverMedicationsListPage extends StatefulWidget {
 
 class CaregiverMedicationsListPageState
     extends State<CaregiverMedicationsListPage> {
-  final ApiService _apiService = ApiService();
+  
   List<Map<String, dynamic>> _medications = [];
   bool _isLoading = true;
   String _error = '';
@@ -31,9 +31,9 @@ class CaregiverMedicationsListPageState
       _error = '';
     });
     try {
-      final meds = await _apiService.getMedications();
+      final meds = await MedicationService().getMedications();
       setState(() {
-        _medications = meds;
+        _medications = meds.cast<Map<String, dynamic>>();
         _isLoading = false;
       });
     } catch (e) {
@@ -161,17 +161,15 @@ class CaregiverMedicationsListPageState
 
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
-      final result = await _apiService.addMedication(
-        name: nameController.text.trim(),
-        currentInventory: int.tryParse(inventoryController.text) ?? 0,
-        refillThreshold: int.tryParse(thresholdController.text) ?? 5,
-        deviceId: deviceIdController.text.trim().isEmpty
-            ? null
-            : int.tryParse(deviceIdController.text),
-        motorSlot: motorSlotController.text.trim().isEmpty
-            ? null
-            : int.tryParse(motorSlotController.text),
-      );
+      final result = await MedicationService().addMedication({
+        'medication_name': nameController.text.trim(),
+        'current_inventory': int.tryParse(inventoryController.text) ?? 0,
+        'refill_threshold': int.tryParse(thresholdController.text) ?? 5,
+        if (deviceIdController.text.trim().isNotEmpty)
+          'device_id': int.tryParse(deviceIdController.text),
+        if (motorSlotController.text.trim().isNotEmpty)
+          'motor_slot': int.tryParse(motorSlotController.text),
+      });
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Medication added successfully')),
@@ -292,17 +290,17 @@ class CaregiverMedicationsListPageState
 
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
-      final result = await _apiService.updateMedication(
-        medicationId: medication['medication_id'],
-        newName: nameController.text.trim(),
-        currentInventory: int.tryParse(inventoryController.text),
-        refillThreshold: int.tryParse(thresholdController.text),
-        deviceId: deviceIdController.text.trim().isEmpty
-            ? null
-            : int.tryParse(deviceIdController.text),
-        motorSlot: motorSlotController.text.trim().isEmpty
-            ? null
-            : int.tryParse(motorSlotController.text),
+      final result = await MedicationService().updateMedication(
+        medication['medication_id'],
+        {
+          'medication_name': nameController.text.trim(),
+          'current_inventory': int.tryParse(inventoryController.text),
+          'refill_threshold': int.tryParse(thresholdController.text),
+          if (deviceIdController.text.trim().isNotEmpty)
+            'device_id': int.tryParse(deviceIdController.text),
+          if (motorSlotController.text.trim().isNotEmpty)
+            'motor_slot': int.tryParse(motorSlotController.text),
+        },
       );
       if (result['success'] == true) {
         ScaffoldMessenger.of(
@@ -347,7 +345,7 @@ class CaregiverMedicationsListPageState
     );
     if (confirm == true) {
       setState(() => _isLoading = true);
-      final result = await _apiService.deleteMedication(
+      final result = await MedicationService().deleteMedication(
         medication['medication_id'],
       );
       if (result['success'] == true) {

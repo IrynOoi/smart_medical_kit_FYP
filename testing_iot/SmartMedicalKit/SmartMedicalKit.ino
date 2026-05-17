@@ -1,7 +1,7 @@
 // SmartMedicalKit.ino
 #include <WiFi.h>
 #include <WebServer.h>
-#include <HTTPClient.h>      // ⚠️ Added for Heartbeat functionality
+#include <HTTPClient.h>      
 #include "dispenser_motor.h" 
 #include "buzzer_control.h" 
 #include <ArduinoJson.h>
@@ -11,22 +11,34 @@
 const char* ssid = SECRET_SSID; 
 const char* password = SECRET_PASS;
 
-
 const String backendUrl = "http://172.20.10.9:5000/device/heartbeat";
-const String deviceSerial = "DISP-1"; // Must match the serial in your database
+const String deviceSerial = "DISP-1"; 
 
 WebServer server(80);
 const int ledPin = 18; 
 
-// ⏱️ Timer variables for heartbeat
+// ⏱️ Timers
 unsigned long lastHeartbeatTime = 0;
-const unsigned long heartbeatInterval = 30000; // Send heartbeat every 30 seconds (30,000 ms)
+const unsigned long heartbeatInterval = 30000; 
 
-void setupTouch();  // 声明外部触摸初始化函数
-void handleTouch(); // 声明外部触摸处理函数
+unsigned long lastDoseCheckTime = 0;
+const unsigned long doseCheckInterval = 10000; // Automatically check every 10 seconds
+
+unsigned long lastBeepTime = 0;
+bool currentBuzzerState = false;
+
+// 🧠 State Machine Variables
+bool isDoseWaiting = false;
+int pendingMotorSlot = 0;
+int pendingAdlogId = 0;
+int pendingPrescriptionId = 0;
+String pendingMedName = "";
 
 
-// --- NEW FUNCTION TO HANDLE THE DISPENSE LOGIC ---
+void setupTouch();  
+void handleTouch(); 
+
+// --- UPDATED LOGIC ---
 void markDoseAsTaken(int adlogId, int prescriptionId) {
   HTTPClient http;
   String url = "http://172.20.10.9:5000/device/dispense_success";
@@ -39,14 +51,15 @@ void markDoseAsTaken(int adlogId, int prescriptionId) {
   int httpCode = http.POST(payload);
   
   if(httpCode == 200) {
-     Serial.println("✅ Database Updated: Medication marked as TAKEN and inventory deducted.");
+     Serial.println("✅ Database Updated: Medication marked as TAKEN.");
   } else {
      Serial.println("❌ Failed to update database.");
   }
   http.end();
 }
 
-void checkAndDispenseDose() {
+// 1. This function automatically polls the server every 10 seconds
+void checkForPendingDose() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     String url = "http://172.20.10.9:5000/device/" + deviceSerial + "/pending_dose";
@@ -57,53 +70,63 @@ void checkAndDispenseDose() {
     
     if (httpCode == 200) {
       String payload = http.getString();
-      
-      // Parse the JSON response
       DynamicJsonDocument doc(1024);
       deserializeJson(doc, payload);
       
       if (doc["success"] == true && doc["has_pending"] == true) {
-        int motorSlot = doc["data"]["motor_slot"];
-        int adlogId = doc["data"]["adlog_id"];
-        int prescriptionId = doc["data"]["prescription_id"];
-        String medName = doc["data"]["medication_name"].as<String>();
+        // Save the details to our global variables
+        pendingMotorSlot = doc["data"]["motor_slot"];
+        pendingAdlogId = doc["data"]["adlog_id"];
+        pendingPrescriptionId = doc["data"]["prescription_id"];
+        pendingMedName = doc["data"]["medication_name"].as<String>();
         
-        Serial.println("🚨 Pending Dose Found: " + medName);
-        Serial.println("⚙️ Rotating Motor Slot: " + String(motorSlot));
+        Serial.println("🚨 Dispense Time Arrived for: " + pendingMedName);
         
-        // 1. ROTATE THE CORRECT MOTOR
-        if (motorSlot == 1) handleMotorForward();
-        else if (motorSlot == 2) handleMotor2Forward();
-        else if (motorSlot == 3) handleMotor3Forward();
-        else Serial.println("Error: Invalid Motor Slot!");
+        // Change State: The device is now waiting for user to touch
+        isDoseWaiting = true;
         
-        // 2. TELL BACKEND IT WAS DISPENSED
-        markDoseAsTaken(adlogId, prescriptionId);
-        
-      } else {
-        Serial.println("ℹ️ Button pressed, but no pending doses right now.");
-        // Optional: Beep twice quickly to tell the patient nothing is due
-        // handleBuzzerOn(); delay(100); handleBuzzerOff(); delay(100);
-        // handleBuzzerOn(); delay(100); handleBuzzerOff();
+        // Update OLED Display
+        updateDisplayState("Medicine Due!", pendingMedName);
       }
-    } else {
-      Serial.println("❌ Failed to connect to server. HTTP Code: " + String(httpCode));
     }
     http.end();
   }
 }
 
+// 2. This function fires ONLY when the user touches the button while a dose is waiting
+void executeDispense() {
+  // 1. Immediately turn off the buzzer & lock state
+  isDoseWaiting = false; 
+  triggerBuzzerHardware(false);
+  
+  // 2. Change LCD to Dispensing
+  Serial.println("⚙️ Dispensing...");
+  updateDisplayState("Dispensing...", pendingMedName);
+  
+  // 3. Spin the correct motor
+  rotateMotorHardware(pendingMotorSlot);
+  
+  // 4. Update the Database
+  markDoseAsTaken(pendingAdlogId, pendingPrescriptionId);
+  
+  // 5. Change LCD to Finished
+  updateDisplayState("Finished!", "Take Meds");
+  
+  // Wait 4 seconds so the user can read the screen, then clear it
+  delay(4000); 
+  handleDisplayClear();
+}
+
+
 void setup() {
   Serial.begin(115200);
   
-  // Setup Hardware
   pinMode(ledPin, OUTPUT);
   setupStepper(); 
   setupBuzzer(); 
-  setupDisplay(); // Initialize screen
+  setupDisplay(); 
   setupTouch();
 
-  // Setup WiFi
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
@@ -114,41 +137,35 @@ void setup() {
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP()); 
 
-  // --- LED Routes ---
+  // --- API Routes ---
   server.on("/led/on", []() {
     digitalWrite(ledPin, HIGH);
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.send(200, "text/plain", "LED IS ON");
   });
-
   server.on("/led/off", []() {
     digitalWrite(ledPin, LOW);
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.send(200, "text/plain", "LED IS OFF");
   });
 
-  // --- Buzzer Routes ---
   server.on("/buzzer/on", handleBuzzerOn);
   server.on("/buzzer/off", handleBuzzerOff);
 
-  // --- Display Routes ---
   server.on("/display/hello", handleDisplayHello);
   server.on("/display/clear", handleDisplayClear);
   server.on("/display/sv", handleDisplaySV); 
   
-  // --- Motor 1 Routes ---
   server.on("/stepper/forward", handleMotorForward);
   server.on("/stepper/backward", handleMotorBackward);
   server.on("/stepper/90", handleMotor90);
   server.on("/stepper/180", handleMotor180);
 
-  // --- Motor 2 Routes ---
   server.on("/stepper2/forward", handleMotor2Forward);
   server.on("/stepper2/backward", handleMotor2Backward);
   server.on("/stepper2/90", handleMotor290);
   server.on("/stepper2/180", handleMotor2180);
 
-  // --- Motor 3 Routes ---
   server.on("/stepper3/forward", handleMotor3Forward);
   server.on("/stepper3/backward", handleMotor3Backward);
   server.on("/stepper3/90", handleMotor390);
@@ -158,53 +175,45 @@ void setup() {
 }
 
 void loop() {
-
   handleTouch();
-  // 1. Listen for incoming commands from Flutter app (LED, Buzzer, Motors)
   server.handleClient();
 
-  // 2. ⚠️ Send Heartbeat to Flask Backend every 30 seconds
+  // 1. AUTOPILOT CHECK: Check for a new dose every 10 seconds
+  if (!isDoseWaiting && (millis() - lastDoseCheckTime > doseCheckInterval)) {
+    checkForPendingDose();
+    lastDoseCheckTime = millis();
+  }
+
+  // 2. AUTOPILOT BEEP: If a dose is waiting, beep every 1 second
+  if (isDoseWaiting && (millis() - lastBeepTime > 1000)) {
+    currentBuzzerState = !currentBuzzerState; // Toggle state
+    triggerBuzzerHardware(currentBuzzerState);
+    lastBeepTime = millis();
+  }
+
+  // 3. Heartbeat to Flask Backend every 30 seconds
   if ((millis() - lastHeartbeatTime) > heartbeatInterval) {
-    
-    // Only try to send if we are actually connected to the internet
     if (WiFi.status() == WL_CONNECTED) {
       HTTPClient http;
-      
       http.begin(backendUrl);
       http.addHeader("Content-Type", "application/json");
-
-
-      // ⚠️ 1. 加上这行通行证，绕过 Ngrok 的拦截页面
       http.addHeader("ngrok-skip-browser-warning", "true"); 
-      
-      // ⚠️ 2. 告诉 ESP32 如果 Ngrok 强制把 http 换成 https，请自动跟随跳转
       http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
-      // Replace 100 with real analogRead() logic if you wire up a battery sensor
       int batteryLevel = 100; 
-      long rssi = WiFi.RSSI(); // Read WiFi signal strength
+      long rssi = WiFi.RSSI(); 
 
-      // Construct the JSON payload
       String jsonPayload = "{\"device_serial\":\"" + deviceSerial + "\",\"battery\":" + String(batteryLevel) + ",\"rssi\":" + String(rssi) + "}";
-
-      Serial.println("Sending Heartbeat: " + jsonPayload);
       
-      // Fire the POST request
       int httpResponseCode = http.POST(jsonPayload);
-      
       if (httpResponseCode > 0) {
-        Serial.print("Heartbeat Sent Successfully. DB Updated. Response code: ");
-        Serial.println(httpResponseCode);
+        Serial.println("Heartbeat Sent Successfully.");
       } else {
         Serial.print("Error sending heartbeat. Code: ");
         Serial.println(httpResponseCode);
       }
-      
-      http.end(); // Free up resources
-    } else {
-      Serial.println("WiFi Disconnected. Skipping heartbeat.");
+      http.end(); 
     }
-    
-    lastHeartbeatTime = millis(); // Reset the timer
+    lastHeartbeatTime = millis();
   }
 }

@@ -28,4 +28,5 @@ void handleMotor3Backward();
 void handleMotor390();       
 void handleMotor3180();      
 
+void rotateMotorHardware(int slot);
 #endif

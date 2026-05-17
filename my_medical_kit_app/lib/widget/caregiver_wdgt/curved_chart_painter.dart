@@ -89,7 +89,7 @@ class CurvedChartPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [lineColor.withOpacity(0.3), lineColor.withOpacity(0.0)],
+          colors: [lineColor.withValues(alpha: 0.3), lineColor.withValues(alpha: 0.0)],
         ).createShader(Rect.fromLTWH(0, 0, size.width, chartHeight)),
     );
 

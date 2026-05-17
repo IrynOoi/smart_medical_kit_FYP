@@ -1,7 +1,7 @@
 //caregiver_adherence_details_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 
 
 class CaregiverAdherenceDetailsPage extends StatefulWidget {
@@ -15,7 +15,7 @@ class CaregiverAdherenceDetailsPage extends StatefulWidget {
 
 class CaregiverAdherenceDetailsPageState
     extends State<CaregiverAdherenceDetailsPage> {
-  final ApiService _apiService = ApiService();
+  
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
 
@@ -29,7 +29,7 @@ class CaregiverAdherenceDetailsPageState
     setState(() => _isLoading = true);
     try {
       // 這裡直接從 API 撈取最新的總體數據
-      final data = await _apiService.getCaregiverOverview(widget.caregiverId);
+      final data = await CaregiverService().getCaregiverOverview(widget.caregiverId);
       setState(() {
         _stats = data;
         _isLoading = false;
@@ -77,7 +77,7 @@ class CaregiverAdherenceDetailsPageState
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
+                              color: Colors.black.withValues(alpha: 0.05),
                               blurRadius: 20,
                             ),
                           ],
@@ -167,10 +167,10 @@ class CaregiverAdherenceDetailsPageState
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryPurple.withOpacity(0.05),
+                        color: AppColors.primaryPurple.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: AppColors.primaryPurple.withOpacity(0.1),
+                          color: AppColors.primaryPurple.withValues(alpha: 0.1),
                         ),
                       ),
                       child: const Row(
@@ -218,7 +218,7 @@ class CaregiverAdherenceDetailsPageState
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color),

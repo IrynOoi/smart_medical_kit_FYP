@@ -93,6 +93,22 @@ void handleDisplaySV() {
   server.send(200, "text/plain", "SV Name displayed");
 }
 
+void updateDisplayState(String title, String subtitle) {
+  display.clearDisplay();
+  
+  // Print Top Title (smaller)
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println(title);
+  
+  // Print Main Subtitle (bigger)
+  display.setTextSize(2);
+  display.setCursor(0, 20);
+  display.println(subtitle);
+  
+  display.display();
+}
+
 void handleDisplayClear() {
   Serial.println("Clearing Display");
   display.clearDisplay();

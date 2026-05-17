@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
+import 'package:my_medical_kit_app/services/api/device_service.dart';
 
 class PatientInventoryPage extends StatefulWidget {
   final int userId;
@@ -15,7 +16,7 @@ class PatientInventoryPage extends StatefulWidget {
 }
 
 class _PatientInventoryPageState extends State<PatientInventoryPage> {
-  final ApiService _apiService = ApiService();
+  
 
   bool _isLoading = true;
   bool _isRefreshing = false;
@@ -44,7 +45,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     });
 
     try {
-      final device = await _apiService.getPatientDevice(widget.userId);
+      final device = await DeviceService().getPatientDevice(widget.userId);
       _deviceData = device.isNotEmpty
           ? device
           : {
@@ -61,7 +62,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
         _espIpController.text = _testEspIp;
       }
 
-      final prescriptions = await _apiService.getPatientMedications(
+      final prescriptions = await MedicationService().getPatientMedications(
         widget.userId,
       );
       _inventoryList = prescriptions
@@ -159,7 +160,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   ) async {
     setState(() => _isRefreshing = true);
     try {
-      final success = await _apiService.restockMedication(
+      final success = await MedicationService().restockMedication(
         prescriptionId,
         quantity,
       );
@@ -192,12 +193,12 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   // IOT CONTROL METHODS (Using Backend Proxy)
   // ------------------------------------------------------------
   Future<void> _controlLed(bool turnOn) async {
-    final success = await _apiService.controlLed(widget.userId, turnOn);
+    final success = await DeviceService().controlLed(widget.userId, turnOn);
     _showControlResult(success, turnOn ? 'LED turned ON' : 'LED turned OFF');
   }
 
   Future<void> _controlBuzzer(bool turnOn) async {
-    final success = await _apiService.controlBuzzer(widget.userId, turnOn);
+    final success = await DeviceService().controlBuzzer(widget.userId, turnOn);
     _showControlResult(
       success,
       turnOn ? 'Buzzer turned ON' : 'Buzzer turned OFF',
@@ -205,7 +206,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   Future<void> _controlDisplay(String command) async {
-    final success = await _apiService.controlDisplay(widget.userId, command);
+    final success = await DeviceService().controlDisplay(widget.userId, command);
     String message = command == 'hello'
         ? 'Displayed "Hello World"'
         : command == 'clear'
@@ -215,7 +216,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   Future<void> _controlStepper(int motor, String action) async {
-    final success = await _apiService.controlStepper(
+    final success = await DeviceService().controlStepper(
       widget.userId,
       motor,
       action,
@@ -384,7 +385,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -442,7 +443,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                               _sendDirectCommand('/led/on', 'LED ON'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -456,7 +457,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                               _sendDirectCommand('/led/off', 'LED OFF'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -474,7 +475,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                               _sendDirectCommand('/buzzer/on', 'Buzzer ON'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -488,7 +489,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                               _sendDirectCommand('/buzzer/off', 'Buzzer OFF'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -630,7 +631,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     return ElevatedButton(
       onPressed: () => _sendDirectCommand(endpoint, label),
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primaryPurple.withOpacity(0.08),
+        backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.08),
         foregroundColor: AppColors.primaryPurple,
         elevation: 0,
       ),
@@ -678,7 +679,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
@@ -932,7 +933,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1090,7 +1091,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1182,14 +1183,14 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isOutOfStock
-              ? Colors.red.withOpacity(0.3)
+              ? Colors.red.withValues(alpha: 0.3)
               : isLowStock
-              ? Colors.orange.withOpacity(0.3)
+              ? Colors.orange.withValues(alpha: 0.3)
               : Colors.transparent,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1204,10 +1205,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isOutOfStock
-                      ? Colors.red.withOpacity(0.1)
+                      ? Colors.red.withValues(alpha: 0.1)
                       : isLowStock
-                      ? Colors.orange.withOpacity(0.1)
-                      : Colors.green.withOpacity(0.1),
+                      ? Colors.orange.withValues(alpha: 0.1)
+                      : Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -1242,10 +1243,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                 ),
                 decoration: BoxDecoration(
                   color: isOutOfStock
-                      ? Colors.red.withOpacity(0.1)
+                      ? Colors.red.withValues(alpha: 0.1)
                       : isLowStock
-                      ? Colors.orange.withOpacity(0.1)
-                      : Colors.green.withOpacity(0.1),
+                      ? Colors.orange.withValues(alpha: 0.1)
+                      : Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(

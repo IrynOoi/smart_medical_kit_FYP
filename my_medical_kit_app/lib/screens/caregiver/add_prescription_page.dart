@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 class AddPrescriptionPage extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -14,7 +14,7 @@ class AddPrescriptionPage extends StatefulWidget {
 }
 
 class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
-  final ApiService _apiService = ApiService();
+  
   final _formKey = GlobalKey<FormState>();
 
   List<Map<String, dynamic>> _medications = [];
@@ -44,9 +44,9 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       _errorMessage = null;
     });
     try {
-      final meds = await _apiService.getMedications();
+      final meds = await MedicationService().getMedications();
       setState(() {
-        _medications = meds;
+        _medications = meds.cast<Map<String, dynamic>>();
         if (_medications.isNotEmpty) {
           _selectedMedicationName = _medications.first['medication_name'];
         }
@@ -141,7 +141,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       'end_date': _endDate != null ? formatter.format(_endDate!) : null,
     };
 
-    final response = await _apiService.addPrescription(data);
+    final response = await MedicationService().addPrescription(data);
     setState(() => _isSaving = false);
 
     if (response['success'] == true) {
@@ -184,7 +184,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                         Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: AppColors.primaryPurple.withOpacity(0.1),
+                              backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.1),
                               child: Text(widget.patient['full_name'][0], style: const TextStyle(color: AppColors.primaryPurple, fontWeight: FontWeight.bold)),
                             ),
                             const SizedBox(width: 12),
@@ -205,7 +205,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
-                              BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 10, spreadRadius: 2, offset: const Offset(0, 4)),
+                              BoxShadow(color: Colors.grey.withValues(alpha: 0.08), blurRadius: 10, spreadRadius: 2, offset: const Offset(0, 4)),
                             ],
                           ),
                           child: DropdownButtonFormField<String>(
@@ -233,7 +233,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
-                              BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 10, spreadRadius: 2, offset: const Offset(0, 4)),
+                              BoxShadow(color: Colors.grey.withValues(alpha: 0.08), blurRadius: 10, spreadRadius: 2, offset: const Offset(0, 4)),
                             ],
                           ),
                           child: TextFormField(
@@ -277,7 +277,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                             return FilterChip(
                               label: Text(day),
                               selected: isSelected,
-                              selectedColor: AppColors.primaryPurple.withOpacity(0.2),
+                              selectedColor: AppColors.primaryPurple.withValues(alpha: 0.2),
                               checkmarkColor: AppColors.primaryPurple,
                               onSelected: (selected) {
                                 setState(() {

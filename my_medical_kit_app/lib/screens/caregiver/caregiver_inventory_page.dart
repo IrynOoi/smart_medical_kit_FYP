@@ -4,7 +4,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/api_client.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
+import 'package:my_medical_kit_app/services/api/device_service.dart';
 
 class CaregiverInventoryPage extends StatefulWidget {
   // final String role; // 'patient' or 'caregiver'
@@ -21,7 +24,7 @@ class CaregiverInventoryPage extends StatefulWidget {
 }
 
 class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
-  final ApiService _apiService = ApiService();
+  
 
   List<Map<String, dynamic>> _deviceInventoryList = [];
   bool _isLoadingDeviceInventory = false;
@@ -64,9 +67,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Future<void> _loadDevices() async {
     try {
-      final devices = await _apiService.getDevices();
+      final devices = await DeviceService().getDevices();
       setState(() {
-        _devicesList = devices;
+        _devicesList = devices.cast<Map<String, dynamic>>();
       });
     } catch (e) {
       print('Error loading devices: $e');
@@ -81,8 +84,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     });
 
     // Fetch device details
-    final device = await _apiService.getDevice(deviceId);
-    if (device.isNotEmpty) {
+    final device = await DeviceService().getDevice(deviceId);
+    if (device != null && device.isNotEmpty) {
       setState(() {
         _selectedDeviceDetail = device;
       });
@@ -91,7 +94,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     await _loadDeviceInventory(deviceId);
 
     // Find patient assigned to this device (for control commands)
-    final patientId = await _apiService.getPatientIdFromDevice(deviceId);
+    final patientId = await DeviceService().getPatientIdFromDevice(deviceId);
     if (patientId != null) {
       setState(() {
         _selectedControlPatientId = patientId;
@@ -149,7 +152,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Future<void> _fetchDeviceForPatient(int patientId) async {
     try {
-      final device = await _apiService.getPatientDevice(patientId);
+      final device = await DeviceService().getPatientDevice(patientId);
       setState(() {
         _selectedPatientDevice = device.isNotEmpty
             ? device
@@ -172,7 +175,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   }
 
   // Future<void> _loadPatientData() async {
-  //   final device = await _apiService.getPatientDevice(widget.userId);
+  //   final device = await DeviceService().getPatientDevice(widget.userId);
   //   _deviceData = device.isNotEmpty
   //       ? device
   //       : {
@@ -181,7 +184,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   //           'last_active_timestamp': null,
   //         };
 
-  //   final prescriptions = await _apiService.getPatientMedications(
+  //   final prescriptions = await MedicationService().getPatientMedications(
   //     widget.userId,
   //   );
   //   _inventoryList = prescriptions
@@ -201,7 +204,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   // }
 
   Future<void> _loadCaregiverData() async {
-    final patients = await _apiService.getCaregiverPatients(widget.userId);
+    final patients = await CaregiverService().getCaregiverPatients(widget.userId);
     for (var patient in patients) {
       _patientNames[patient['patient_id']] = patient['full_name'] ?? 'Unknown';
     }
@@ -209,7 +212,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     _inventoryList = [];
     for (var patient in patients) {
       final patientId = patient['patient_id'];
-      final prescriptions = await _apiService.getPatientMedications(patientId);
+      final prescriptions = await MedicationService().getPatientMedications(patientId);
       for (var med in prescriptions) {
         _inventoryList.add({
           'prescription_id': med.prescriptionId,
@@ -235,22 +238,24 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   Future<void> _loadDeviceInventory(int deviceId) async {
     setState(() => _isLoadingDeviceInventory = true);
     try {
-      final prescriptions = await _apiService.getDevicePrescriptions(deviceId);
+      final prescriptions = await DeviceService().getDevicePrescriptions(deviceId);
       final List<Map<String, dynamic>> inventory = [];
       for (var med in prescriptions) {
+        final medMap = med as Map<String, dynamic>;
         String patientName = '';
-        if (_patientNames.containsKey(med.patientId)) {
-          patientName = _patientNames[med.patientId]!;
+        final patId = medMap['patient_id'];
+        if (patId != null && _patientNames.containsKey(patId)) {
+          patientName = _patientNames[patId]!;
         }
         inventory.add({
-          'prescription_id': med.prescriptionId,
-          'medication_name': med.medicationName,
-          'current_inventory': med.currentInventory,
-          'refill_threshold': med.refillThreshold,
+          'prescription_id': medMap['prescription_id'],
+          'medication_name': medMap['medication_name'],
+          'current_inventory': medMap['current_inventory'],
+          'refill_threshold': medMap['refill_threshold'],
           'patient_name': patientName,
-          'patient_id': med.patientId,
-          'dosage_tablet': med.dosageTablet,
-          'device_id': med.deviceId,
+          'patient_id': patId,
+          'dosage_tablet': medMap['dosage_tablet'],
+          'device_id': medMap['device_id'],
         });
       }
       setState(() {
@@ -330,7 +335,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   ) async {
     setState(() => _isRefreshing = true);
     try {
-      final success = await _apiService.restockMedication(
+      final success = await MedicationService().restockMedication(
         prescriptionId,
         quantity,
       );
@@ -365,7 +370,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   Future<void> _testDevice() async {
     try {
       final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/test_device/${widget.userId}'),
+        Uri.parse('${ApiClient.baseUrl}/test_device/${widget.userId}'),
         headers: {'ngrok-skip-browser-warning': 'true'},
       );
       final result = jsonDecode(response.body);
@@ -396,7 +401,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   // ------------------------------------------------------------
   Future<void> _controlLed(bool turnOn) async {
     if (_selectedControlPatientId == null) return;
-    final success = await _apiService.controlLed(
+    final success = await DeviceService().controlLed(
       _selectedControlPatientId!,
       turnOn,
     );
@@ -405,7 +410,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Future<void> _controlBuzzer(bool turnOn) async {
     if (_selectedControlPatientId == null) return;
-    final success = await _apiService.controlBuzzer(
+    final success = await DeviceService().controlBuzzer(
       _selectedControlPatientId!,
       turnOn,
     );
@@ -417,7 +422,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Future<void> _controlDisplay(String command) async {
     if (_selectedControlPatientId == null) return;
-    final success = await _apiService.controlDisplay(
+    final success = await DeviceService().controlDisplay(
       _selectedControlPatientId!,
       command,
     );
@@ -438,7 +443,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Future<void> _controlStepper(int motor, String action) async {
     if (_selectedControlPatientId == null) return;
-    final success = await _apiService.controlStepper(
+    final success = await DeviceService().controlStepper(
       _selectedControlPatientId!,
       motor,
       action,
@@ -622,7 +627,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -693,7 +698,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
@@ -967,7 +972,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1026,7 +1031,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1056,8 +1061,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: isOnline
-                      ? Colors.green.withOpacity(0.2)
-                      : Colors.grey.withOpacity(0.2),
+                      ? Colors.green.withValues(alpha: 0.2)
+                      : Colors.grey.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -1157,7 +1162,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1261,7 +1266,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1319,7 +1324,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                               _sendDirectCommand('/led/on', 'LED ON'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1333,7 +1338,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                               _sendDirectCommand('/led/off', 'LED OFF'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1351,7 +1356,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                               _sendDirectCommand('/buzzer/on', 'Buzzer ON'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1365,7 +1370,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                               _sendDirectCommand('/buzzer/off', 'Buzzer OFF'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryPurple
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1507,7 +1512,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     return ElevatedButton(
       onPressed: () => _sendDirectCommand(endpoint, label),
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primaryPurple.withOpacity(0.08),
+        backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.08),
         foregroundColor: AppColors.primaryPurple,
         elevation: 0,
       ),
@@ -1581,7 +1586,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1684,14 +1689,14 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isOutOfStock
-              ? Colors.red.withOpacity(0.3)
+              ? Colors.red.withValues(alpha: 0.3)
               : isLowStock
-              ? Colors.orange.withOpacity(0.3)
+              ? Colors.orange.withValues(alpha: 0.3)
               : Colors.transparent,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1706,10 +1711,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isOutOfStock
-                      ? Colors.red.withOpacity(0.1)
+                      ? Colors.red.withValues(alpha: 0.1)
                       : isLowStock
-                      ? Colors.orange.withOpacity(0.1)
-                      : Colors.green.withOpacity(0.1),
+                      ? Colors.orange.withValues(alpha: 0.1)
+                      : Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -1758,10 +1763,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 ),
                 decoration: BoxDecoration(
                   color: isOutOfStock
-                      ? Colors.red.withOpacity(0.1)
+                      ? Colors.red.withValues(alpha: 0.1)
                       : isLowStock
-                      ? Colors.orange.withOpacity(0.1)
-                      : Colors.green.withOpacity(0.1),
+                      ? Colors.orange.withValues(alpha: 0.1)
+                      : Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(

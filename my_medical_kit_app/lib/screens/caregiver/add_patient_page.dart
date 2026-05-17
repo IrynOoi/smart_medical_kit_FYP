@@ -1,7 +1,7 @@
 //add_patient_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
 
 
 class AddPatientPage extends StatefulWidget {
@@ -14,7 +14,7 @@ class AddPatientPage extends StatefulWidget {
 
 class _AddPatientPageState extends State<AddPatientPage> {
   final _formKey = GlobalKey<FormState>();
-  final ApiService _apiService = ApiService();
+  
 
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -65,7 +65,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
       'caregiver_id': widget.caregiverId,
     };
 
-    final res = await _apiService.addPatient(data);
+    final res = await PatientService().addPatient(data);
 
     if (mounted) {
       if (res['success'] == true) {
@@ -109,7 +109,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryPurple.withOpacity(0.1),
+                        color: AppColors.primaryPurple.withValues(alpha: 0.1),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -118,7 +118,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withOpacity(0.1),
+                      color: AppColors.primaryPurple.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -179,7 +179,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPurple.withOpacity(0.3),
+                      color: AppColors.primaryPurple.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -245,7 +245,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -262,7 +262,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: AppColors.primaryPurple, size: 20),
@@ -301,7 +301,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -318,7 +318,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -363,7 +363,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -381,7 +381,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(

@@ -1,7 +1,7 @@
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 //patient_detail_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
 
 import 'edit_patient_page.dart';
 
@@ -39,7 +39,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     if (photoUrl != null && photoUrl.toString().isNotEmpty) {
       final imageUrl = photoUrl.toString().startsWith('http')
           ? photoUrl.toString()
-          : '${ApiService.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
+          : '${ApiClient.baseUrl}${photoUrl.toString().startsWith('/') ? '' : '/'}$photoUrl';
 
       return CircleAvatar(
         radius: 50,
@@ -53,7 +53,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
 
     return CircleAvatar(
       radius: 50,
-      backgroundColor: AppColors.primaryPurple.withOpacity(0.2),
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.2),
       child: Text(
         patientData['full_name']?.substring(0, 1).toUpperCase() ?? '?',
         style: const TextStyle(

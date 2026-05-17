@@ -6,9 +6,11 @@ int lastTouchState = LOW;
 unsigned long lastDebounceTime = 0;  
 const unsigned long debounceDelay = 500;
 
-// ✅ Forward declarations
+// ✅ Pull in external variables and functions from our main file
+extern bool isDoseWaiting; 
+void executeDispense(); 
+
 bool checkTouch();
-void checkAndDispenseDose();
 
 void setupTouch() {
   pinMode(touchPin, INPUT_PULLDOWN); 
@@ -17,7 +19,13 @@ void setupTouch() {
 void handleTouch() {
   if (checkTouch()) {
     Serial.println("👆 Touch detected!");
-    checkAndDispenseDose();
+    
+    if (isDoseWaiting) {
+       // Only dispense if a dose is actually waiting!
+       executeDispense();
+    } else {
+       Serial.println("No dose waiting right now.");
+    }
   }
 }
 

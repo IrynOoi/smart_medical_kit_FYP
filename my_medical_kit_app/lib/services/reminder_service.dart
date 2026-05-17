@@ -10,7 +10,8 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:workmanager/workmanager.dart';
 
 import '../models/prescription.dart';
-import 'api_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'app_navigator.dart';
 
 @pragma('vm:entry-point')
@@ -40,12 +41,12 @@ class ReminderService {
     await _initializeTimeZone();
     await _initializeNotifications();
 
-    await Workmanager().initialize(reminderCallbackDispatcher);
-    await Workmanager().registerPeriodicTask(
-      'reminderCheck',
-      reminderTask,
-      frequency: const Duration(minutes: 15),
-    );
+    // await Workmanager().initialize(reminderCallbackDispatcher);
+    // await Workmanager().registerPeriodicTask(
+    //   'reminderCheck',
+    //   reminderTask,
+    //   frequency: const Duration(minutes: 15),
+    // );
 
     final prefs = await SharedPreferences.getInstance();
     final patientId = prefs.getInt('patient_id');
@@ -154,8 +155,9 @@ class ReminderService {
     final patientId = prefs.getInt('patient_id');
     if (patientId == null || patientId <= 0) return;
 
-    final api = ApiService();
-    final prescriptions = await api.getPatientMedications(patientId);
+    final prescriptions = await MedicationService().getPatientMedications(
+      patientId,
+    );
     final now = DateTime.now();
 
     // 只检查未来 15 分钟内或者刚刚错过的药物
@@ -187,19 +189,19 @@ class ReminderService {
           await prefs.setBool(systemShownKey, true);
         }
 
-        // ✅ 核心：保证每天每顿药【只写入一次】MySQL 数据库！这就是铃铛里的那个红点！
-        if (!alreadyRecorded) {
-          final saved = await api.createNotification(
-            patientId: patientId,
-            title: 'Medication Reminder',
-            message: _inAppReminderMessage(p),
-            type: 'REMINDER',
-          );
-          if (saved) {
-            await prefs.setBool(recordedKey, true);
-            print("✅ 成功写入一条干干净净的数据库红点！");
-          }
-        }
+        // // ✅ 核心：保证每天每顿药【只写入一次】MySQL 数据库！这就是铃铛里的那个红点！
+        // if (!alreadyRecorded) {
+        //   final saved = await PatientService().createNotification(
+        //     patientId: patientId,
+        //     title: 'Medication Reminder',
+        //     message: _inAppReminderMessage(p),
+        //     type: 'REMINDER',
+        //   );
+        //   if (saved) {
+        //     await prefs.setBool(recordedKey, true);
+        //     print("✅ 成功写入一条干干净净的数据库红点！");
+        //   }
+        // }
       }
     }
   }
@@ -231,7 +233,8 @@ class ReminderService {
     }
 
     final meds =
-        medications ?? await ApiService().getPatientMedications(patientId);
+        medications ??
+        await MedicationService().getPatientMedications(patientId);
     final now = DateTime.now();
     final scheduledIds = <String>[];
 
@@ -342,8 +345,7 @@ class ReminderService {
 
     await _showNotification('Test Aspirin (Debug)', 2.0);
 
-    final api = ApiService();
-    final success = await api.createNotification(
+    final success = await PatientService().createNotification(
       patientId: patientId,
       title: 'Debug Reminder Test',
       message:

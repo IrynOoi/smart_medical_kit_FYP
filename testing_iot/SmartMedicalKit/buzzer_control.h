@@ -10,5 +10,6 @@ extern WebServer server; // Reference the server from your main file
 void setupBuzzer();
 void handleBuzzerOn();
 void handleBuzzerOff();
+void triggerBuzzerHardware(bool turnOn);
 
 #endif

@@ -1,9 +1,11 @@
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 // lib/screens/patient_dashboard_page.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient/smart_reminder_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
 import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/models/patient.dart';
 import 'package:my_medical_kit_app/models/prescription.dart';
@@ -19,7 +21,7 @@ class PatientDashboardPage extends StatefulWidget {
 }
 
 class _PatientDashboardPageState extends State<PatientDashboardPage> {
-  final ApiService _apiService = ApiService();
+  
 
   // ✅ FIXED: Get patient ID from shared preferences (login session)
   int _currentPatientId = 0;
@@ -207,7 +209,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: AppColors.primaryPurple.withOpacity(0.2),
+                                color: AppColors.primaryPurple.withValues(alpha: 0.2),
                               ),
                             ),
                             child: ListTile(
@@ -230,7 +232,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                                 child: Text(notif.message),
                               ),
                               onTap: () async {
-                                final success = await _apiService
+                                final success = await PatientService()
                                     .markNotificationRead(notif.notificationId);
                                 if (!mounted) return;
                                 if (success) {
@@ -266,11 +268,11 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     print('Caregiver name: ${_patient?.caregiver?.user.fullName}');
     try {
       final results = await Future.wait([
-        _apiService.getPatient(_currentPatientId),
-        _apiService.getPatientMedications(_currentPatientId),
-        _apiService.getAdherenceLogs(_currentPatientId, limit: 30),
-        _apiService.getAdherenceStats(_currentPatientId),
-        _apiService.getNotifications(_currentPatientId),
+        PatientService().getPatient(_currentPatientId),
+        MedicationService().getPatientMedications(_currentPatientId),
+        PatientService().getAdherenceLogs(_currentPatientId, limit: 30),
+        PatientService().getAdherenceStats(_currentPatientId),
+        PatientService().getNotifications(_currentPatientId),
       ]);
 
       final meds = results[1] as List<Prescription>;
@@ -372,7 +374,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   int get _unreadNotifications => _notifications.where((n) => !n.isRead).length;
 
   Future<void> _markTaken(int prescriptionId, int deviceId) async {
-    final success = await _apiService.recordMedicationTaken(
+    final success = await MedicationService().recordMedicationTaken(
       prescriptionId,
       deviceId,
     );
@@ -465,7 +467,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.premiumLight.withOpacity(0.1),
+      backgroundColor: AppColors.premiumLight.withValues(alpha: 0.1),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -537,7 +539,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         fullPhotoUrl = rawPhotoPath;
       } else {
         fullPhotoUrl =
-            '${ApiService.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
+            '${ApiClient.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
       }
     }
 
@@ -687,7 +689,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
+                      color: Colors.black.withValues(alpha: 0.15),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -710,7 +712,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Row(
@@ -950,7 +952,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withOpacity(0.1),
+                color: AppColors.primaryPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
@@ -978,7 +980,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withOpacity(0.1),
+              color: AppColors.primaryPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -1062,7 +1064,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         fullPhotoUrl = rawPhotoPath;
       } else {
         fullPhotoUrl =
-            '${ApiService.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
+            '${ApiClient.baseUrl}${rawPhotoPath.startsWith('/') ? '' : '/'}$rawPhotoPath';
       }
     }
 
@@ -1163,12 +1165,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppColors.premiumLight.withOpacity(0.4),
+          color: AppColors.premiumLight.withValues(alpha: 0.4),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.premiumDark.withOpacity(0.06),
+            color: AppColors.premiumDark.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1179,7 +1181,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withOpacity(0.1),
+              color: AppColors.primaryPurple.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -1273,12 +1275,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppColors.premiumLight.withOpacity(0.4),
+          color: AppColors.premiumLight.withValues(alpha: 0.4),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.premiumDark.withOpacity(0.06),
+            color: AppColors.premiumDark.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1330,7 +1332,7 @@ class _DonutPainter extends CustomPainter {
         2 * pi,
         false,
         Paint()
-          ..color = AppColors.primaryPurple.withOpacity(0.5)
+          ..color = AppColors.primaryPurple.withValues(alpha: 0.5)
           ..style = PaintingStyle.stroke
           ..strokeWidth = stroke
           ..strokeCap = StrokeCap.round,
@@ -1424,7 +1426,7 @@ class _LinePainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [lineColor.withOpacity(0.25), lineColor.withOpacity(0.0)],
+            colors: [lineColor.withValues(alpha: 0.25), lineColor.withValues(alpha: 0.0)],
           ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
       );
 

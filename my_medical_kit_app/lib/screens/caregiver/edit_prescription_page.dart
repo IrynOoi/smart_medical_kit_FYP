@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api_service.dart';
+import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 class EditPrescriptionPage extends StatefulWidget {
   final Map<String, dynamic> prescription;
@@ -14,7 +14,7 @@ class EditPrescriptionPage extends StatefulWidget {
 }
 
 class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
-  final ApiService _apiService = ApiService();
+  
   final _formKey = GlobalKey<FormState>();
 
   List<Map<String, dynamic>> _medications = [];
@@ -114,9 +114,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       _errorMessage = null;
     });
     try {
-      final meds = await _apiService.getMedications();
+      final meds = await MedicationService().getMedications();
       setState(() {
-        _medications = meds;
+        _medications = meds.cast<Map<String, dynamic>>();
         if (_selectedMedicationName != null) {
           final exists = _medications.any(
             (m) => m['medication_name'] == _selectedMedicationName,
@@ -224,10 +224,11 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       // 🚫 Do NOT send inventory, threshold, device_id – backend keeps existing values
     };
 
-    final success = await _apiService.updatePrescription(
+    final result = await MedicationService().updatePrescription(
       widget.prescription['prescription_id'],
       data,
     );
+    final success = result['success'] == true;
     setState(() => _isSaving = false);
 
     if (success) {
