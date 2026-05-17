@@ -6,10 +6,8 @@
 #include "buzzer_control.h" 
 #include <ArduinoJson.h>
 #include "display_control.h" 
-#include "secrets.h"
 
-const char* ssid = SECRET_SSID; 
-const char* password = SECRET_PASS;
+// NOTE: No secrets.h or hardcoded passwords here!
 
 const String backendUrl = "http://172.20.10.9:5000/device/heartbeat";
 const String deviceSerial = "DISP-1"; 
@@ -34,9 +32,62 @@ int pendingAdlogId = 0;
 int pendingPrescriptionId = 0;
 String pendingMedName = "";
 
-
 void setupTouch();  
 void handleTouch(); 
+
+// ==========================================
+// --- SMART CONFIG ROUTINE (You missed this part!) ---
+// ==========================================
+void connectToWiFi() {
+  WiFi.mode(WIFI_AP_STA); 
+  WiFi.begin(); // Automatically tries the last saved WiFi network
+
+  Serial.print("Connecting to saved WiFi...");
+  int retries = 0;
+  
+  // Wait up to 10 seconds to see if it connects to the old network
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
+    delay(500);
+    Serial.print(".");
+    retries++;
+  }
+
+  // If it failed to connect, trigger SmartConfig
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nNo saved WiFi found. Entering SmartConfig Mode...");
+    
+    // Update OLED to tell the user to use the phone app
+    updateDisplayState("Need WiFi!", "Use Phone App"); 
+    
+    WiFi.beginSmartConfig();
+
+    // Wait until it receives credentials from the phone
+    while (!WiFi.smartConfigDone()) {
+      delay(500);
+      Serial.print("*");
+    }
+
+    Serial.println("\nSmartConfig details received.");
+    Serial.println("Waiting for WiFi connection...");
+    updateDisplayState("Connecting...", "Please wait");
+
+    // Wait until it actually connects to the router
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+  }
+
+  // Success!
+  Serial.println("\nWiFi Connected!");
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  
+  updateDisplayState("MedSmart", "Ready!");
+}
+
 
 // --- UPDATED LOGIC ---
 void markDoseAsTaken(int adlogId, int prescriptionId) {
@@ -74,18 +125,13 @@ void checkForPendingDose() {
       deserializeJson(doc, payload);
       
       if (doc["success"] == true && doc["has_pending"] == true) {
-        // Save the details to our global variables
         pendingMotorSlot = doc["data"]["motor_slot"];
         pendingAdlogId = doc["data"]["adlog_id"];
         pendingPrescriptionId = doc["data"]["prescription_id"];
         pendingMedName = doc["data"]["medication_name"].as<String>();
         
         Serial.println("🚨 Dispense Time Arrived for: " + pendingMedName);
-        
-        // Change State: The device is now waiting for user to touch
         isDoseWaiting = true;
-        
-        // Update OLED Display
         updateDisplayState("Medicine Due!", pendingMedName);
       }
     }
@@ -95,24 +141,16 @@ void checkForPendingDose() {
 
 // 2. This function fires ONLY when the user touches the button while a dose is waiting
 void executeDispense() {
-  // 1. Immediately turn off the buzzer & lock state
   isDoseWaiting = false; 
   triggerBuzzerHardware(false);
   
-  // 2. Change LCD to Dispensing
   Serial.println("⚙️ Dispensing...");
   updateDisplayState("Dispensing...", pendingMedName);
   
-  // 3. Spin the correct motor
   rotateMotorHardware(pendingMotorSlot);
-  
-  // 4. Update the Database
   markDoseAsTaken(pendingAdlogId, pendingPrescriptionId);
   
-  // 5. Change LCD to Finished
   updateDisplayState("Finished!", "Take Meds");
-  
-  // Wait 4 seconds so the user can read the screen, then clear it
   delay(4000); 
   handleDisplayClear();
 }
@@ -127,15 +165,8 @@ void setup() {
   setupDisplay(); 
   setupTouch();
 
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nConnected!");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP()); 
+  // Call the SmartConfig setup routine
+  connectToWiFi();
 
   // --- API Routes ---
   server.on("/led/on", []() {
@@ -178,20 +209,20 @@ void loop() {
   handleTouch();
   server.handleClient();
 
-  // 1. AUTOPILOT CHECK: Check for a new dose every 10 seconds
+  // 1. AUTOPILOT CHECK
   if (!isDoseWaiting && (millis() - lastDoseCheckTime > doseCheckInterval)) {
     checkForPendingDose();
     lastDoseCheckTime = millis();
   }
 
-  // 2. AUTOPILOT BEEP: If a dose is waiting, beep every 1 second
+  // 2. AUTOPILOT BEEP
   if (isDoseWaiting && (millis() - lastBeepTime > 1000)) {
-    currentBuzzerState = !currentBuzzerState; // Toggle state
+    currentBuzzerState = !currentBuzzerState; 
     triggerBuzzerHardware(currentBuzzerState);
     lastBeepTime = millis();
   }
 
-  // 3. Heartbeat to Flask Backend every 30 seconds
+  // 3. Heartbeat to Flask Backend
   if ((millis() - lastHeartbeatTime) > heartbeatInterval) {
     if (WiFi.status() == WL_CONNECTED) {
       HTTPClient http;
