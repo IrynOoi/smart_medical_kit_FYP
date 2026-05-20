@@ -5,11 +5,26 @@ def insert_notification(patient_id, title, message, notif_type='REMINDER'):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
+            SELECT notification_id
+            FROM notifications
+            WHERE patient_id = %s
+              AND title = %s
+              AND message = %s
+              AND type = %s
+              AND is_read = 0
+            LIMIT 1
+        ''', (patient_id, title, message, notif_type))
+        if cursor.fetchone():
+            cursor.close()
+            return False
+
+        cursor.execute('''
             INSERT INTO notifications (patient_id, title, message, type)
             VALUES (%s, %s, %s, %s)
         ''', (patient_id, title, message, notif_type))
         conn.commit()
         cursor.close()
+    return True
 
 def get_patient_notifications(patient_id):
     with get_db_connection() as conn:

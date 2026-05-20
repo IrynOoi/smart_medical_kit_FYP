@@ -17,6 +17,17 @@ from routes.medication import medication_bp
 from routes.device import device_bp
 from routes.analytics import analytics_bp
 
+import os
+import sys
+
+# Only call tzset on Unix (Linux/macOS)
+if sys.platform != 'win32':
+    import time
+    os.environ['TZ'] = 'Asia/Kuala_Lumpur'
+    time.tzset()
+else:
+    # On Windows, just print a warning – system time must already be Malaysia time
+    print("⚠️ Running on Windows: Please ensure your system time zone is set to 'Singapore/Malaysia Time (GMT+8)'")
 class CustomJSONProvider(DefaultJSONProvider):
     def default(self, obj):
         if isinstance(obj, (datetime.datetime, datetime.date)):

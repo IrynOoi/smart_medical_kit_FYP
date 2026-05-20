@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from models.user import get_patient_profile, update_patient_profile, delete_patient_cascade
 from models.medication import get_prescriptions_by_patient
 from models.adherence import get_patient_adherence_stats, get_patient_adherence_logs
-from models.notification import get_patient_notifications, mark_single_reminder_read, mark_all_reminders_read, insert_notification, mark_notification_as_read
+from models.notification import get_patient_notifications, mark_single_reminder_read, mark_all_reminders_read as mark_all_reminders_read_model, insert_notification, mark_notification_as_read
 from models.analytics_model import get_latest_ai_prediction
 
 patient_bp = Blueprint('patient', __name__)
@@ -181,9 +181,9 @@ def delete_patient(patient_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 @patient_bp.route('/patient/<int:patient_id>/reminders/read', methods=['PUT'])
-def mark_all_reminders_read(patient_id):
+def api_mark_all_reminders_read(patient_id):
     try:
-        mark_all_reminders_read(patient_id)
+        mark_all_reminders_read_model(patient_id)
         return jsonify({"success": True, "message": "All reminders marked as read"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

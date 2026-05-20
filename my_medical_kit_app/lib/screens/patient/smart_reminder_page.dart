@@ -5,8 +5,18 @@ import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:my_medical_kit_app/services/api/medication_service.dart';
+import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+
+// 🌟 新增：专门用来组合“通知”和“对应药物详情”的数据类
+class ReminderItem {
+  final NotificationModel notification;
+  final Prescription prescription;
+
+  ReminderItem({required this.notification, required this.prescription});
+}
 
 class SmartReminderPage extends StatefulWidget {
   const SmartReminderPage({super.key});
@@ -16,15 +26,23 @@ class SmartReminderPage extends StatefulWidget {
 }
 
 class _SmartReminderPageState extends State<SmartReminderPage> {
-  
+  Timer? _autoRefreshTimer;
   bool _isLoading = true;
-  List<Prescription> _medications = [];
+
+  // 🌟 修改：列表数据源从 List<Prescription> 变成了 List<ReminderItem>
+  List<ReminderItem> _reminders = [];
   int _patientId = 0;
 
   @override
   void initState() {
     super.initState();
     _loadPatientId();
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPatientId() async {
@@ -41,34 +59,53 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
   Future<void> _loadMedications() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Fetch all prescriptions (the schedule)
-      final allMeds = await MedicationService().getPatientMedications(_patientId);
-
-      // 2. Fetch notifications to see which ones are actually unread
+      final allMeds = await MedicationService().getPatientMedications(
+        _patientId,
+      );
+      await ReminderService.checkAndSendReminders(medications: allMeds);
       final notifications = await PatientService().getNotifications(_patientId);
 
-      // Filter to keep only unread notifications (isRead == false or 0 depending on your model)
-      // We assume your NotificationModel uses a boolean or int for isRead.
+      // 取出所有未读通知
       final unreadNotifications = notifications
-          .where((n) => n.isRead == false)
+          .where((notification) => !notification.isRead)
           .toList();
 
-      // 3. Filter the medications: only keep the card if its name is in an unread notification
-      final activeReminders = allMeds.where((med) {
-        return unreadNotifications.any(
-          (notif) => notif.message.contains(med.medicationName),
-        );
-      }).toList();
+      List<ReminderItem> items = [];
+
+      // 🌟 核心逻辑：遍历每一个未读通知，为它们各自生成一张卡片！
+      for (var notif in unreadNotifications) {
+        final title = notif.title.toLowerCase();
+        // 只处理和吃药相关的通知
+        if (title.contains('medication') || title.contains('reminder')) {
+          try {
+            // 在处方列表中找到这个通知对应的是哪个药
+            final matchedMed = allMeds.firstWhere(
+              (med) => notif.message.toLowerCase().contains(
+                med.medicationName.toLowerCase(),
+              ),
+            );
+            // 组装成一个 ReminderItem 添加到列表中
+            items.add(
+              ReminderItem(notification: notif, prescription: matchedMed),
+            );
+          } catch (e) {
+            // 如果这个药已经被删除了，找不到匹配的处方，就跳过这条通知
+            debugPrint(
+              'Could not find prescription for notification ${notif.notificationId}',
+            );
+          }
+        }
+      }
 
       setState(() {
-        _medications = activeReminders; // <-- Display the filtered list!
+        _reminders = items; // 更新 UI
         _isLoading = false;
       });
 
       try {
         await ReminderService.scheduleUpcomingMedicationReminders(
           _patientId,
-          medications: allMeds, // Keep scheduling based on the full schedule
+          medications: allMeds,
         );
       } catch (scheduleError) {
         debugPrint('Reminder scheduling skipped: $scheduleError');
@@ -108,16 +145,13 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     }
   }
 
-  String _formatCron(String cron) {
-    final parts = cron.split(' ');
-    if (parts.length < 5) return cron;
-    final minute = parts[0];
-    final hour = parts[1];
-    if (hour.contains(',')) {
-      final times = hour.split(',').map((h) => '$h:$minute').join(', ');
-      return 'Daily at $times';
-    }
-    return 'Daily at ${hour.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
+  // 🌟 新增：格式化通知的具体生成时间 (方便区分 48 和 49)
+  String _formatNotificationTime(DateTime time) {
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$day/$month at $hour:$minute';
   }
 
   Widget _buildHeader() {
@@ -161,27 +195,20 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-
-              // 把右边的按钮组合起来
               Row(
                 children: [
-                  // 🐛 1. 开发者测试按钮 (一键发通知)
                   GestureDetector(
                     onTap: () async {
-                      // 直接触发我们的 Debug 函数
                       await ReminderService.triggerTestDualNotification(
                         context,
                       );
-                      // 顺便刷新一下列表，让你能马上在 App 里看到新通知
                       _loadMedications();
                     },
                     child: Container(
-                      margin: const EdgeInsets.only(right: 10), // 和刷新按钮隔开一点
+                      margin: const EdgeInsets.only(right: 10),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.orangeAccent.withOpacity(
-                          0.8,
-                        ), // 设成橘色，提示这是测试按钮
+                        color: Colors.orangeAccent.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -191,14 +218,15 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                       ),
                     ),
                   ),
-
-                  // 🔄 2. 真实的时间检查按钮 (Sync)
                   GestureDetector(
                     onTap: () async {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Checking schedule...')),
                       );
                       await ReminderService.checkAndSendReminders();
+                      if (mounted) {
+                        await _loadMedications();
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(10),
@@ -219,7 +247,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
           ),
           const SizedBox(height: 24),
           const Text(
-            'YOUR DAILY SCHEDULE',
+            'YOUR UNREAD ALERTS',
             style: TextStyle(
               fontSize: 14,
               letterSpacing: 1.5,
@@ -244,26 +272,14 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F0FF), // 浅紫色背景
-      // floatingActionButton: FloatingActionButton.extended(
-      //   onPressed: () {
-      //     // 按下去直接强行触发通知！
-      //     ReminderService.showNotification("Aspirin (Test)", 1.0);
-      //   },
-      //   backgroundColor: AppColors.primaryPurple,
-      //   icon: const Icon(Icons.notifications_active, color: Colors.white),
-      //   label: const Text(
-      //     "Test Notification",
-      //     style: TextStyle(color: Colors.white),
-      //   ),
-      // ),
+      backgroundColor: const Color(0xFFF5F0FF),
       body: Column(
         children: [
           _buildHeader(),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _medications.isEmpty
+                : _reminders.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -275,7 +291,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No medications scheduled',
+                          'No active medication reminders',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey.shade600,
@@ -289,12 +305,14 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                     color: AppColors.primaryPurple,
                     child: ListView.builder(
                       padding: const EdgeInsets.only(top: 16, bottom: 24),
-                      itemCount: _medications.length,
+                      itemCount: _reminders.length,
                       itemBuilder: (context, index) {
-                        final med = _medications[index];
+                        final item = _reminders[index];
+                        final notif = item.notification;
+                        final med = item.prescription;
+
                         final isLowStock =
                             med.currentInventory <= med.refillThreshold;
-                        final canTake = med.currentInventory > 0;
 
                         return Container(
                           margin: const EdgeInsets.symmetric(
@@ -306,7 +324,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.primaryPurple.withValues(alpha: 0.1),
+                                color: AppColors.primaryPurple.withValues(
+                                  alpha: 0.1,
+                                ),
                                 blurRadius: 20,
                                 offset: const Offset(0, 6),
                               ),
@@ -327,7 +347,8 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                         borderRadius: BorderRadius.circular(18),
                                       ),
                                       child: Icon(
-                                        Icons.medication_liquid,
+                                        Icons
+                                            .notifications_active, // 换个更符合“提醒”的图标
                                         color: AppColors.primaryPurple,
                                         size: 28,
                                       ),
@@ -356,12 +377,15 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                _formatCron(
-                                                  med.dispenseSchedule,
+                                                // 🌟 核心：显示这个通知真正发生的时间！
+                                                _formatNotificationTime(
+                                                  notif.createdAt,
                                                 ),
                                                 style: TextStyle(
                                                   fontSize: 14,
-                                                  color: Colors.grey.shade700,
+                                                  color:
+                                                      Colors.redAccent.shade700,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
                                               ),
                                             ],
@@ -381,7 +405,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      '${med.dosageTablet.toStringAsFixed(0)} tablet(s) per dose',
+                                      '${med.dosageTablet.toStringAsFixed(0)} tablet(s) missed',
                                       style: TextStyle(
                                         fontSize: 14,
                                         color: Colors.grey.shade700,
@@ -391,14 +415,12 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                 ),
                                 const SizedBox(height: 12),
                                 const SizedBox(height: 12),
-                                // 💡 修复 Overflow：用 Wrap 代替 Row，让空间不够时自动换行
                                 Wrap(
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   spacing: 8.0,
                                   runSpacing: 12.0,
                                   children: [
-                                    // 1. Stock Status
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
@@ -439,13 +461,11 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                       ),
                                     ),
 
-                                    // 2. Actions (Press Kit + Mark as Read)
                                     Wrap(
                                       crossAxisAlignment:
                                           WrapCrossAlignment.center,
                                       spacing: 8.0,
                                       children: [
-                                        // Press Kit hint
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 14,
@@ -480,18 +500,14 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                           ),
                                         ),
 
-                                        // Mark as Read button
-                                        // Replace your existing Mark as Read ElevatedButton (around line 290) with this:
                                         ElevatedButton(
                                           onPressed: () async {
                                             final confirm = await showDialog<bool>(
                                               context: context,
                                               builder: (ctx) => AlertDialog(
-                                                title: Text(
-                                                  'Dismiss ${med.medicationName} reminder',
-                                                ),
+                                                title: Text('Dismiss reminder'),
                                                 content: Text(
-                                                  'This will clear the unread reminder for ${med.medicationName}. Are you sure?',
+                                                  'This will clear the reminder for ${med.medicationName} from ${_formatNotificationTime(notif.createdAt)}. Are you sure?',
                                                 ),
                                                 actions: [
                                                   TextButton(
@@ -524,12 +540,12 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
 
                                             if (confirm != true) return;
 
-                                            // Call the new single-read API
-                                            final success = await PatientService()
-                                                .markSingleReminderRead(
-                                                  _patientId,
-                                                  med.medicationName,
-                                                );
+                                            // 🌟 核心：使用单独的 markNotificationRead API，精准干掉具体的某一条 Notification!
+                                            final success =
+                                                await PatientService()
+                                                    .markNotificationRead(
+                                                      notif.notificationId,
+                                                    );
 
                                             if (!mounted) return;
 
@@ -544,7 +560,6 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                                   backgroundColor: Colors.teal,
                                                 ),
                                               );
-                                              // Refresh the list to update UI
                                               _loadMedications();
                                             } else {
                                               ScaffoldMessenger.of(
@@ -573,7 +588,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             ),
                                           ),
                                           child: const Text(
-                                            'Mark as Read', // Updated text
+                                            'Mark as Read',
                                             style: TextStyle(fontSize: 12),
                                           ),
                                         ),

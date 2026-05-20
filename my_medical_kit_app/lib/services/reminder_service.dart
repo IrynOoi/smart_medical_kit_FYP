@@ -121,7 +121,6 @@ class ReminderService {
     return granted;
   }
 
-  // ✅ FIX: 删除了原本导致多次重复写入数据库的 _createInAppNotificationFromResponse！
   static void _handleNotificationResponse(NotificationResponse response) {
     if (response.payload != _payloadSmartReminder) return;
     unawaited(_openSmartReminderWhenReady());
@@ -148,16 +147,18 @@ class ReminderService {
     });
   }
 
-  static Future<void> checkAndSendReminders() async {
+  static Future<void> checkAndSendReminders({
+    List<Prescription>? medications,
+  }) async {
     await _initializeNotifications();
 
     final prefs = await SharedPreferences.getInstance();
     final patientId = prefs.getInt('patient_id');
     if (patientId == null || patientId <= 0) return;
 
-    final prescriptions = await MedicationService().getPatientMedications(
-      patientId,
-    );
+    final prescriptions =
+        medications ??
+        await MedicationService().getPatientMedications(patientId);
     final now = DateTime.now();
 
     // 只检查未来 15 分钟内或者刚刚错过的药物
@@ -189,19 +190,14 @@ class ReminderService {
           await prefs.setBool(systemShownKey, true);
         }
 
-        // // ✅ 核心：保证每天每顿药【只写入一次】MySQL 数据库！这就是铃铛里的那个红点！
-        // if (!alreadyRecorded) {
-        //   final saved = await PatientService().createNotification(
-        //     patientId: patientId,
-        //     title: 'Medication Reminder',
-        //     message: _inAppReminderMessage(p),
-        //     type: 'REMINDER',
-        //   );
-        //   if (saved) {
-        //     await prefs.setBool(recordedKey, true);
-        //     print("✅ 成功写入一条干干净净的数据库红点！");
-        //   }
-        // }
+        if (!alreadyRecorded) {
+          await _createInAppNotificationOnce(
+            prefs: prefs,
+            patientId: patientId,
+            prescription: p,
+            scheduledAt: scheduledAt,
+          );
+        }
       }
     }
   }
@@ -213,11 +209,8 @@ class ReminderService {
   }) async {
     await _initializeTimeZone();
     await _initializeNotifications();
-    var notificationsAllowed = true;
     try {
-      notificationsAllowed = await requestNotificationPermissions(
-        requestExactAlarms: true,
-      );
+      await requestNotificationPermissions(requestExactAlarms: true);
     } catch (e) {
       debugPrint('Reminder permission request failed: $e');
     }
@@ -258,6 +251,15 @@ class ReminderService {
           await prefs.setBool(
             _localScheduledCacheKey(med.prescriptionId, scheduledAt),
             true,
+          );
+        }
+
+        if (_isScheduledTimeActive(scheduledAt, now)) {
+          await _createInAppNotificationOnce(
+            prefs: prefs,
+            patientId: patientId,
+            prescription: med,
+            scheduledAt: scheduledAt,
           );
         }
 
@@ -376,6 +378,24 @@ class ReminderService {
     ).where((time) => !time.isAfter(end)).toList();
   }
 
+  static bool isMedicationActiveNow(
+    Prescription prescription, {
+    DateTime? now,
+  }) {
+    if (prescription.currentInventory <= 0) return false;
+    final reference = now ?? DateTime.now();
+    final windowStart = reference.subtract(const Duration(minutes: 5));
+    final windowEnd = reference.add(const Duration(minutes: 15));
+    return _doseTimesBetween(prescription, windowStart, windowEnd).isNotEmpty;
+  }
+
+  static bool _isScheduledTimeActive(DateTime scheduledAt, DateTime now) {
+    final windowStart = now.subtract(const Duration(minutes: 5));
+    final windowEnd = now.add(const Duration(minutes: 15));
+    return !scheduledAt.isBefore(windowStart) &&
+        !scheduledAt.isAfter(windowEnd);
+  }
+
   static List<DateTime> _upcomingDoseTimesFor(
     Prescription prescription,
     DateTime from, {
@@ -427,8 +447,9 @@ class ReminderService {
 
       if (!months.contains(day.month) ||
           !daysOfMonth.contains(day.day) ||
-          !daysOfWeek.contains(cronWeekday))
+          !daysOfWeek.contains(cronWeekday)) {
         continue;
+      }
 
       for (final hour in hours) {
         for (final minute in minutes) {
@@ -441,8 +462,9 @@ class ReminderService {
           );
           if (!candidate.isAfter(from)) continue;
           if (candidate.isBefore(prescriptionStart)) continue;
-          if (prescriptionEnd != null && candidate.isAfter(prescriptionEnd))
+          if (prescriptionEnd != null && candidate.isAfter(prescriptionEnd)) {
             continue;
+          }
           result.add(candidate);
         }
       }
@@ -498,8 +520,41 @@ class ReminderService {
     return '${scheduledAt.year}${two(scheduledAt.month)}${two(scheduledAt.day)}_${two(scheduledAt.hour)}${two(scheduledAt.minute)}';
   }
 
-  static String _inAppReminderMessage(Prescription prescription) {
-    return 'Time to take ${prescription.dosageTablet.toStringAsFixed(0)} tablet(s) of ${prescription.medicationName}.';
+  static Future<void> _createInAppNotificationOnce({
+    required SharedPreferences prefs,
+    required int patientId,
+    required Prescription prescription,
+    required DateTime scheduledAt,
+  }) async {
+    final recordedKey = _recordedCacheKey(
+      prescription.prescriptionId,
+      scheduledAt,
+    );
+    if (prefs.getBool(recordedKey) ?? false) return;
+
+    // final saved = await PatientService().createNotification(
+    //   patientId: patientId,
+    //   title: 'Medication Reminder',
+    //   message: _inAppReminderMessage(prescription, scheduledAt),
+    //   type: 'REMINDER',
+    // );
+
+    // if (saved) {
+    //   await prefs.setBool(recordedKey, true);
+    // }
+    await prefs.setBool(recordedKey, true);
+  }
+
+  static String _inAppReminderMessage(
+    Prescription prescription,
+    DateTime scheduledAt,
+  ) {
+    return 'Time to take ${prescription.dosageTablet.toStringAsFixed(0)} tablet(s) of ${prescription.medicationName} at ${_formatScheduledAt(scheduledAt)}.';
+  }
+
+  static String _formatScheduledAt(DateTime scheduledAt) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${scheduledAt.year}-${two(scheduledAt.month)}-${two(scheduledAt.day)} ${two(scheduledAt.hour)}:${two(scheduledAt.minute)}';
   }
 
   static String _systemReminderMessage(String medName, double dosage) {

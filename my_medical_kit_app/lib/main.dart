@@ -19,9 +19,6 @@ Future<void> main() async {
 
   await ReminderService.init();
 
-  // 👇 3. 加上这一行！这会唤醒你的后台任务和通知系统
-  await ReminderService.init();
-
   debugPrint('🚀 App started: WidgetsFlutterBinding initialized.');
   runApp(const MyApp());
 }

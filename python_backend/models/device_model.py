@@ -135,14 +135,15 @@ def record_device_heartbeat(device_serial, battery_level, ip_address, wifi_rssi=
 def get_pending_dose_for_device(device_serial):
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        
         cursor.execute('''
             SELECT al.adlog_id, al.scheduled_time, al.prescription_id,
-                   pc.dosage_tablet, med.motor_slot, pc.patient_id
+                   pc.dosage_tablet, med.motor_slot, pc.patient_id,
+                   m.medication_name          -- ← 加上这行
             FROM iot_device d
             JOIN medications med ON d.device_id = med.device_id
             JOIN prescription_config pc ON med.medication_id = pc.medication_id
             JOIN adherence_logs al ON pc.prescription_id = al.prescription_id
+            JOIN medications m ON pc.medication_id = m.medication_id   -- ← 加上这个 JOIN
             WHERE d.device_serial = %s
               AND al.status = 'PENDING'
               AND al.scheduled_time <= CURRENT_TIMESTAMP
@@ -176,12 +177,14 @@ def record_dispense_from_device(adlog_id, prescription_id):
         row = cursor.fetchone()
         patient_id = row[0] if row else None
 
+   # 1. 更新 adherence_logs
         cursor.execute('''
             UPDATE adherence_logs 
             SET status = 'TAKEN', dispensed_time = CURRENT_TIMESTAMP 
             WHERE adlog_id = %s
         ''', (adlog_id,))
-        
+
+        # 2. 扣减库存
         cursor.execute('''
             UPDATE medications m
             JOIN prescription_config pc ON m.medication_id = pc.medication_id
@@ -190,14 +193,14 @@ def record_dispense_from_device(adlog_id, prescription_id):
             WHERE pc.prescription_id = %s AND m.current_inventory > 0
         ''', (prescription_id,))
         
-        if patient_id:
-            cursor.execute('''
-                UPDATE notifications
-                SET is_read = 1
-                WHERE patient_id = %s
-                  AND type = 'REMINDER'
-                  AND is_read = 0
-            ''', (patient_id,))
+        # if patient_id:
+        #     cursor.execute('''
+        #         UPDATE notifications
+        #         SET is_read = 1
+        #         WHERE patient_id = %s
+        #           AND type = 'REMINDER'
+        #           AND is_read = 0
+        #     ''', (patient_id,))
         
         conn.commit()
         cursor.close()

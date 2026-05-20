@@ -21,8 +21,6 @@ class PatientDashboardPage extends StatefulWidget {
 }
 
 class _PatientDashboardPageState extends State<PatientDashboardPage> {
-  
-
   // ✅ FIXED: Get patient ID from shared preferences (login session)
   int _currentPatientId = 0;
 
@@ -209,7 +207,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: AppColors.primaryPurple.withValues(alpha: 0.2),
+                                color: AppColors.primaryPurple.withValues(
+                                  alpha: 0.2,
+                                ),
                               ),
                             ),
                             child: ListTile(
@@ -277,13 +277,23 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
       final meds = results[1] as List<Prescription>;
       final logs = results[2] as List<AdherenceLog>;
+      var notifications = results[4] as List<NotificationModel>;
+
+      try {
+        await ReminderService.checkAndSendReminders(medications: meds);
+        notifications = await PatientService().getNotifications(
+          _currentPatientId,
+        );
+      } catch (reminderError) {
+        debugPrint('Reminder notification sync skipped: $reminderError');
+      }
 
       setState(() {
         _patient = results[0] as Patient?;
         _medications = meds;
         _recentLogs = logs;
         _adherenceStats = results[3] as Map<String, dynamic>;
-        _notifications = results[4] as List<NotificationModel>;
+        _notifications = notifications;
         _weeklyTaken = _computeWeekly(logs);
         _isLoading = false;
       });
@@ -1426,7 +1436,10 @@ class _LinePainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [lineColor.withValues(alpha: 0.25), lineColor.withValues(alpha: 0.0)],
+            colors: [
+              lineColor.withValues(alpha: 0.25),
+              lineColor.withValues(alpha: 0.0),
+            ],
           ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
       );
 

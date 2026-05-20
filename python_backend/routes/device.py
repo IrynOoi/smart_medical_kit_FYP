@@ -314,3 +314,30 @@ def get_prescription_for_device_patient_route(device_id, patient_id):
         return jsonify({"success": True, "data": result})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@device_bp.route('/device/dispense_missed', methods=['POST'])
+def dispense_missed():
+    try:
+        data = request.get_json()
+        adlog_id = data.get('adlog_id')
+        if not adlog_id:
+            return jsonify({"success": False, "message": "adlog_id required"}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE adherence_logs
+                SET status = 'MISSED', dispensed_time = NULL
+                WHERE adlog_id = %s AND status = 'PENDING'
+            ''', (adlog_id,))
+            conn.commit()
+            affected = cursor.rowcount
+            cursor.close()
+
+        if affected:
+            return jsonify({"success": True, "message": "Marked as MISSED"})
+        else:
+            return jsonify({"success": False, "message": "No pending log found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
