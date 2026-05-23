@@ -1,6 +1,7 @@
 #device_model.py
 from db import get_db_connection
 from datetime import datetime
+from models.notification_model import sync_patient_caregiver_stock_notifications
 
 def get_device_by_id(device_id):
     with get_db_connection() as conn:
@@ -193,15 +194,17 @@ def record_dispense_from_device(adlog_id, prescription_id):
             WHERE pc.prescription_id = %s AND m.current_inventory > 0
         ''', (prescription_id,))
         
-        # if patient_id:
-        #     cursor.execute('''
-        #         UPDATE notifications
-        #         SET is_read = 1
-        #         WHERE patient_id = %s
-        #           AND type = 'REMINDER'
-        #           AND is_read = 0
-        #     ''', (patient_id,))
+        if patient_id:
+            cursor.execute('''
+                UPDATE notifications
+                SET is_read = 1
+                WHERE recipient_id = %s
+                  AND type = 'REMINDER'
+                  AND is_read = 0
+            ''', (patient_id,))
         
         conn.commit()
         cursor.close()
+    if patient_id:
+        sync_patient_caregiver_stock_notifications(patient_id)
     return True, "Success"

@@ -1,5 +1,5 @@
 #notification_service.py
-from models.notification import insert_notification
+from models.notification_model import insert_notification
 
 def send_new_prescription_notification(patient_id, medication_name):
     title = "New Prescription Added"

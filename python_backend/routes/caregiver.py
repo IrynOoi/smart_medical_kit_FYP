@@ -2,8 +2,15 @@
 import os
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
-from models.adherence import get_all_recent_logs, get_caregiver_overview_stats, get_caregiver_chart_data, get_caregiver_alerts, get_caregiver_analytics_overview
+from models.adherence_model import get_all_recent_logs, get_caregiver_overview_stats, get_caregiver_chart_data, get_caregiver_alerts, get_caregiver_analytics_overview
 from models.user import get_caregiver_profile, update_caregiver_profile, get_caregiver_patients_list
+from models.notification_model import (
+    get_caregiver_notifications as get_caregiver_notifications_model,
+    get_caregiver_stock_alert_rows,
+    get_caregiver_stock_notification_rows,
+    mark_notification_as_read,
+    sync_caregiver_stock_notifications,
+)
 
 caregiver_bp = Blueprint('caregiver', __name__)
 
@@ -98,6 +105,33 @@ def get_recent_alerts(caregiver_id):
         # Return error response with status code 500
         return jsonify({"success": False, "error": str(e)}), 500
 
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/low_stock_alerts', methods=['GET'])
+def get_low_stock_alerts(caregiver_id):
+    try:
+        from models.notification_model import get_caregiver_stock_notification_rows
+        rows = get_caregiver_stock_notification_rows(caregiver_id)
+        return jsonify({"success": True, "data": rows})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/stock_notifications', methods=['GET'])
+def get_caregiver_stock_notifications(caregiver_id):
+    try:
+        from models.notification_model import get_caregiver_stock_notification_rows
+        rows = get_caregiver_stock_notification_rows(caregiver_id)
+        return jsonify({"success": True, "data": rows})
+    except Exception as e:
+        print(f"Error in stock_notifications: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/stock_notifications', methods=['GET'])
+def get_stock_notifications(caregiver_id):
+    try:
+        alerts = get_caregiver_stock_notification_rows(caregiver_id)
+        return jsonify({"success": True, "data": alerts})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/patients', methods=['GET'])
 def get_caregiver_patients(caregiver_id):
     try:
@@ -146,6 +180,22 @@ def update_caregiver(caregiver_id):
         return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url})
     except Exception as e:
         print(f"Update caregiver error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/notifications', methods=['GET'])
+def get_caregiver_notifications(caregiver_id):
+    try:
+        notifs = get_caregiver_notifications_model(caregiver_id)
+        return jsonify({"success": True, "data": notifs})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@caregiver_bp.route('/caregiver/notification/<int:notif_id>/read', methods=['PUT'])
+def mark_caregiver_notification_read(notif_id):
+    try:
+        mark_notification_as_read(notif_id)
+        return jsonify({"success": True})
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/analytics_overview', methods=['GET'])

@@ -1,5 +1,4 @@
 // lib/screens/patient/patient_inventory_page.dart
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -16,8 +15,6 @@ class PatientInventoryPage extends StatefulWidget {
 }
 
 class _PatientInventoryPageState extends State<PatientInventoryPage> {
-  
-
   bool _isLoading = true;
   bool _isRefreshing = false;
   String _errorMessage = '';
@@ -118,8 +115,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
               border: OutlineInputBorder(),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty)
+              if (value == null || value.isEmpty) {
                 return 'Please enter a quantity';
+              }
               final qty = int.tryParse(value);
               if (qty == null || qty <= 0) return 'Enter a positive number';
               return null;
@@ -206,7 +204,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   Future<void> _controlDisplay(String command) async {
-    final success = await DeviceService().controlDisplay(widget.userId, command);
+    final success = await DeviceService().controlDisplay(
+      widget.userId,
+      command,
+    );
     String message = command == 'hello'
         ? 'Displayed "Hello World"'
         : command == 'clear'
@@ -442,8 +443,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/led/on', 'LED ON'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.15),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.15,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -456,8 +458,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/led/off', 'LED OFF'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.15),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.15,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -474,8 +477,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/buzzer/on', 'Buzzer ON'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.15),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.15,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -488,8 +492,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/buzzer/off', 'Buzzer OFF'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.1),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.1,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),

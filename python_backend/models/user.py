@@ -112,7 +112,7 @@ def delete_patient_cascade(patient_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM ai_adherence_prediction WHERE patient_id = %s', (patient_id,))
-        cursor.execute('DELETE FROM notifications WHERE patient_id = %s', (patient_id,))
+        cursor.execute('DELETE FROM notifications WHERE recipient_id = %s', (patient_id,))
         cursor.execute('''
             DELETE FROM adherence_logs 
             WHERE prescription_id IN (SELECT prescription_id FROM prescription_config WHERE patient_id = %s)

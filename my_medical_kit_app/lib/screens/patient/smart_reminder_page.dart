@@ -146,12 +146,73 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
   }
 
   // 🌟 新增：格式化通知的具体生成时间 (方便区分 48 和 49)
+  // 🌟 Modified: Format time to 12-hour (AM/PM) system
   String _formatNotificationTime(DateTime time) {
+    final year = time.year.toString(); // 🌟 ADDED YEAR
     final month = time.month.toString().padLeft(2, '0');
     final day = time.day.toString().padLeft(2, '0');
-    final hour = time.hour.toString().padLeft(2, '0');
+
+    int hour = time.hour;
     final minute = time.minute.toString().padLeft(2, '0');
-    return '$day/$month at $hour:$minute';
+    final amPm = hour >= 12 ? 'PM' : 'AM';
+
+    hour = hour % 12;
+    if (hour == 0) hour = 12;
+
+    // 🌟 ADDED YEAR TO THE OUTPUT STRING
+    return '$day/$month/$year at $hour:$minute $amPm';
+  }
+
+  // 🌟 NEW: Translates a cron string (e.g., "53 15 * * *") into readable text
+  String _getReadableSchedule(String cronExp) {
+    try {
+      final parts = cronExp.trim().split(RegExp(r'\s+'));
+      if (parts.length < 5) return cronExp; // Fallback if format is weird
+
+      final minuteStr = parts[0];
+      final hourStr = parts[1];
+      final daysOfWeekStr = parts[4];
+
+      // Format Time
+      String timeString = '';
+      if (minuteStr != '*' && hourStr != '*') {
+        int h = int.parse(hourStr);
+        int m = int.parse(minuteStr);
+        final amPm = h >= 12 ? 'PM' : 'AM';
+
+        int displayHour = h % 12;
+        if (displayHour == 0) displayHour = 12;
+        final displayMinute = m.toString().padLeft(2, '0');
+
+        timeString = '$displayHour:$displayMinute $amPm';
+      } else {
+        timeString = 'Various times';
+      }
+
+      // Format Days
+      String daysString = '';
+      if (daysOfWeekStr == '*') {
+        daysString = 'Daily';
+      } else {
+        final dayNames = {
+          '0': 'Sun',
+          '1': 'Mon',
+          '2': 'Tue',
+          '3': 'Wed',
+          '4': 'Thu',
+          '5': 'Fri',
+          '6': 'Sat',
+          '7': 'Sun',
+        };
+        final dayNums = daysOfWeekStr.split(',');
+        final mappedDays = dayNums.map((d) => dayNames[d.trim()] ?? d).toList();
+        daysString = mappedDays.join(', ');
+      }
+
+      return '$daysString at $timeString';
+    } catch (e) {
+      return cronExp; // Fallback to raw cron string if parsing fails
+    }
   }
 
   Widget _buildHeader() {
@@ -197,50 +258,116 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
               ),
               Row(
                 children: [
-                  GestureDetector(
-                    onTap: () async {
-                      await ReminderService.triggerTestDualNotification(
-                        context,
-                      );
-                      _loadMedications();
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 10),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.orangeAccent.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.bug_report,
-                        color: Colors.white,
-                        size: 18,
+                  // 🌟 CHANGED: Mark All As Read Text Button
+                  if (_reminders.isNotEmpty)
+                    GestureDetector(
+                      onTap: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Mark all as read?'),
+                            content: const Text(
+                              'This will dismiss all active reminders.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryPurple,
+                                ),
+                                child: const Text(
+                                  'Yes',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirm != true) return;
+
+                        // Mark all currently displayed notifications as read
+                        for (var item in _reminders) {
+                          await PatientService().markNotificationRead(
+                            item.notification.notificationId,
+                          );
+                        }
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('All reminders cleared'),
+                              backgroundColor: Colors.teal,
+                            ),
+                          );
+                          _loadMedications();
+                        }
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          'Read All',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold, // 🌟 Still bold!
+                            fontSize:
+                                16, // Made slightly bigger since it has no background
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Checking schedule...')),
-                      );
-                      await ReminderService.checkAndSendReminders();
-                      if (mounted) {
-                        await _loadMedications();
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.sync,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
+
+                  // GestureDetector(
+                  //   onTap: () async {
+                  //     await ReminderService.triggerTestDualNotification(
+                  //       context,
+                  //     );
+                  //     _loadMedications();
+                  //   },
+                  //   child: Container(
+                  //     margin: const EdgeInsets.only(right: 10),
+                  //     padding: const EdgeInsets.all(10),
+                  //     decoration: BoxDecoration(
+                  //       color: Colors.orangeAccent.withValues(alpha: 0.8),
+                  //       borderRadius: BorderRadius.circular(12),
+                  //     ),
+                  //     child: const Icon(
+                  //       Icons.bug_report,
+                  //       color: Colors.white,
+                  //       size: 18,
+                  //     ),
+                  //   ),
+                  // ),
+                  // GestureDetector(
+                  //   onTap: () async {
+                  //     ScaffoldMessenger.of(context).showSnackBar(
+                  //       const SnackBar(content: Text('Checking schedule...')),
+                  //     );
+                  //     await ReminderService.checkAndSendReminders();
+                  //     if (mounted) {
+                  //       await _loadMedications();
+                  //     }
+                  //   },
+                  //   child: Container(
+                  //     padding: const EdgeInsets.all(10),
+                  //     decoration: BoxDecoration(
+                  //       color: Colors.white.withValues(alpha: 0.2),
+                  //       borderRadius: BorderRadius.circular(12),
+                  //     ),
+                  //     child: const Icon(
+                  //       Icons.sync,
+                  //       color: Colors.white,
+                  //       size: 18,
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ],
@@ -368,34 +495,108 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             ),
                                           ),
                                           const SizedBox(height: 6),
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.access_time,
-                                                size: 16,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                // 🌟 核心：显示这个通知真正发生的时间！
-                                                _formatNotificationTime(
-                                                  notif.createdAt,
-                                                ),
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  color:
-                                                      Colors.redAccent.shade700,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
+                                          Text(
+                                            'Created: ${_formatNotificationTime(notif.createdAt)}',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: AppColors
+                                                  .primaryPurple, // 🌟 CHANGED TO PURPLE
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 16),
+                                // 🌟 NEW: Display Notification Message
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Message:',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        notif.message,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: AppColors.textDark,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // 🌟 NEW: Display Type & Dispense Schedule
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.label_outline,
+                                            size: 16,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Type: ${notif.type}',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule,
+                                            size: 16,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              _getReadableSchedule(
+                                                med.dispenseSchedule,
+                                              ), // 🌟 Now uses the translator!
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey.shade700,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              overflow: TextOverflow
+                                                  .ellipsis, // Prevents overflow if days list is long
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 16),
                                 Row(
                                   children: [
                                     Icon(

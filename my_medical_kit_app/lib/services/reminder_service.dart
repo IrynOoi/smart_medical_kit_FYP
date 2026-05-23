@@ -10,6 +10,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:workmanager/workmanager.dart';
 
 import '../models/prescription.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:my_medical_kit_app/services/api/medication_service.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'app_navigator.dart';
@@ -25,9 +26,14 @@ void notificationTapBackground(NotificationResponse notificationResponse) {}
 class ReminderService {
   static const String reminderTask = 'medicationReminderTask';
   static const String _payloadSmartReminder = 'smart_reminder';
+  static const String _payloadCaregiverStock = 'caregiver_stock_alert';
   static const String _channelId = 'medication_channel';
   static const String _channelName = 'Medication Reminders';
   static const String _channelDescription = 'Reminders to take your medicine';
+  static const String _stockChannelId = 'caregiver_stock_channel';
+  static const String _stockChannelName = 'Caregiver Stock Alerts';
+  static const String _stockChannelDescription =
+      'Low stock and out of stock medicine alerts for caregivers';
   static const String _askedExactAlarmPermissionKey =
       'asked_exact_alarm_permission';
 
@@ -49,9 +55,19 @@ class ReminderService {
     // );
 
     final prefs = await SharedPreferences.getInstance();
+    final role = prefs.getString('role');
     final patientId = prefs.getInt('patient_id');
-    if (patientId != null && patientId > 0) {
+    if ((role == null || role == 'patient') &&
+        patientId != null &&
+        patientId > 0) {
       unawaited(scheduleUpcomingMedicationReminders(patientId));
+    }
+
+    final caregiverId = prefs.getInt('caregiver_id');
+    if ((role == null || role == 'caregiver') &&
+        caregiverId != null &&
+        caregiverId > 0) {
+      unawaited(checkAndSendCaregiverStockAlerts(caregiverId: caregiverId));
     }
   }
 
@@ -122,13 +138,26 @@ class ReminderService {
   }
 
   static void _handleNotificationResponse(NotificationResponse response) {
-    if (response.payload != _payloadSmartReminder) return;
-    unawaited(_openSmartReminderWhenReady());
+    if (response.payload == _payloadSmartReminder) {
+      unawaited(_openSmartReminderWhenReady());
+      return;
+    }
+
+    if (response.payload == _payloadCaregiverStock) {
+      unawaited(_openCaregiverNotificationsWhenReady());
+    }
   }
 
   static Future<void> _openSmartReminderWhenReady() async {
     for (int i = 0; i < 12; i++) {
       if (openSmartReminderPage()) return;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+  }
+
+  static Future<void> _openCaregiverNotificationsWhenReady() async {
+    for (int i = 0; i < 12; i++) {
+      if (openCaregiverNotificationsPage()) return;
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
   }
@@ -199,6 +228,38 @@ class ReminderService {
           );
         }
       }
+    }
+  }
+
+  static Future<void> checkAndSendCaregiverStockAlerts({
+    int? caregiverId,
+    List<Map<String, dynamic>>? notifications,
+  }) async {
+    await _initializeNotifications();
+
+    try {
+      await requestNotificationPermissions();
+    } catch (e) {
+      debugPrint('Caregiver stock notification permission failed: $e');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final id = caregiverId ?? prefs.getInt('caregiver_id');
+    if (id == null || id <= 0) return;
+
+    final stockAlerts =
+        notifications ??
+        await CaregiverService().getCaregiverStockNotifications(id);
+
+    for (final alert in stockAlerts) {
+      final type = (alert['type'] ?? '').toString();
+      if (!_isStockAlertType(type) || _isRead(alert['is_read'])) continue;
+
+      final cacheKey = _caregiverStockShownCacheKey(alert);
+      if (prefs.getBool(cacheKey) ?? false) continue;
+
+      await _showCaregiverStockNotification(alert);
+      await prefs.setBool(cacheKey, true);
     }
   }
 
@@ -334,6 +395,33 @@ class ReminderService {
       _systemReminderMessage(medName, dosage),
       _notificationDetails,
       payload: _payloadSmartReminder,
+    );
+  }
+
+  static Future<void> _showCaregiverStockNotification(
+    Map<String, dynamic> alert,
+  ) async {
+    final type = (alert['type'] ?? '').toString();
+    final medicationName = (alert['medication_name'] ?? 'Medicine').toString();
+    final patientName = (alert['patient_name'] ?? 'assigned patient')
+        .toString();
+    final currentInventory = _asInt(alert['current_inventory']) ?? 0;
+    final refillThreshold = _asInt(alert['refill_threshold']) ?? 0;
+    final title = (alert['title'] ?? '').toString().trim().isNotEmpty
+        ? alert['title'].toString()
+        : type == 'OUT_OF_STOCK'
+        ? 'Medicine Out of Stock'
+        : 'Medicine Low Stock';
+    final body = type == 'OUT_OF_STOCK'
+        ? '$medicationName for $patientName is out of stock. Please restock immediately.'
+        : '$medicationName for $patientName is running low. $currentInventory left, threshold $refillThreshold.';
+
+    await _notifications.show(
+      _caregiverStockNotificationId(alert),
+      title,
+      body,
+      _stockNotificationDetails,
+      payload: _payloadCaregiverStock,
     );
   }
 
@@ -499,6 +587,19 @@ class ReminderService {
     return ((prescriptionId * 1000003) + minuteBucket) & 0x7fffffff;
   }
 
+  static int _caregiverStockNotificationId(Map<String, dynamic> alert) {
+    final notificationId = _asInt(alert['notification_id']);
+    if (notificationId != null) {
+      return (900000000 + notificationId) & 0x7fffffff;
+    }
+
+    final medicationId = _asInt(alert['medication_id']) ?? 0;
+    final patientId = _asInt(alert['patient_id']) ?? 0;
+    final deviceId = _asInt(alert['device_id']) ?? 0;
+    return ((medicationId * 1000003) + (patientId * 1009) + deviceId) &
+        0x7fffffff;
+  }
+
   static String _scheduledIdsKey(int patientId) =>
       'scheduled_reminder_ids_$patientId';
 
@@ -515,9 +616,38 @@ class ReminderService {
     DateTime scheduledAt,
   ) => 'local_scheduled_${prescriptionId}_${_scheduleKey(scheduledAt)}';
 
+  static String _caregiverStockShownCacheKey(Map<String, dynamic> alert) {
+    final notificationId = _asInt(alert['notification_id']);
+    if (notificationId != null) {
+      return 'caregiver_stock_shown_$notificationId';
+    }
+
+    final type = (alert['type'] ?? '').toString();
+    final medicationId = _asInt(alert['medication_id']) ?? 0;
+    final patientId = _asInt(alert['patient_id']) ?? 0;
+    final deviceId = _asInt(alert['device_id']) ?? 0;
+    final currentInventory = _asInt(alert['current_inventory']) ?? 0;
+    return 'caregiver_stock_shown_${type}_${medicationId}_${patientId}_${deviceId}_$currentInventory';
+  }
+
   static String _scheduleKey(DateTime scheduledAt) {
     String two(int value) => value.toString().padLeft(2, '0');
     return '${scheduledAt.year}${two(scheduledAt.month)}${two(scheduledAt.day)}_${two(scheduledAt.hour)}${two(scheduledAt.minute)}';
+  }
+
+  static bool _isStockAlertType(String type) {
+    return type == 'LOW_STOCK' || type == 'OUT_OF_STOCK';
+  }
+
+  static bool _isRead(dynamic value) {
+    return value == true || value == 1 || value == '1' || value == 'true';
+  }
+
+  static int? _asInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
   }
 
   static Future<void> _createInAppNotificationOnce({
@@ -545,18 +675,6 @@ class ReminderService {
     await prefs.setBool(recordedKey, true);
   }
 
-  static String _inAppReminderMessage(
-    Prescription prescription,
-    DateTime scheduledAt,
-  ) {
-    return 'Time to take ${prescription.dosageTablet.toStringAsFixed(0)} tablet(s) of ${prescription.medicationName} at ${_formatScheduledAt(scheduledAt)}.';
-  }
-
-  static String _formatScheduledAt(DateTime scheduledAt) {
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${scheduledAt.year}-${two(scheduledAt.month)}-${two(scheduledAt.day)} ${two(scheduledAt.hour)}:${two(scheduledAt.minute)}';
-  }
-
   static String _systemReminderMessage(String medName, double dosage) {
     return 'Take ${dosage.toStringAsFixed(0)} tablet(s) of $medName.\nPress the button on your medical kit.';
   }
@@ -577,4 +695,22 @@ class ReminderService {
       presentSound: true,
     ),
   );
+
+  static const NotificationDetails _stockNotificationDetails =
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _stockChannelId,
+          _stockChannelName,
+          channelDescription: _stockChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          ticker: 'Caregiver stock alert',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
 }

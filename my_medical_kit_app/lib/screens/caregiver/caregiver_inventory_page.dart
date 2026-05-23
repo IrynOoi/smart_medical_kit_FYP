@@ -1,5 +1,4 @@
-// lib/screens/inventory_management_page.dart
-
+// lib/screens/caregiver_inventory_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -24,8 +23,6 @@ class CaregiverInventoryPage extends StatefulWidget {
 }
 
 class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
-  
-
   List<Map<String, dynamic>> _deviceInventoryList = [];
   bool _isLoadingDeviceInventory = false;
 
@@ -53,7 +50,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   static const int _onlineThresholdHours = 24;
 
   // Direct ESP32 test section variables
-  String _testEspIp = "172.20.10.2";
+  String _testEspIp = "";
   int _selectedTestMotor = 1;
   final TextEditingController _espIpController = TextEditingController();
 
@@ -76,6 +73,67 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     }
   }
 
+  // Future<void> _scanForDevice() async {
+  //   setState(() => _isRefreshing = true);
+
+  //   // 获取当前手机连接的 Wi-Fi 网段前缀 (简单处理)
+  //   // 你也可以根据需求扫描 192.168.0.x 或 192.168.1.x
+  //   String subnet = "192.168.0";
+
+  //   for (int i = 2; i < 20; i++) {
+  //     // 只扫描 2-20，速度很快
+  //     String ip = "$subnet.$i";
+  //     String testUrl = "http://$ip:5000/device/heartbeat"; // 借用心跳接口测试存活
+
+  //     try {
+  //       final response = await http
+  //           .post(
+  //             Uri.parse(testUrl),
+  //             headers: {
+  //               'Content-Type': 'application/json',
+  //               'ngrok-skip-browser-warning': 'true',
+  //             },
+  //             body: jsonEncode({'device_serial': 'DISP-1'}), // 发送一个空心跳
+  //           )
+  //           .timeout(const Duration(milliseconds: 500)); // 快速超时
+
+  //       if (response.statusCode == 200) {
+  //         setState(() {
+  //           _testEspIp = ip;
+  //           _espIpController.text = ip;
+  //         });
+
+  //         // 自动调用配置接口，告诉 ESP32 谁是服务器
+  //         await _configureEspIp(ip);
+
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(
+  //             content: Text('✅ Found Device at $ip'),
+  //             backgroundColor: Colors.green,
+  //           ),
+  //         );
+  //         break;
+  //       }
+  //     } catch (e) {
+  //       // 忽略扫描过程中的超时错误
+  //     }
+  //   }
+  //   setState(() => _isRefreshing = false);
+  // }
+
+  // 辅助：告诉 ESP32 记住当前电脑的 IP
+  Future<void> _configureEspIp(String espIp) async {
+    // 获取你电脑当前的局域网 IP (可以通过 API 获取或手动指定)
+    String myComputerIp = "192.168.0.7";
+    try {
+      await http.get(
+        Uri.parse('http://$espIp:80/config/setip?ip=$myComputerIp'),
+      );
+    } catch (e) {
+      print("Config error: $e");
+    }
+  }
+
   Future<void> _onDeviceSelected(int? deviceId) async {
     if (deviceId == null) return;
     setState(() {
@@ -88,9 +146,13 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     if (device != null && device.isNotEmpty) {
       setState(() {
         _selectedDeviceDetail = device;
+        // 关键点：动态更新输入框为数据库里的 IP
+        if (device['last_known_ip'] != null) {
+          _testEspIp = device['last_known_ip'];
+          _espIpController.text = _testEspIp; // This updates the UI box
+        }
       });
     }
-
     await _loadDeviceInventory(deviceId);
 
     // Find patient assigned to this device (for control commands)
@@ -204,30 +266,48 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   // }
 
   Future<void> _loadCaregiverData() async {
-    final patients = await CaregiverService().getCaregiverPatients(widget.userId);
+    final patients = await CaregiverService().getCaregiverPatients(
+      widget.userId,
+    );
     for (var patient in patients) {
       _patientNames[patient['patient_id']] = patient['full_name'] ?? 'Unknown';
     }
 
-    _inventoryList = [];
+    // Use a Map to group medications by name
+    Map<String, Map<String, dynamic>> consolidatedInventory = {};
+
     for (var patient in patients) {
       final patientId = patient['patient_id'];
-      final prescriptions = await MedicationService().getPatientMedications(patientId);
+      final prescriptions = await MedicationService().getPatientMedications(
+        patientId,
+      );
+
       for (var med in prescriptions) {
-        _inventoryList.add({
-          'prescription_id': med.prescriptionId,
-          'medication_name': med.medicationName,
-          'current_inventory': med.currentInventory,
-          'refill_threshold': med.refillThreshold,
-          'patient_name': _patientNames[patientId],
-          'patient_id': patientId,
-          'dosage_tablet': med.dosageTablet,
-          'device_id': med.deviceId,
-        });
+        String medName = med.medicationName;
+
+        if (consolidatedInventory.containsKey(medName)) {
+          // If it exists, just add the current inventory to the existing total
+          consolidatedInventory[medName]!['current_inventory'] +=
+              med.currentInventory;
+        } else {
+          // Otherwise, add a new entry
+          consolidatedInventory[medName] = {
+            'prescription_id': med.prescriptionId,
+            'medication_name': medName,
+            'current_inventory': med.currentInventory,
+            'refill_threshold': med.refillThreshold,
+            'patient_name': 'Multiple Patients', // Or handle this differently
+            'patient_id': patientId,
+            'dosage_tablet': med.dosageTablet,
+            'device_id': med.deviceId,
+          };
+        }
       }
     }
 
-    // For caregiver view, device info is not shown; set a placeholder.
+    // Convert map values back to the list
+    _inventoryList = consolidatedInventory.values.toList();
+
     _deviceData = {
       'device_serial': 'N/A',
       'battery_level': null,
@@ -238,28 +318,46 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   Future<void> _loadDeviceInventory(int deviceId) async {
     setState(() => _isLoadingDeviceInventory = true);
     try {
-      final prescriptions = await DeviceService().getDevicePrescriptions(deviceId);
-      final List<Map<String, dynamic>> inventory = [];
+      final prescriptions = await DeviceService().getDevicePrescriptions(
+        deviceId,
+      );
+      print("API Response: $prescriptions"); // ADD THIS TO DEBUG
+      // --- ADD THIS LINE ---
+      debugPrint("Raw API Response: $prescriptions");
+
+      Map<String, Map<String, dynamic>> groupedInventory = {};
+
       for (var med in prescriptions) {
         final medMap = med as Map<String, dynamic>;
-        String patientName = '';
-        final patId = medMap['patient_id'];
-        if (patId != null && _patientNames.containsKey(patId)) {
-          patientName = _patientNames[patId]!;
+        String name = medMap['medication_name'];
+
+        // Use the actual values from the API
+        int currentInv = (medMap['current_inventory'] as num?)?.toInt() ?? 0;
+        int threshold = (medMap['refill_threshold'] as num?)?.toInt() ?? 0;
+
+        if (!groupedInventory.containsKey(name)) {
+          groupedInventory[name] = {
+            'medication_name': name,
+            'prescriptions': [],
+            'current_inventory_total': 0,
+            'refill_threshold': threshold,
+            'device_id': medMap['device_id'],
+          };
         }
-        inventory.add({
+
+        groupedInventory[name]!['prescriptions'].add({
           'prescription_id': medMap['prescription_id'],
-          'medication_name': medMap['medication_name'],
-          'current_inventory': medMap['current_inventory'],
-          'refill_threshold': medMap['refill_threshold'],
-          'patient_name': patientName,
-          'patient_id': patId,
-          'dosage_tablet': medMap['dosage_tablet'],
-          'device_id': medMap['device_id'],
+          'patient_name': medMap['patient_name'] ?? 'Unknown',
+          'current_inventory': currentInv,
+          'refill_threshold': threshold,
         });
+
+        // SUM the inventory correctly
+        groupedInventory[name]!['current_inventory_total'] += currentInv;
       }
+
       setState(() {
-        _deviceInventoryList = inventory;
+        _deviceInventoryList = groupedInventory.values.toList();
       });
     } catch (e) {
       print('Error loading device inventory: $e');
@@ -634,7 +732,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           ],
         ),
         child: DropdownButtonFormField<int>(
-          value: _selectedDeviceId,
+          initialValue: _selectedDeviceId,
           hint: const Text('Select a device serial'),
           isExpanded: true,
           decoration: const InputDecoration(
@@ -825,198 +923,198 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     );
   }
 
-  // ------------------------------------------------------------
-  // PATIENT CONTROLS (includes device status card for caregiver)
-  // ------------------------------------------------------------
-  Widget _buildPatientControls() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Patient selector for caregiver (only visible if role == caregiver)
-          if (_controlPatientOptions.isNotEmpty) _buildPatientSelector(),
-          const SizedBox(height: 16),
+  // // ------------------------------------------------------------
+  // // PATIENT CONTROLS (includes device status card for caregiver)
+  // // ------------------------------------------------------------
+  // Widget _buildPatientControls() {
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(horizontal: 20),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         // Patient selector for caregiver (only visible if role == caregiver)
+  //         if (_controlPatientOptions.isNotEmpty) _buildPatientSelector(),
+  //         const SizedBox(height: 16),
 
-          // Device status card (show only for caregiver, patient already has header)
-          _buildDeviceStatusCard(),
-          const SizedBox(height: 16),
+  //         // Device status card (show only for caregiver, patient already has header)
+  //         _buildDeviceStatusCard(),
+  //         const SizedBox(height: 16),
 
-          const Text(
-            'Remote Device Control',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textDark,
-            ),
-          ),
-          const SizedBox(height: 12),
+  //         const Text(
+  //           'Remote Device Control',
+  //           style: TextStyle(
+  //             fontSize: 18,
+  //             fontWeight: FontWeight.bold,
+  //             color: AppColors.textDark,
+  //           ),
+  //         ),
+  //         const SizedBox(height: 12),
 
-          // LED & Buzzer Row
-          _buildControlCard(
-            title: 'LED',
-            icon: Icons.highlight,
-            color: Colors.amber,
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _controlLed(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('ON'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _controlLed(false),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('OFF'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
+  //         // LED & Buzzer Row
+  //         _buildControlCard(
+  //           title: 'LED',
+  //           icon: Icons.highlight,
+  //           color: Colors.amber,
+  //           child: Row(
+  //             children: [
+  //               Expanded(
+  //                 child: ElevatedButton(
+  //                   onPressed: () => _controlLed(true),
+  //                   style: ElevatedButton.styleFrom(
+  //                     backgroundColor: Colors.green,
+  //                     foregroundColor: Colors.white,
+  //                     shape: RoundedRectangleBorder(
+  //                       borderRadius: BorderRadius.circular(12),
+  //                     ),
+  //                   ),
+  //                   child: const Text('ON'),
+  //                 ),
+  //               ),
+  //               const SizedBox(width: 12),
+  //               Expanded(
+  //                 child: ElevatedButton(
+  //                   onPressed: () => _controlLed(false),
+  //                   style: ElevatedButton.styleFrom(
+  //                     backgroundColor: Colors.red,
+  //                     foregroundColor: Colors.white,
+  //                     shape: RoundedRectangleBorder(
+  //                       borderRadius: BorderRadius.circular(12),
+  //                     ),
+  //                   ),
+  //                   child: const Text('OFF'),
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //         const SizedBox(height: 12),
 
-          _buildControlCard(
-            title: 'Buzzer',
-            icon: Icons.volume_up,
-            color: Colors.deepPurple,
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _controlBuzzer(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('ON'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _controlBuzzer(false),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('OFF'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
+  //         _buildControlCard(
+  //           title: 'Buzzer',
+  //           icon: Icons.volume_up,
+  //           color: Colors.deepPurple,
+  //           child: Row(
+  //             children: [
+  //               Expanded(
+  //                 child: ElevatedButton(
+  //                   onPressed: () => _controlBuzzer(true),
+  //                   style: ElevatedButton.styleFrom(
+  //                     backgroundColor: Colors.green,
+  //                     foregroundColor: Colors.white,
+  //                     shape: RoundedRectangleBorder(
+  //                       borderRadius: BorderRadius.circular(12),
+  //                     ),
+  //                   ),
+  //                   child: const Text('ON'),
+  //                 ),
+  //               ),
+  //               const SizedBox(width: 12),
+  //               Expanded(
+  //                 child: ElevatedButton(
+  //                   onPressed: () => _controlBuzzer(false),
+  //                   style: ElevatedButton.styleFrom(
+  //                     backgroundColor: Colors.red,
+  //                     foregroundColor: Colors.white,
+  //                     shape: RoundedRectangleBorder(
+  //                       borderRadius: BorderRadius.circular(12),
+  //                     ),
+  //                   ),
+  //                   child: const Text('OFF'),
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //         const SizedBox(height: 12),
 
-          _buildControlCard(
-            title: 'OLED Display',
-            icon: Icons.screenshot,
-            color: Colors.teal,
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _buildDisplayButton('hello', 'Hello', Icons.text_fields),
-                _buildDisplayButton('clear', 'Clear', Icons.clear),
-                _buildDisplayButton('sv', 'Supervisor', Icons.person),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
+  //         _buildControlCard(
+  //           title: 'OLED Display',
+  //           icon: Icons.screenshot,
+  //           color: Colors.teal,
+  //           child: Wrap(
+  //             spacing: 12,
+  //             runSpacing: 12,
+  //             children: [
+  //               _buildDisplayButton('hello', 'Hello', Icons.text_fields),
+  //               _buildDisplayButton('clear', 'Clear', Icons.clear),
+  //               _buildDisplayButton('sv', 'Supervisor', Icons.person),
+  //             ],
+  //           ),
+  //         ),
+  //         const SizedBox(height: 12),
 
-          _buildControlCard(
-            title: 'Stepper Motors',
-            icon: Icons.settings,
-            color: Colors.orange,
-            child: Column(
-              children: [
-                _buildMotorRow(1, Colors.blue),
-                const SizedBox(height: 12),
-                _buildMotorRow(2, Colors.green),
-                const SizedBox(height: 12),
-                _buildMotorRow(3, Colors.purple),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  //         _buildControlCard(
+  //           title: 'Stepper Motors',
+  //           icon: Icons.settings,
+  //           color: Colors.orange,
+  //           child: Column(
+  //             children: [
+  //               _buildMotorRow(1, Colors.blue),
+  //               const SizedBox(height: 12),
+  //               _buildMotorRow(2, Colors.green),
+  //               const SizedBox(height: 12),
+  //               _buildMotorRow(3, Colors.purple),
+  //             ],
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  Widget _buildPatientSelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Select Patient',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: AppColors.textDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            value: _selectedControlPatientId,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            items: _controlPatientOptions.entries.map((entry) {
-              return DropdownMenuItem<int>(
-                value: entry.key,
-                child: Text(entry.value),
-              );
-            }).toList(),
-            onChanged: (value) async {
-              setState(() {
-                _selectedControlPatientId = value;
-              });
-              if (value != null) {
-                await _fetchDeviceForPatient(value);
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildPatientSelector() {
+  //   return Container(
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(20),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withValues(alpha: 0.04),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, 4),
+  //         ),
+  //       ],
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         const Text(
+  //           'Select Patient',
+  //           style: TextStyle(
+  //             fontWeight: FontWeight.bold,
+  //             fontSize: 14,
+  //             color: AppColors.textDark,
+  //           ),
+  //         ),
+  //         const SizedBox(height: 8),
+  //         DropdownButtonFormField<int>(
+  //           initialValue: _selectedControlPatientId,
+  //           decoration: InputDecoration(
+  //             border: OutlineInputBorder(
+  //               borderRadius: BorderRadius.circular(12),
+  //             ),
+  //             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+  //           ),
+  //           items: _controlPatientOptions.entries.map((entry) {
+  //             return DropdownMenuItem<int>(
+  //               value: entry.key,
+  //               child: Text(entry.value),
+  //             );
+  //           }).toList(),
+  //           onChanged: (value) async {
+  //             setState(() {
+  //               _selectedControlPatientId = value;
+  //             });
+  //             if (value != null) {
+  //               await _fetchDeviceForPatient(value);
+  //             }
+  //           },
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Widget _buildDeviceStatusCard() {
     final serial = _selectedPatientDevice['device_serial'] ?? 'Unknown';
@@ -1292,6 +1390,15 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       ),
                     ),
                   ),
+
+                  // IconButton(
+                  //   icon: const Icon(
+                  //     Icons.wifi_find,
+                  //     color: AppColors.primaryPurple,
+                  //   ),
+                  //   onPressed: _scanForDevice,
+                  //   tooltip: 'Scan Network',
+                  // ),
                   SizedBox(
                     width: 140,
                     child: TextFormField(
@@ -1320,14 +1427,16 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () =>
-                              _sendDirectCommand('/led/on', 'LED ON'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.15),
-                            foregroundColor: AppColors.primaryPurple,
-                            elevation: 0,
-                          ),
+                          // 修改后（调用 DeviceService）
+                          onPressed: () async {
+                            if (_selectedControlPatientId == null) return;
+                            // 调用你已经写好的 Service 方法
+                            final success = await DeviceService().controlLed(
+                              _selectedControlPatientId!,
+                              true,
+                            );
+                            _showControlResult(success, 'LED ON');
+                          },
                           child: const Text('LED ON'),
                         ),
                       ),
@@ -1337,8 +1446,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/led/off', 'LED OFF'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.15),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.15,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1355,8 +1465,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/buzzer/on', 'Buzzer ON'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.15),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.15,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1369,8 +1480,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                           onPressed: () =>
                               _sendDirectCommand('/buzzer/off', 'Buzzer OFF'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.1),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.1,
+                            ),
                             foregroundColor: AppColors.primaryPurple,
                             elevation: 0,
                           ),
@@ -1527,16 +1639,16 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     if (_deviceInventoryList.isEmpty) return const SizedBox.shrink();
 
     int totalItems = _deviceInventoryList.length;
-    int lowStockCount = _deviceInventoryList
-        .where(
-          (med) =>
-              (med['current_inventory'] as int) <=
-              (med['refill_threshold'] as int),
-        )
-        .length;
-    int outOfStockCount = _deviceInventoryList
-        .where((med) => (med['current_inventory'] as int) == 0)
-        .length;
+    int lowStockCount = _deviceInventoryList.where((med) {
+      final current = (med['current_inventory_total'] as num?)?.toInt() ?? 0;
+      final threshold = (med['refill_threshold'] as num?)?.toInt() ?? 0;
+      return current > 0 && current <= threshold;
+    }).length;
+
+    int outOfStockCount = _deviceInventoryList.where((med) {
+      final current = (med['current_inventory_total'] as num?)?.toInt() ?? 0;
+      return current == 0;
+    }).length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1669,193 +1781,330 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     );
   }
 
+  Widget _buildPatientListPreview(List<dynamic> prescriptions) {
+    // Extract unique patient names
+    List<String> patientNames = prescriptions
+        .map((p) => p['patient_name'] as String)
+        .toList();
+    // Remove duplicates (if same patient has multiple prescriptions of same drug? can happen)
+    patientNames = patientNames.toSet().toList();
+
+    const int maxPreview = 2; // show max 2 names
+    String displayText = '';
+    if (patientNames.length <= maxPreview) {
+      displayText = patientNames.join(', ');
+    } else {
+      displayText =
+          '${patientNames.take(maxPreview).join(', ')} + ${patientNames.length - maxPreview} more';
+    }
+
+    return Text(
+      'Patient: $displayText',
+      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  void _showMedicationDetailDialog(Map<String, dynamic> medicationGroup) {
+    final prescriptions = List<Map<String, dynamic>>.from(
+      medicationGroup['prescriptions'],
+    );
+    final totalInventory = medicationGroup['current_inventory_total'];
+    final medicationName = medicationGroup['medication_name'];
+    final quantityController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$medicationName Details'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Total pills remaining: $totalInventory'),
+                const SizedBox(height: 12),
+                const Text(
+                  'Medicine assigned to :',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...prescriptions.map(
+                  (p) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 2, child: Text(p['patient_name'])),
+
+                        if (p['current_inventory'] <= p['refill_threshold'])
+                          Icon(Icons.warning, color: Colors.orange, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 24),
+                const Text(
+                  'Restock this medication for all patients:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Number of pills to add for this medicine',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter a quantity';
+                    }
+                    final qty = int.tryParse(value);
+                    if (qty == null || qty <= 0) {
+                      return 'Enter a positive number';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final quantity = int.parse(quantityController.text);
+                Navigator.pop(context); // close dialog
+                await _restockAllPrescriptions(
+                  prescriptions,
+                  medicationName,
+                  quantity,
+                );
+              }
+            },
+            child: const Text('Restock All'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _restockAllPrescriptions(
+    List<Map<String, dynamic>> prescriptions,
+    String medicationName,
+    int quantity,
+  ) async {
+    // Show a loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    bool allSuccess = true;
+    for (var p in prescriptions) {
+      final prescriptionId = p['prescription_id'];
+      final success = await MedicationService().restockMedication(
+        prescriptionId,
+        quantity,
+      );
+      if (!success) allSuccess = false;
+    }
+
+    // Dismiss loading dialog
+    if (mounted) Navigator.pop(context);
+
+    if (!mounted) return;
+
+    if (allSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✅ Restocked $medicationName with ${quantity * prescriptions.length} total pills!',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _loadDeviceInventory(
+        _selectedDeviceId!,
+      ); // refresh inventory for current device
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Some restock operations failed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Widget _buildInventoryCard(Map<String, dynamic> med) {
-    final current = med['current_inventory'] as int;
-    final threshold = med['refill_threshold'] as int;
+    final current = (med['current_inventory_total'] as num?)?.toInt() ?? 0;
+    final threshold = (med['refill_threshold'] as num?)?.toInt() ?? 0;
     final isLowStock = current <= threshold;
     final isOutOfStock = current == 0;
-
-    // Set max for progress bar: either threshold * 2 or current, whichever is larger (minimum 10)
     final maxInventory = (threshold * 2) > current ? (threshold * 2) : current;
     final progressValue = maxInventory > 0
         ? (current / maxInventory).clamp(0.0, 1.0)
         : 0.0;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isOutOfStock
-              ? Colors.red.withValues(alpha: 0.3)
-              : isLowStock
-              ? Colors.orange.withValues(alpha: 0.3)
-              : Colors.transparent,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    // Entire card becomes tappable
+    return GestureDetector(
+      onTap: () => _showMedicationDetailDialog(med),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isOutOfStock
+                ? Colors.red.withValues(alpha: 0.3)
+                : isLowStock
+                ? Colors.orange.withValues(alpha: 0.3)
+                : Colors.transparent,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isOutOfStock
-                      ? Colors.red.withValues(alpha: 0.1)
-                      : isLowStock
-                      ? Colors.orange.withValues(alpha: 0.1)
-                      : Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isOutOfStock
-                      ? Icons.cancel
-                      : isLowStock
-                      ? Icons.warning
-                      : Icons.check_circle,
-                  color: isOutOfStock
-                      ? Colors.red
-                      : isLowStock
-                      ? Colors.orange
-                      : Colors.green,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      med['medication_name'],
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    if (med['patient_name'] != null &&
-                        (med['patient_name'] as String).isNotEmpty)
-                      Text(
-                        'Patient: ${med['patient_name']}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: isOutOfStock
-                      ? Colors.red.withValues(alpha: 0.1)
-                      : isLowStock
-                      ? Colors.orange.withValues(alpha: 0.1)
-                      : Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  isOutOfStock
-                      ? 'Empty'
-                      : (isLowStock ? 'Low Stock' : 'Sufficient'),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Icon (unchanged)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isOutOfStock
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : isLowStock
+                        ? Colors.orange.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isOutOfStock
+                        ? Icons.cancel
+                        : isLowStock
+                        ? Icons.warning
+                        : Icons.check_circle,
                     color: isOutOfStock
                         ? Colors.red
-                        : (isLowStock ? Colors.orange : Colors.green),
+                        : isLowStock
+                        ? Colors.orange
+                        : Colors.green,
+                    size: 20,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '$current left',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
+                const SizedBox(width: 12),
+                // Medication name + patient preview (no longer tappable separately)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        med['medication_name'],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          // No underline, because the whole card is tappable
+                          color: AppColors.primaryPurple,
                         ),
-                        Text(
-                          'Threshold: $threshold',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: progressValue,
-                      backgroundColor: Colors.grey.shade200,
+                      ),
+                      if (med['prescriptions'] != null &&
+                          med['prescriptions'].isNotEmpty)
+                        _buildPatientListPreview(med['prescriptions']),
+                    ],
+                  ),
+                ),
+                // Status label (unchanged)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isOutOfStock
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : isLowStock
+                        ? Colors.orange.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isOutOfStock
+                        ? 'Empty'
+                        : (isLowStock ? 'Low Stock' : 'Sufficient'),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                       color: isOutOfStock
                           ? Colors.red
                           : (isLowStock ? Colors.orange : Colors.green),
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
                     ),
-                  ],
-                ),
-              ),
-              if (isLowStock || isOutOfStock)
-                Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: ElevatedButton(
-                    onPressed: _isRefreshing
-                        ? null
-                        : () => _showRestockDialog(
-                            med['prescription_id'],
-                            med['medication_name'],
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryPurple,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isRefreshing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Restock',
-                            style: TextStyle(color: Colors.white),
-                          ),
                   ),
                 ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Progress bar (unchanged)
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$current left',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            'Threshold: $threshold',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: progressValue,
+                        backgroundColor: Colors.grey.shade200,
+                        color: isOutOfStock
+                            ? Colors.red
+                            : (isLowStock ? Colors.orange : Colors.green),
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ],
+                  ),
+                ),
+                // Restock button has been REMOVED – now only in dialog
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,12 +1,12 @@
 #medication.py
 import datetime
 from flask import Blueprint, request, jsonify
-from models.medication import (
+from models.medication_model import (
     record_dispense_inventory, create_prescription_config, get_prescription_details,
     restock_medication_inventory, update_prescription_config, delete_prescription_config,
     get_all_medications, add_new_medication, update_medication_info, delete_medication_if_unused
 )
-from models.adherence import save_medication_log, get_all_medication_logs
+from models.adherence_model import save_medication_log, get_all_medication_logs
 from services.notification_service import send_new_prescription_notification, send_removed_prescription_notification
 
 medication_bp = Blueprint('medication', __name__)

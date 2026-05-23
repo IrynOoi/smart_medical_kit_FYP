@@ -26,8 +26,8 @@ if sys.platform != 'win32':
     os.environ['TZ'] = 'Asia/Kuala_Lumpur'
     time.tzset()
 else:
-    # On Windows, just print a warning – system time must already be Malaysia time
-    print("⚠️ Running on Windows: Please ensure your system time zone is set to 'Singapore/Malaysia Time (GMT+8)'")
+    # On Windows, system time must already be Malaysia time.
+    print("Running on Windows: Please ensure your system time zone is set to 'Singapore/Malaysia Time (GMT+8)'")
 class CustomJSONProvider(DefaultJSONProvider):
     def default(self, obj):
         if isinstance(obj, (datetime.datetime, datetime.date)):

@@ -14,7 +14,6 @@ class EditPrescriptionPage extends StatefulWidget {
 }
 
 class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
-  
   final _formKey = GlobalKey<FormState>();
 
   List<Map<String, dynamic>> _medications = [];
@@ -291,7 +290,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      value: _selectedMedicationName,
+                      initialValue: _selectedMedicationName,
                       items: _medications
                           .map(
                             (med) => DropdownMenuItem(
@@ -358,8 +357,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                           context: context,
                           initialTime: _selectedTime,
                         );
-                        if (picked != null)
+                        if (picked != null) {
                           setState(() => _selectedTime = picked);
+                        }
                       },
                     ),
                     const SizedBox(height: 24),
@@ -387,10 +387,11 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                           checkmarkColor: AppColors.primaryPurple,
                           onSelected: (selected) {
                             setState(() {
-                              if (selected)
+                              if (selected) {
                                 _selectedDays.add(day);
-                              else
+                              } else {
                                 _selectedDays.remove(day);
+                              }
                             });
                           },
                         );

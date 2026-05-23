@@ -15,7 +15,6 @@ class CaregiverDevicesListPage extends StatefulWidget {
 }
 
 class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
-  
   List<Map<String, dynamic>> _devices = [];
   bool _isLoading = true;
   String _error = '';
@@ -84,7 +83,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     final thresholdController = TextEditingController(text: '10');
     final formKey = GlobalKey<FormState>();
 
-    final patients = await CaregiverService().getCaregiverPatients(widget.caregiverId);
+    final patients = await CaregiverService().getCaregiverPatients(
+      widget.caregiverId,
+    );
     if (!mounted) return;
     if (patients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -133,7 +134,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    value: selectedPatientId,
+                    initialValue: selectedPatientId,
                     items: patientOptions.map((p) {
                       return DropdownMenuItem<int>(
                         value: p['patient_id'] as int,
@@ -148,7 +149,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    value: selectedMotorSlot,
+                    initialValue: selectedMotorSlot,
                     items: const [
                       DropdownMenuItem(value: 1, child: Text('Motor Slot 1')),
                       DropdownMenuItem(value: 2, child: Text('Motor Slot 2')),
@@ -160,7 +161,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    value: selectedMedicationId,
+                    initialValue: selectedMedicationId,
                     items: _medications.map((med) {
                       return DropdownMenuItem<int>(
                         value: med['medication_id'] as int,
@@ -240,7 +241,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   // Edit Device (assignment + prescription details)
   // ------------------------------------------------------------------
   Future<void> _showEditAssignmentDialog(Map<String, dynamic> device) async {
-    final patients = await CaregiverService().getCaregiverPatients(widget.caregiverId);
+    final patients = await CaregiverService().getCaregiverPatients(
+      widget.caregiverId,
+    );
 
     final patientOptions = patients.map((p) {
       return <String, dynamic>{
@@ -269,10 +272,11 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     // Fetch existing prescription if any
     if (selectedPatientId != null) {
       try {
-        final prescription = await DeviceService().getPrescriptionForDevicePatient(
-          device['device_id'] as int,
-          selectedPatientId,
-        );
+        final prescription = await DeviceService()
+            .getPrescriptionForDevicePatient(
+              device['device_id'] as int,
+              selectedPatientId,
+            );
         if (prescription != null) {
           selectedMotorSlot = (prescription['motor_slot'] as int?) ?? 1;
           selectedMedicationId = (prescription['medication_id'] as int?) ?? 1;
@@ -299,7 +303,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<int>(
-                  value: selectedPatientId,
+                  initialValue: selectedPatientId,
                   items: patientOptions.map((p) {
                     return DropdownMenuItem<int>(
                       value: p['patient_id'] as int,
@@ -314,7 +318,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
-                  value: selectedMotorSlot,
+                  initialValue: selectedMotorSlot,
                   items: const [
                     DropdownMenuItem(value: 1, child: Text('Motor Slot 1')),
                     DropdownMenuItem(value: 2, child: Text('Motor Slot 2')),
@@ -326,7 +330,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
-                  value: selectedMedicationId,
+                  initialValue: selectedMedicationId,
                   items: _medications.map((med) {
                     return DropdownMenuItem<int>(
                       value: med['medication_id'] as int,
@@ -371,16 +375,14 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     );
 
     if (confirmed == true && selectedPatientId != null) {
-      final success = await DeviceService().updateDevicePrescription(
-        device['device_id'] as int,
-        {
-          'patient_id': selectedPatientId!,
-          'motor_slot': selectedMotorSlot,
-          'medication_id': selectedMedicationId,
-          'current_inventory': int.parse(inventoryController.text),
-          'refill_threshold': int.parse(thresholdController.text),
-        },
-      );
+      final success = await DeviceService()
+          .updateDevicePrescription(device['device_id'] as int, {
+            'patient_id': selectedPatientId!,
+            'motor_slot': selectedMotorSlot,
+            'medication_id': selectedMedicationId,
+            'current_inventory': int.parse(inventoryController.text),
+            'refill_threshold': int.parse(thresholdController.text),
+          });
       if (success) {
         ScaffoldMessenger.of(
           context,
@@ -428,10 +430,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       ),
     );
     if (confirmed == true && formKey.currentState!.validate()) {
-      final success = await DeviceService().updateDevice(
-        device['device_id'],
-        {'device_serial': controller.text},
-      );
+      final success = await DeviceService().updateDevice(device['device_id'], {
+        'device_serial': controller.text,
+      });
       if (success && mounted) {
         ScaffoldMessenger.of(
           context,

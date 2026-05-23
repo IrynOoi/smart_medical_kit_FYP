@@ -4,6 +4,7 @@ import 'theme/colors.dart';
 import 'screens/splash_screen.dart';
 import 'package:my_medical_kit_app/screens/landing_page.dart';
 import 'package:my_medical_kit_app/screens/login_page.dart';
+import 'package:my_medical_kit_app/screens/caregiver/caregiver_notifications_page.dart';
 import 'package:my_medical_kit_app/screens/patient/smart_reminder_page.dart';
 
 // 👇 1. 导入你的 ReminderService
@@ -42,6 +43,8 @@ class MyApp extends StatelessWidget {
         '/landing': (context) => const LandingPage(),
         '/login': (context) => const LoginPage(),
         '/smart-reminder': (context) => const SmartReminderPage(),
+        '/caregiver-notifications': (context) =>
+            const CaregiverNotificationsPage(),
       },
       initialRoute: '/',
     );

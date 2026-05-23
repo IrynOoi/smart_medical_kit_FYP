@@ -1,5 +1,7 @@
-import 'package:my_medical_kit_app/services/api/api_client.dart';
 // lib/screens/caregiver_dashboard_page.dart
+import 'package:my_medical_kit_app/screens/caregiver/caregiver_notifications_page.dart';
+import 'package:my_medical_kit_app/services/api/api_client.dart';
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
@@ -28,15 +30,15 @@ class CaregiverDashboardPage extends StatefulWidget {
 }
 
 class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
-  
-
+  List<Map<String, dynamic>> _notifications = [];
+  int _unreadCount = 0;
   String _caregiverPhotoUrl = '';
 
   int _caregiverId = 0;
   String _caregiverName = '';
 
   String _selectedPeriod = 'Week';
-
+  List<Map<String, dynamic>> _lowStockAlerts = [];
   bool _isLoading = true;
   String _errorMessage = '';
 
@@ -86,7 +88,9 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       _caregiverId = savedId;
       _caregiverName = prefs.getString('user_name') ?? 'Caregiver';
 
-      final profile = await CaregiverService().getCaregiverProfile(_caregiverId);
+      final profile = await CaregiverService().getCaregiverProfile(
+        _caregiverId,
+      );
       if (profile['success'] == true) {
         setState(() {
           _caregiverPhotoUrl = profile['data']['profile_photo'] ?? '';
@@ -102,6 +106,114 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     }
   }
 
+  Widget _buildLowStockAlerts() {
+    if (_lowStockAlerts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Low Stock Alerts',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _lowStockAlerts.length > 5
+                  ? 5
+                  : _lowStockAlerts.length,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, indent: 20, endIndent: 20),
+              itemBuilder: (context, index) {
+                final alert = _lowStockAlerts[index];
+                final isOutOfStock = alert['current_inventory'] == 0;
+                return ListTile(
+                  leading: Icon(
+                    isOutOfStock ? Icons.cancel : Icons.warning,
+                    color: isOutOfStock ? Colors.red : Colors.orange,
+                  ),
+                  title: Text(alert['medication_name']),
+                  subtitle: Text(
+                    alert['patient_id'] == null
+                        ? 'Device: ${alert['device_serial'] ?? 'Unassigned'}'
+                        : 'Patient: ${alert['patient_name']}',
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${alert['current_inventory']} left',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isOutOfStock ? Colors.red : Colors.orange,
+                        ),
+                      ),
+                      Text(
+                        'Threshold: ${alert['refill_threshold']}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  onTap: () {
+                    // Optional: navigate to the inventory page for that device
+                    // if (alert['device_id'] != null) { ... }
+                  },
+                );
+              },
+            ),
+            if (_lowStockAlerts.length > 5)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    '+ ${_lowStockAlerts.length - 5} more alerts',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _loadDashboardData() async {
     setState(() {
       _isLoading = true;
@@ -112,11 +224,22 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         CaregiverService().getCaregiverOverview(_caregiverId),
         CaregiverService().getCaregiverPatients(_caregiverId),
         CaregiverService().getCaregiverAlerts(_caregiverId),
+        CaregiverService().getCaregiverNotifications(_caregiverId),
+        CaregiverService().getCaregiverLowStockAlerts(_caregiverId),
       ]);
+
+      _lowStockAlerts =
+          results[4] as List<Map<String, dynamic>>; // ✅ keep the data
       final overview = results[0] as Map<String, dynamic>;
       final patients = results[1] as List<Map<String, dynamic>>;
       final alerts = results[2] as List<Map<String, dynamic>>;
+      _notifications = results[3] as List<Map<String, dynamic>>;
+      _unreadCount = _notifications.where((n) => n['is_read'] == 0).length;
+
+      // ❌ removed the line that cleared _lowStockAlerts
+
       await _fetchChartData('Week');
+
       setState(() {
         _overviewStats = overview;
         _patients = patients;
@@ -251,31 +374,48 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       );
     }
     if (_errorMessage.isNotEmpty) {
+      // Inside build() method, replace your Scaffold body with this structure:
       return Scaffold(
         backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.cloud_off_rounded, size: 60, color: Colors.grey),
-              const SizedBox(height: 16),
-              Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.grey, fontSize: 15),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadDashboardData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                ),
-                child: const Text(
-                  'Retry',
-                  style: TextStyle(color: Colors.white),
+        body: Stack(
+          // 1. Use a Stack to overlay the icon
+          children: [
+            SafeArea(
+              top: false,
+              child: RefreshIndicator(
+                onRefresh: _loadDashboardData,
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildHeader(), // Remove bell icon from here if you move it to Stack
+                      // ... rest of your body content
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+            // 2. Position the Bell Icon at the top right
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              right: 16,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.notifications_none,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CaregiverNotificationsPage(caregiverId: _caregiverId),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -309,6 +449,88 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
+  void _showNotificationsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Notifications'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: _notifications.isEmpty
+              ? const Center(child: Text('No notifications'))
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _notifications.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final notif = _notifications[index];
+                    final isRead = notif['is_read'] == 1;
+                    return ListTile(
+                      leading: Icon(
+                        isRead
+                            ? Icons.notifications_none
+                            : Icons.notifications_active,
+                        color: isRead ? Colors.grey : AppColors.primaryPurple,
+                      ),
+                      title: Text(
+                        notif['title'],
+                        style: TextStyle(
+                          fontWeight: isRead
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(notif['message']),
+                      trailing: Text(
+                        _formatNotificationTime(notif['created_at']),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      onTap: () async {
+                        if (!isRead) {
+                          final success = await CaregiverService()
+                              .markCaregiverNotificationRead(
+                                notif['notification_id'],
+                              );
+                          if (success && mounted) {
+                            setState(() {
+                              notif['is_read'] = 1;
+                              _unreadCount--;
+                            });
+                          }
+                        }
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatNotificationTime(String isoString) {
+    try {
+      final dateTime = DateTime.parse(isoString);
+      final now = DateTime.now();
+      final diff = now.difference(dateTime);
+      if (diff.inDays > 0) return '${diff.inDays}d ago';
+      if (diff.inHours > 0) return '${diff.inHours}h ago';
+      if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+      return 'Just now';
+    } catch (_) {
+      return '';
+    }
+  }
+
   // ==========================================
   // HEADER
   // ==========================================
@@ -328,26 +550,23 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: [
-              const SizedBox(width: 10),
-              const Text(
-                'MedSmart',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start, // 关键：顶部对齐
             children: [
+              // 左侧区域
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'MedSmart',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8), // 问候语紧跟 MedSmart
                   Text(
                     _greeting.toUpperCase(),
                     style: const TextStyle(
@@ -357,7 +576,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 4),
                   Text(
                     _caregiverName,
                     style: const TextStyle(
@@ -368,45 +586,100 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                   ),
                 ],
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: CircleAvatar(
-                  radius: 28,
-                  backgroundColor: Colors.white,
-                  backgroundImage: _caregiverPhotoUrl.isNotEmpty
-                      ? (_caregiverPhotoUrl.startsWith('http')
-                            ? NetworkImage(_caregiverPhotoUrl)
-                            : NetworkImage(
-                                '${ApiClient.baseUrl}${_caregiverPhotoUrl.startsWith('/') ? '' : '/'}$_caregiverPhotoUrl',
-                              ))
-                      : null,
-                  child: _caregiverPhotoUrl.isEmpty
-                      ? Text(
-                          _caregiverName.isNotEmpty
-                              ? _caregiverName[0].toUpperCase()
-                              : 'C',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryPurple,
+
+              // 右侧区域
+              Column(
+                children: [
+                  // 铃铛 icon (与 MedSmart 标题平齐)
+                  Stack(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.notifications_none,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CaregiverNotificationsPage(
+                              caregiverId: _caregiverId,
+                            ),
                           ),
-                        )
-                      : null,
-                ),
+                        ),
+                      ),
+                      if (_unreadCount > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              '$_unreadCount',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4), // 铃铛与头像间距
+                  // 头像 (与名字平齐)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Colors.white,
+                      backgroundImage: _caregiverPhotoUrl.isNotEmpty
+                          ? (_caregiverPhotoUrl.startsWith('http')
+                                ? NetworkImage(_caregiverPhotoUrl)
+                                : NetworkImage(
+                                    '${ApiClient.baseUrl}${_caregiverPhotoUrl.startsWith('/') ? '' : '/'}$_caregiverPhotoUrl',
+                                  ))
+                          : null,
+                      child: _caregiverPhotoUrl.isEmpty
+                          ? Text(
+                              _caregiverName.isNotEmpty
+                                  ? _caregiverName[0].toUpperCase()
+                                  : 'C',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryPurple,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+
           const SizedBox(height: 20),
+          // 日期
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
@@ -906,7 +1179,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       }
     }
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 18),
       child: Row(
         children: [
           Container(

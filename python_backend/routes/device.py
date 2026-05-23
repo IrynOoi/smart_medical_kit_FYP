@@ -8,7 +8,8 @@ from models.device_model import (
     delete_device as delete_device_model, record_device_heartbeat,
     get_pending_dose_for_device, get_device_ip_for_patient, record_dispense_from_device
 )
-from models.medication import get_prescriptions_by_device, get_prescription_for_device_patient as get_prescription_for_device_patient_model
+from models.medication_model import get_prescriptions_by_device, get_prescription_for_device_patient as get_prescription_for_device_patient_model
+from models.notification_model import sync_patient_caregiver_stock_notifications
 from services.esp_forwarder import _forward_to_esp
 from db import get_db_connection
 
@@ -279,6 +280,7 @@ def create_device_with_prescription():
         ''', (device_id, motor_slot, inventory, threshold, medication_id))
 
         conn.commit()
+    sync_patient_caregiver_stock_notifications(patient_id)
     return jsonify({"success": True, "message": "Device and prescription created"})
 
 @device_bp.route('/device/<int:device_id>/prescription', methods=['PUT'])
@@ -305,6 +307,7 @@ def update_device_prescription(device_id):
         ''', (device_id, motor_slot, inventory, threshold, medication_id))
 
         conn.commit()
+    sync_patient_caregiver_stock_notifications(patient_id)
     return jsonify({"success": True, "message": "Prescription updated"})
 
 @device_bp.route('/device/<int:device_id>/patient/<int:patient_id>/prescription', methods=['GET'])

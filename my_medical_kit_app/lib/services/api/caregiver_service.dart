@@ -17,26 +17,62 @@ class CaregiverService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getLowStockAlerts(int caregiverId) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/low_stock_alerts',
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching low stock alerts: $e');
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>> getCaregiverOverview(int caregiverId) async {
     try {
-      final response = await ApiClient.get('/caregiver/$caregiverId/overview_stats');
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/overview_stats',
+      );
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         if (json['success']) return json['data'];
       }
-      return {'taken_count': 0, 'missed_count': 0, 'pending_count': 0, 'total_patients': 0, 'low_stock_count': 0};
+      return {
+        'taken_count': 0,
+        'missed_count': 0,
+        'pending_count': 0,
+        'total_patients': 0,
+        'low_stock_count': 0,
+      };
     } catch (e) {
       debugPrint('Error getting caregiver overview: $e');
-      return {'taken_count': 0, 'missed_count': 0, 'pending_count': 0, 'total_patients': 0, 'low_stock_count': 0};
+      return {
+        'taken_count': 0,
+        'missed_count': 0,
+        'pending_count': 0,
+        'total_patients': 0,
+        'low_stock_count': 0,
+      };
     }
   }
 
   Future<List<Map<String, dynamic>>> getAllRecentLogs(int caregiverId) async {
     try {
-      final response = await ApiClient.get('/caregiver/$caregiverId/all_recent_logs?limit=20');
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/all_recent_logs?limit=20',
+      );
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json['success']) return List<Map<String, dynamic>>.from(json['data']);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
       }
       return [];
     } catch (e) {
@@ -44,12 +80,16 @@ class CaregiverService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getCaregiverPatients(int caregiverId) async {
+  Future<List<Map<String, dynamic>>> getCaregiverPatients(
+    int caregiverId,
+  ) async {
     try {
       final response = await ApiClient.get('/caregiver/$caregiverId/patients');
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json['success']) return List<Map<String, dynamic>>.from(json['data']);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
       }
       return [];
     } catch (e) {
@@ -59,10 +99,14 @@ class CaregiverService {
 
   Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
     try {
-      final response = await ApiClient.get('/caregiver/$caregiverId/recent_alerts');
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/recent_alerts',
+      );
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json['success']) return List<Map<String, dynamic>>.from(json['data']);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
       }
       return [];
     } catch (e) {
@@ -70,14 +114,23 @@ class CaregiverService {
     }
   }
 
-  Future<Map<String, List<double>>> getChartData(int caregiverId, String period) async {
+  Future<Map<String, List<double>>> getChartData(
+    int caregiverId,
+    String period,
+  ) async {
     try {
-      final response = await ApiClient.get('/caregiver/$caregiverId/chart_data?period=$period');
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/chart_data?period=$period',
+      );
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         if (json['success']) {
-          final takenList = (json['data']['taken'] as List).map((e) => (e as num).toDouble()).toList();
-          final missedList = (json['data']['missed'] as List).map((e) => (e as num).toDouble()).toList();
+          final takenList = (json['data']['taken'] as List)
+              .map((e) => (e as num).toDouble())
+              .toList();
+          final missedList = (json['data']['missed'] as List)
+              .map((e) => (e as num).toDouble())
+              .toList();
           return {'taken': takenList, 'missed': missedList};
         }
       }
@@ -97,14 +150,99 @@ class CaregiverService {
 
   Future<Map<String, dynamic>> getAnalyticsOverview(int caregiverId) async {
     try {
-      final response = await ApiClient.get('/caregiver/$caregiverId/analytics_overview');
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/analytics_overview',
+      );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         if (jsonResponse['success']) return jsonResponse['data'];
       }
-      return {'overall_adherence_prediction': 0.0, 'high_risk_patients': 0, 'medium_risk_patients': 0, 'total_analyzed': 0};
+      return {
+        'overall_adherence_prediction': 0.0,
+        'high_risk_patients': 0,
+        'medium_risk_patients': 0,
+        'total_analyzed': 0,
+      };
     } catch (e) {
-      return {'overall_adherence_prediction': 0.0, 'high_risk_patients': 0, 'medium_risk_patients': 0, 'total_analyzed': 0};
+      return {
+        'overall_adherence_prediction': 0.0,
+        'high_risk_patients': 0,
+        'medium_risk_patients': 0,
+        'total_analyzed': 0,
+      };
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCaregiverNotifications(
+    int caregiverId,
+  ) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/notifications',
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching caregiver notifications: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCaregiverStockNotifications(
+    int caregiverId,
+  ) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/stock_notifications',
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching caregiver stock notifications: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCaregiverLowStockAlerts(
+    int caregiverId,
+  ) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/low_stock_alerts',
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching low stock alerts: $e');
+      return [];
+    }
+  }
+
+  Future<bool> markCaregiverNotificationRead(int notificationId) async {
+    try {
+      final response = await ApiClient.put(
+        '/caregiver/notification/$notificationId/read',
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('Error marking notification read: $e');
+      return false;
     }
   }
 }

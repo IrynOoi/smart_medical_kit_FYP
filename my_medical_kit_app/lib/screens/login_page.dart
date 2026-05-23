@@ -7,6 +7,7 @@ import 'package:my_medical_kit_app/screens/register_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_medical_kit_app/services/api/auth_service.dart';
+import 'package:my_medical_kit_app/services/reminder_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,7 +19,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  
 
   bool _isPasswordVisible = false;
 
@@ -51,6 +51,9 @@ class _LoginPageState extends State<LoginPage> {
           await prefs.setInt('patient_id', user['id']);
         } else {
           await prefs.setInt('caregiver_id', user['id']);
+          await ReminderService.checkAndSendCaregiverStockAlerts(
+            caregiverId: user['id'],
+          );
         }
 
         if (!mounted) return;
@@ -318,7 +321,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
-  
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;

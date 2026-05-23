@@ -4,6 +4,8 @@ from croniter import croniter
 from datetime import timedelta
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from models.notification_model import sync_stock_notifications
+
 def create_tasks_for_hardware_and_app():
     now = datetime.now().replace(second=0, microsecond=0)
     
@@ -31,11 +33,11 @@ def create_tasks_for_hardware_and_app():
                     if croniter.match(cron_expr, check_time):
                         
                         # ✅ FIX: 用精确的计划时间去重，而不是 CURDATE()
-                        scheduled_time_str = check_time.strftime("%Y-%m-%d %H:%M")
+                        scheduled_time_str = check_time.strftime("%Y-%m-%d %I:%M %p")
                         
                         cursor.execute("""
                             SELECT 1 FROM notifications
-                            WHERE patient_id = %s 
+                            WHERE recipient_id = %s
                               AND type = 'REMINDER'
                               AND message LIKE %s
                               AND message LIKE %s
@@ -52,10 +54,10 @@ def create_tasks_for_hardware_and_app():
                                 f"{p['medication_name']} at {scheduled_time_str}."
                             )
                             cursor.execute("""
-                                INSERT INTO notifications (patient_id, title, message, type, is_read)
+                                INSERT INTO notifications (recipient_id, title, message, type, is_read)
                                 VALUES (%s, 'Medication Reminder', %s, 'REMINDER', 0)
                             """, (p['patient_id'], msg))
-                            print(f"📲 [App] Notification for {p['medication_name']} at {scheduled_time_str}")
+                            print(f"[App] Notification for {p['medication_name']} at {scheduled_time_str}")
                         break  # 同一药物只发一次提前通知
                 
                 # ==========================================
@@ -78,11 +80,12 @@ def create_tasks_for_hardware_and_app():
                                 FROM medications 
                                 WHERE medication_id = %s AND device_id IS NOT NULL
                             """, (p['prescription_id'], formatted_time, p['medication_id']))
-                            print(f"🤖 [Hardware] Triggered for {p['medication_name']} at {formatted_time}")
+                            print(f"[Hardware] Triggered for {p['medication_name']} at {formatted_time}")
                         break  # 找到匹配就停
             
             conn.commit()
             cursor.close()
+            sync_stock_notifications()
     except Exception as e:
         print(f"Scheduler Error: {e}")
 

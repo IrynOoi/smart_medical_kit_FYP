@@ -16,7 +16,6 @@ class AiAnalyticsPage extends StatefulWidget {
 }
 
 class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
-  
   bool _isLoading = true;
   bool _isRefreshing = false;
   String _errorMessage = '';
@@ -25,7 +24,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
 
   // Real data from backend
   Map<String, dynamic> _overview = {};
-  List<Map<String, dynamic>> _riskPatients = [];
+  final List<Map<String, dynamic>> _riskPatients = [];
   List<Map<String, dynamic>> _allPatients = [];
   final Map<int, bool> _predictingPatients = {};
 
@@ -84,7 +83,10 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   Future<List<int>> _fetchPatientHistory(int patientId) async {
     try {
       // Fetch a larger limit in case the top 3 are all 'PENDING'
-      final logs = await PatientService().getAdherenceLogs(patientId, limit: 10);
+      final logs = await PatientService().getAdherenceLogs(
+        patientId,
+        limit: 10,
+      );
       final history = <int>[];
 
       for (var log in logs) {
@@ -233,7 +235,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                   ),
                 );
               }
-              final freshPred = await PredictionService().getAIPrediction(patientId);
+              final freshPred = await PredictionService().getAIPrediction(
+                patientId,
+              );
               if (mounted) {
                 setState(() {
                   _patientPredictions[patientId] = freshPred;
@@ -961,7 +965,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     final int pid = patient['patient_id'];
     final AIPrediction? pred = _patientPredictions[pid];
     final String riskLevel =
-        pred?.riskLevel?.toString().split('.').last.toUpperCase() ?? 'LOW';
+        pred?.riskLevel.toString().split('.').last.toUpperCase() ?? 'LOW';
 
     // Only flag MEDIUM and HIGH
     final bool hasRisk = riskLevel == 'HIGH' || riskLevel == 'MEDIUM';
@@ -990,7 +994,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               CircleAvatar(
                 radius: 24,
                 // Neutral purple background for the avatar instead of the risk color
-                backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.15),
+                backgroundColor: AppColors.primaryPurple.withValues(
+                  alpha: 0.15,
+                ),
                 child: Text(
                   patient['full_name']?[0]?.toUpperCase() ?? '?',
                   style: const TextStyle(

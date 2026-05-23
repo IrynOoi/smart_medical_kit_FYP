@@ -2,8 +2,6 @@
 // import 'package:flutter/material.dart';
 // import 'package:my_medical_kit_app/theme/colors.dart';
 // import 'package:my_medical_kit_app/services/api/patient_service.dart';
-import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
-import 'package:my_medical_kit_app/services/api/prediction_service.dart';
 
 // class AiAnalyticsPage extends StatefulWidget {
 //   final int caregiverId;
@@ -15,7 +13,7 @@ import 'package:my_medical_kit_app/services/api/prediction_service.dart';
 // }
 
 // class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
-//   
+//
 //   bool _isLoading = true;
 //   bool _isRefreshing = false;
 //   String _errorMessage = '';
