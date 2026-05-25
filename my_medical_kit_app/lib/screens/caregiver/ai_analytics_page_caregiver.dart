@@ -82,7 +82,6 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   // Fetch patient's recent adherence history
   Future<List<int>> _fetchPatientHistory(int patientId) async {
     try {
-      // Fetch a larger limit in case the top 3 are all 'PENDING'
       final logs = await PatientService().getAdherenceLogs(
         patientId,
         limit: 10,
@@ -90,26 +89,20 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       final history = <int>[];
 
       for (var log in logs) {
-        // Assume your AdherenceLog model has a 'status' string property.
-        // Skip anything that isn't explicitly TAKEN or MISSED.
-        if (log.status == 'TAKEN') {
+        if (log.status == 'TAKEN')
           history.add(1);
-        } else if (log.status == 'MISSED') {
+        else if (log.status == 'MISSED')
           history.add(0);
-        }
-
-        // Stop once we have found the 3 most recent VALID actions
         if (history.length == 3) break;
       }
 
+      // 关键修改：用 -1 代替 1 来填充
       while (history.length < 3) {
-        history.insert(0, 1);
+        history.insert(0, -1);
       }
-
       return history.reversed.toList();
     } catch (e) {
-      print('Error fetching history: $e');
-      return [1, 1, 1];
+      return [-1, -1, -1]; // 默认也是 -1
     }
   }
 
@@ -134,7 +127,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   }
 
   // Show prediction dialog with history loading
-  // Show prediction dialog with history loading
+
   Future<void> _showPredictionDialog(Map<String, dynamic> patient) async {
     final int patientId = patient['patient_id'];
     final String patientName = patient['full_name'] ?? 'Patient';
@@ -193,13 +186,38 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                 Navigator.pop(context);
               }
 
-              if (result.containsKey('error')) {
-                throw Exception(result['error']);
+              // 1. Check for success flag first
+              if (result['success'] == false) {
+                // 使用 Future.microtask 确保 pop 操作在当前 UI 循环结束后执行
+                if (mounted) {
+                  // 使用 Future 延迟一小段时间，确保上一个窗口完全关闭，避免上下文竞争
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Insufficient Data'),
+                          content: Text(
+                            result['message'] ?? 'Not enough history.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  });
+                }
+                return;
               }
 
+              // 2. Proceed with showing the prediction if successful
               if (!result.containsKey('prediction_score') ||
                   !result.containsKey('risk_level')) {
-                throw Exception('Invalid response from server');
+                throw Exception('Invalid response format');
               }
 
               // ✅ FIX 3: Pop out a NEW window with the AI results!
@@ -331,16 +349,21 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                                           width: 40,
                                           height: 40,
                                           decoration: BoxDecoration(
+                                            // 逻辑：1=绿，0=红，-1=灰
                                             color: value == 1
                                                 ? Colors.green
-                                                : Colors.red,
+                                                : (value == 0
+                                                      ? Colors.red
+                                                      : Colors.grey),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
                                             child: Icon(
                                               value == 1
                                                   ? Icons.check
-                                                  : Icons.close,
+                                                  : (value == 0
+                                                        ? Icons.close
+                                                        : Icons.remove),
                                               color: Colors.white,
                                               size: 20,
                                             ),

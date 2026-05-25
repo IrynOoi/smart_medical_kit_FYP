@@ -372,7 +372,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
 
   double get _adherenceScore {
     final total = _taken + _missed;
-    if (total == 0) return 100.0;
+    if (total == 0) return 0.0;
     return (_taken / total) * 100;
   }
 
@@ -1342,7 +1342,8 @@ class _DonutPainter extends CustomPainter {
         2 * pi,
         false,
         Paint()
-          ..color = AppColors.primaryPurple.withValues(alpha: 0.5)
+          ..color = Colors
+              .grey // Change this from AppColors.primaryPurple... to Colors.grey
           ..style = PaintingStyle.stroke
           ..strokeWidth = stroke
           ..strokeCap = StrokeCap.round,

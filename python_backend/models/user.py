@@ -159,6 +159,12 @@ def get_caregiver_patients_list(caregiver_id):
                     d.last_known_ip,
                     m.current_inventory AS inventory,
                     m.refill_threshold AS refill_threshold,
+                    -- Add prescription count subquery
+                    (SELECT COUNT(*) 
+                     FROM prescription_config pc2 
+                     WHERE pc2.patient_id = p.patient_id 
+                       AND (pc2.end_date IS NULL OR pc2.end_date >= CURDATE())
+                    ) AS prescription_count,
                     ROW_NUMBER() OVER (PARTITION BY p.patient_id ORDER BY pc.created_at DESC) as rn
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
@@ -169,13 +175,16 @@ def get_caregiver_patients_list(caregiver_id):
             )
             SELECT patient_id, email, full_name, date_of_birth, gender, phone_no, address,
                    medical_notes, profile_photo, device_id, battery_level, device_serial,
-                   last_active_timestamp, last_known_ip, inventory, refill_threshold
+                   last_active_timestamp, last_known_ip, inventory, refill_threshold,
+                   prescription_count
             FROM RankedPatients WHERE rn = 1
         ''', (caregiver_id,))
         patients = cursor.fetchall()
         cursor.close()
     return patients
 
+
+    
 def update_caregiver_profile(caregiver_id, full_name, phone_no, address, email, gender, date_of_birth, photo_url):
     with get_db_connection() as conn:
         cursor = conn.cursor()

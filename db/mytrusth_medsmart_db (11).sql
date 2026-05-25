@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 16, 2026 at 11:10 PM
+-- Generation Time: May 23, 2026 at 07:28 PM
 -- Server version: 10.11.16-MariaDB-cll-lve
 -- PHP Version: 8.4.21
 
@@ -45,7 +45,32 @@ INSERT INTO `adherence_logs` (`adlog_id`, `prescription_id`, `device_id`, `sched
 (7, 2, 1, '2026-05-05 00:21:46', NULL, 'MISSED', '2026-05-06 00:21:46'),
 (8, 2, 1, '2026-05-04 00:21:46', NULL, 'TAKEN', '2026-05-06 00:21:46'),
 (9, 2, 1, '2026-05-06 02:21:46', '2026-05-13 21:11:37', 'TAKEN', '2026-05-06 00:21:46'),
-(10, 2, 1, '2026-05-06 08:21:46', '2026-05-13 21:13:54', 'TAKEN', '2026-05-06 00:21:46');
+(10, 2, 1, '2026-05-06 08:21:46', '2026-05-13 21:13:54', 'TAKEN', '2026-05-06 00:21:46'),
+(12, 2, 1, '2026-05-17 01:29:00', '2026-05-17 01:29:48', 'TAKEN', '2026-05-17 01:29:28'),
+(13, 2, 1, '2026-05-17 01:36:00', '2026-05-17 02:02:51', 'TAKEN', '2026-05-17 01:36:28'),
+(14, 2, 1, '2026-05-17 22:56:00', '2026-05-17 22:57:24', 'TAKEN', '2026-05-17 22:57:00'),
+(15, 9, 1, '2026-05-17 23:10:00', '2026-05-17 23:11:21', 'TAKEN', '2026-05-17 23:11:00'),
+(16, 8, 1, '2026-05-19 21:53:00', '2026-05-19 21:53:36', 'TAKEN', '2026-05-19 21:53:07'),
+(17, 2, 1, '2026-05-19 21:56:00', '2026-05-19 21:56:36', 'TAKEN', '2026-05-19 21:56:07'),
+(18, 9, 1, '2026-05-20 08:36:00', '2026-05-20 08:36:46', 'TAKEN', '2026-05-20 08:36:18'),
+(19, 9, 1, '2026-05-20 08:45:00', '2026-05-20 08:47:33', 'TAKEN', '2026-05-20 08:45:18'),
+(20, 2, 1, '2026-05-20 11:20:00', '2026-05-20 11:23:13', 'TAKEN', '2026-05-20 11:20:13'),
+(21, 9, 1, '2026-05-20 11:53:00', NULL, 'MISSED', '2026-05-20 11:53:28'),
+(22, 2, 1, '2026-05-20 12:21:00', NULL, 'MISSED', '2026-05-20 12:21:35'),
+(23, 2, 1, '2026-05-20 12:36:00', NULL, 'MISSED', '2026-05-20 12:36:41'),
+(24, 2, 1, '2026-05-20 12:56:00', NULL, 'MISSED', '2026-05-20 12:57:20'),
+(25, 2, 1, '2026-05-20 13:05:00', '2026-05-20 13:05:25', 'TAKEN', '2026-05-20 13:04:20'),
+(26, 2, 1, '2026-05-20 13:17:00', '2026-05-20 13:17:11', 'TAKEN', '2026-05-20 13:16:43'),
+(27, 2, 1, '2026-05-20 13:22:00', NULL, 'MISSED', '2026-05-20 13:22:43'),
+(28, 2, 1, '2026-05-20 13:53:00', NULL, 'MISSED', '2026-05-20 13:52:12'),
+(29, 2, 1, '2026-05-20 13:57:00', '2026-05-20 13:57:17', 'TAKEN', '2026-05-20 13:56:12'),
+(30, 2, 1, '2026-05-20 15:27:00', NULL, 'MISSED', '2026-05-20 15:26:46'),
+(31, 2, 1, '2026-05-20 15:53:00', '2026-05-20 15:53:22', 'TAKEN', '2026-05-20 15:52:13'),
+(32, 8, 1, '2026-05-20 21:57:00', NULL, 'MISSED', '2026-05-20 21:56:12'),
+(33, 2, 1, '2026-05-20 22:40:00', NULL, 'MISSED', '2026-05-20 22:39:53'),
+(34, 2, 1, '2026-05-20 23:46:00', NULL, 'MISSED', '2026-05-20 23:45:54'),
+(35, 9, 1, '2026-05-23 11:53:00', NULL, 'MISSED', '2026-05-23 11:52:58'),
+(36, 2, 1, '2026-05-23 13:43:00', NULL, 'MISSED', '2026-05-23 13:43:00');
 
 -- --------------------------------------------------------
 
@@ -124,7 +149,7 @@ CREATE TABLE `iot_device` (
 --
 
 INSERT INTO `iot_device` (`device_id`, `device_serial`, `last_reported_battery`, `last_known_ip`, `last_battery_report`, `wifi_rssi`) VALUES
-(1, 'DISP-1', 100, '172.20.10.2', '2026-05-16 23:10:26', -66);
+(1, 'DISP-1', 100, '192.168.0.12', '2026-05-23 18:28:29', -60);
 
 -- --------------------------------------------------------
 
@@ -148,9 +173,9 @@ CREATE TABLE `medications` (
 --
 
 INSERT INTO `medications` (`medication_id`, `medication_name`, `current_inventory`, `refill_threshold`, `device_id`, `motor_slot`, `created_at`, `updated_at`) VALUES
-(1, 'Aspirin', 17, 10, 1, 1, '2026-05-05 15:33:23', '2026-05-15 19:15:51'),
-(2, 'Lisinopril', 10, 5, 1, NULL, '2026-05-05 15:33:23', '2026-05-15 14:15:24'),
-(3, 'Metformin', 20, 10, 1, 2, '2026-05-05 15:33:23', '2026-05-15 19:13:17');
+(1, 'Aspirin', 13, 10, 1, 1, '2026-05-05 15:33:23', '2026-05-20 08:47:33'),
+(2, 'Lisinopril', 2, 5, 1, 3, '2026-05-05 15:33:23', '2026-05-23 17:55:07'),
+(3, 'Metformin', 9, 10, 1, 2, '2026-05-05 15:33:23', '2026-05-23 19:26:09');
 
 -- --------------------------------------------------------
 
@@ -162,11 +187,11 @@ CREATE TABLE `notifications` (
   `notification_id` int(11) NOT NULL,
   `patient_id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
-  `message` text NOT NULL,
+  `message` mediumtext NOT NULL,
   `type` varchar(50) DEFAULT 'REMINDER',
   `is_read` tinyint(1) DEFAULT 0,
   `created_at` datetime DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `notifications`
@@ -174,7 +199,16 @@ CREATE TABLE `notifications` (
 
 INSERT INTO `notifications` (`notification_id`, `patient_id`, `title`, `message`, `type`, `is_read`, `created_at`) VALUES
 (29, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Aspirin.', 'REMINDER', 1, '2026-05-15 16:52:14'),
-(30, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin.', 'REMINDER', 1, '2026-05-15 21:58:20');
+(30, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin.', 'REMINDER', 1, '2026-05-15 21:58:20'),
+(48, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-20 13:53.', 'REMINDER', 1, '2026-05-20 13:50:12'),
+(49, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-20 13:57.', 'REMINDER', 1, '2026-05-20 13:55:12'),
+(50, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-20 15:27.', 'REMINDER', 1, '2026-05-20 15:22:46'),
+(51, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-20 15:53.', 'REMINDER', 1, '2026-05-20 15:49:13'),
+(52, 2, 'Medication Reminder', 'Time to take 1 tablet(s) of Aspirin at 2026-05-20 21:57.', 'REMINDER', 0, '2026-05-20 21:47:12'),
+(53, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-20 22:40.', 'REMINDER', 1, '2026-05-20 22:35:53'),
+(54, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-20 11:46 PM.', 'REMINDER', 0, '2026-05-20 23:41:54'),
+(55, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Aspirin at 2026-05-23 11:53 AM.', 'REMINDER', 0, '2026-05-23 11:43:58'),
+(56, 3, 'Medication Reminder', 'Time to take 1 tablet(s) of Metformin at 2026-05-23 01:43 PM.', 'REMINDER', 0, '2026-05-23 13:39:58');
 
 -- --------------------------------------------------------
 
@@ -193,7 +227,7 @@ CREATE TABLE `patient` (
 --
 
 INSERT INTO `patient` (`patient_id`, `caregiver_id`, `medical_notes`) VALUES
-(2, 1, 'Severe heart attack history. Needs strict monitoring.'),
+(2, 1, NULL),
 (3, 1, 'Type 2 diabetes, requires insulin monitoring.'),
 (4, 1, NULL);
 
@@ -220,9 +254,9 @@ CREATE TABLE `prescription_config` (
 --
 
 INSERT INTO `prescription_config` (`prescription_id`, `patient_id`, `medication_id`, `dosage_tablet`, `dispense_schedule`, `start_date`, `end_date`, `created_at`, `updated_at`) VALUES
-(2, 3, 3, 1.00, '00 22 * * *', '2026-05-05', NULL, '2026-05-05 22:31:02', '2026-05-14 22:57:10'),
-(8, 2, 1, 1.00, '53 21 * * 2,3,4', '2026-05-14', NULL, '2026-05-14 21:49:17', '2026-05-15 13:52:09'),
-(9, 3, 1, 1.00, '55 16 * * *', '2026-05-14', NULL, '2026-05-14 22:57:29', '2026-05-15 16:50:06');
+(2, 3, 3, 1.00, '43 13 * * *', '2026-05-05', NULL, '2026-05-05 22:31:02', '2026-05-23 13:39:00'),
+(8, 2, 1, 1.00, '57 21 * * 2,3,4', '2026-05-14', NULL, '2026-05-14 21:49:17', '2026-05-20 11:48:27'),
+(9, 3, 1, 1.00, '53 11 * * *', '2026-05-14', NULL, '2026-05-14 22:57:29', '2026-05-20 11:48:56');
 
 -- --------------------------------------------------------
 
@@ -274,7 +308,7 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`user_id`, `email`, `password`, `role`, `full_name`, `phone_no`, `address`, `gender`, `date_of_birth`, `profile_photo`, `is_active`, `created_at`, `updated_at`) VALUES
 (1, 'caregiver1@example.com', '123456', 'caregiver', 'Jane Smith', '+60197775462', '123 Main St, KL', 'Female', '1980-03-21', 'http://reluctant-scrambled-badge.ngrok-free.dev/static/profiles/caregiver_1_scaled_6d8a90df45d69bb2f4ca4dfb8257e0b48a50ee56.jpg', 1, '2026-04-17 00:29:27', '2026-04-18 16:20:43'),
-(2, 'ahmad125@gmail.com', 'hash2', 'patient', 'Ahmad Abdullah123', '+60110000001', 'No 1, Jalan SS2, jalan keris 28', 'Male', '1945-05-15', 'https://randomuser.me/api/portraits/men/1.jpg', 1, '2026-04-17 00:29:27', '2026-05-04 00:49:31'),
+(2, 'ahmad125@gmail.com', 'hash2', 'patient', 'Ahmad Abdullah', '+60110000001', 'No 1, Jalan SS2, jalan keris 28', 'Male', '1945-05-15', 'https://randomuser.me/api/portraits/men/1.jpg', 1, '2026-04-17 00:29:27', '2026-05-20 22:02:44'),
 (3, 'patient2@example.com', '123456', 'patient', 'Mei Ling Tan', '+60110000002', '22, Lorong Gombak, KL', 'Female', '1948-07-20', '/static/profiles/patient_3_scaled_1000020585.jpg', 1, '2026-04-17 00:29:27', '2026-04-27 08:43:49'),
 (4, 'ooi14@gmail.com', '123456', 'patient', 'irynooi', '0197560221', '2,jalan keris 28,Taman puteri wangsa', 'Female', '1979-03-20', NULL, 1, '2026-05-06 16:10:38', '2026-05-08 19:39:20');
 
@@ -355,7 +389,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `adherence_logs`
 --
 ALTER TABLE `adherence_logs`
-  MODIFY `adlog_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `adlog_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
 
 --
 -- AUTO_INCREMENT for table `ai_adherence_prediction`
@@ -379,7 +413,7 @@ ALTER TABLE `medications`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `notification_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=34;
+  MODIFY `notification_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
 
 --
 -- AUTO_INCREMENT for table `prescription_config`

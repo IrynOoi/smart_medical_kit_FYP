@@ -27,6 +27,10 @@ def compute_prediction_for_patient(patient_id):
     """
     age, history_vals = get_patient_history_for_ai(patient_id)
 
+    if history_vals is None:
+        print(f"[AI] Skipping patient {patient_id}: no adherence history.")
+        return None
+
     # 3. Current day & time
     now = datetime.datetime.now()
     day_of_week = now.strftime('%A')

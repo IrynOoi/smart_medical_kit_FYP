@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'patient_prescriptions_page.dart';
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 import 'add_prescription_page.dart';
+
 class CaregiverPrescriptionSetupPage extends StatefulWidget {
   final int caregiverId;
   const CaregiverPrescriptionSetupPage({super.key, required this.caregiverId});
@@ -15,7 +17,6 @@ class CaregiverPrescriptionSetupPage extends StatefulWidget {
 
 class _CaregiverPrescriptionSetupPageState
     extends State<CaregiverPrescriptionSetupPage> {
-  
   List<Map<String, dynamic>> _patients = [];
   bool _isLoading = true;
   String _error = '';
@@ -50,9 +51,7 @@ class _CaregiverPrescriptionSetupPageState
   void _openPrescriptionForm(Map<String, dynamic> patient) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => AddPrescriptionPage(patient: patient),
-      ),
+      MaterialPageRoute(builder: (_) => AddPrescriptionPage(patient: patient)),
     );
   }
 
@@ -111,21 +110,43 @@ class _CaregiverPrescriptionSetupPageState
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
+                          // Avatar
                           CircleAvatar(
                             radius: 26,
-                            backgroundColor: AppColors.primaryPurple
-                                .withValues(alpha: 0.1),
-                            child: Text(
-                              p['full_name']?.substring(0, 1).toUpperCase() ??
-                                  '?',
-                              style: const TextStyle(
-                                color: AppColors.primaryPurple,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20,
-                              ),
+                            backgroundColor: AppColors.primaryPurple.withValues(
+                              alpha: 0.1,
                             ),
+                            // 1. Add backgroundImage to render the image
+                            backgroundImage:
+                                (p['profile_photo'] != null &&
+                                    p['profile_photo'].toString().isNotEmpty)
+                                ? NetworkImage(
+                                    p['profile_photo'].toString().startsWith(
+                                          'http',
+                                        )
+                                        ? p['profile_photo']
+                                        : '${ApiClient.baseUrl}${p['profile_photo'].toString().startsWith('/') ? '' : '/'}${p['profile_photo']}',
+                                  )
+                                : null,
+                            // 2. Keep the Text as a fallback ONLY if no image exists
+                            child:
+                                (p['profile_photo'] == null ||
+                                    p['profile_photo'].toString().isEmpty)
+                                ? Text(
+                                    p['full_name']
+                                            ?.substring(0, 1)
+                                            .toUpperCase() ??
+                                        '?',
+                                    style: const TextStyle(
+                                      color: AppColors.primaryPurple,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  )
+                                : null,
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 12), // Reduced spacing
+                          // Text Column - Now Expanded to handle overflow
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,37 +154,45 @@ class _CaregiverPrescriptionSetupPageState
                                 Text(
                                   p['full_name'] ?? 'Unknown Patient',
                                   style: const TextStyle(
-                                    fontSize: 16,
+                                    fontSize:
+                                        15, // Slightly reduced to fit more
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textDark,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Device: ${p['device_serial'] ?? 'Not Paired'}',
+                                  '${p['prescription_count'] ?? 0} active prescription', // Simplified label
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey.shade600,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
                           ),
-                          ElevatedButton.icon(
+
+                          // Action Button - Removed icon to maximize space
+                          const SizedBox(width: 8),
+                          ElevatedButton(
                             onPressed: () => _openPrescriptionForm(p),
-                            icon: const Icon(
-                              Icons.add,
-                              size: 18,
-                              color: Colors.white,
-                            ),
-                            label: const Text(
-                              "Set prescription",
-                              style: TextStyle(color: Colors.white),
-                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryPurple,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              "Add",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
@@ -177,4 +206,3 @@ class _CaregiverPrescriptionSetupPageState
     );
   }
 }
-

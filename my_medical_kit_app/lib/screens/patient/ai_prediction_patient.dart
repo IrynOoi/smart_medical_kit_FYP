@@ -17,7 +17,6 @@ class AIPredictionPatientPage extends StatefulWidget {
 
 class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     with SingleTickerProviderStateMixin {
-  
   bool _isLoading = true;
   AIPrediction? _prediction;
   int _patientId = 0;
@@ -76,28 +75,41 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   Future<void> _recalculatePrediction() async {
     setState(() => _isLoading = true);
     try {
-      final newPrediction = await PredictionService().recalculatePrediction(_patientId);
-      setState(() {
-        _prediction = newPrediction;
-        _isLoading = false;
-      });
-
-      if (mounted && newPrediction != null) {
+      final prediction = await PredictionService().recalculatePrediction(
+        _patientId,
+      );
+      if (prediction != null) {
+        setState(() {
+          _prediction = prediction;
+        });
         _animationController.forward(from: 0.0);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Successfully re-calculated AI prediction!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      } else {
+        // No prediction (possibly insufficient data)
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Info'),
+              content: const Text('No adherence data for prediction.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      // If the backend returned a meaningful error message (e.g., "No adherence data")
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error re-predicting: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -384,12 +396,17 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [AppColors.primaryPurple.withValues(alpha: 0.05), Colors.white],
+              colors: [
+                AppColors.primaryPurple.withValues(alpha: 0.05),
+                Colors.white,
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.primaryPurple.withValues(alpha: 0.1)),
+            border: Border.all(
+              color: AppColors.primaryPurple.withValues(alpha: 0.1),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,12 +672,17 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryPurple.withValues(alpha: 0.05), Colors.white],
+          colors: [
+            AppColors.primaryPurple.withValues(alpha: 0.05),
+            Colors.white,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.primaryPurple.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: AppColors.primaryPurple.withValues(alpha: 0.1),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

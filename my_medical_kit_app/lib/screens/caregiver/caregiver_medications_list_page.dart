@@ -14,7 +14,6 @@ class CaregiverMedicationsListPage extends StatefulWidget {
 
 class CaregiverMedicationsListPageState
     extends State<CaregiverMedicationsListPage> {
-  
   List<Map<String, dynamic>> _medications = [];
   bool _isLoading = true;
   String _error = '';
@@ -44,12 +43,20 @@ class CaregiverMedicationsListPageState
     }
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon, {String? prefixText}) {
+  InputDecoration _inputDecoration(
+    String label,
+    IconData icon, {
+    String? prefixText,
+  }) {
     return InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon, color: AppColors.primaryPurple),
       prefixText: prefixText,
-      prefixStyle: const TextStyle(color: AppColors.primaryPurple, fontWeight: FontWeight.bold, fontSize: 16),
+      prefixStyle: const TextStyle(
+        color: AppColors.primaryPurple,
+        fontWeight: FontWeight.bold,
+        fontSize: 16,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -69,7 +76,7 @@ class CaregiverMedicationsListPageState
   }
 
   // ------------------------------------------------------------------
-  // Add medication (with inventory, device, motor slot)
+  // Add medication (ALL FIELDS REQUIRED)
   // ------------------------------------------------------------------
   Future<void> _showAddMedicationDialog() async {
     final formKey = GlobalKey<FormState>();
@@ -85,7 +92,10 @@ class CaregiverMedicationsListPageState
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Add New Medication',
-          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPurple),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.primaryPurple,
+          ),
         ),
         content: Form(
           key: formKey,
@@ -95,56 +105,92 @@ class CaregiverMedicationsListPageState
               children: [
                 TextFormField(
                   controller: nameController,
-                  decoration: _inputDecoration('Medication Name *', Icons.medical_services),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: _inputDecoration(
+                    'Medication Name *',
+                    Icons.medical_services,
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Medication name is required'
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: inventoryController,
-                  decoration: _inputDecoration('Initial Inventory', Icons.inventory),
+                  decoration: _inputDecoration(
+                    'Initial Inventory *',
+                    Icons.inventory,
+                  ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) => v == null || int.tryParse(v) == null
-                      ? 'Number required'
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Inventory is required'
                       : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: thresholdController,
-                  decoration: _inputDecoration('Refill Threshold', Icons.warning_amber),
+                  decoration: _inputDecoration(
+                    'Refill Threshold *',
+                    Icons.warning_amber,
+                  ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) => v == null || int.tryParse(v) == null
-                      ? 'Number required'
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Threshold is required'
                       : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: deviceIdController,
-                  decoration: _inputDecoration('Device ID (optional)', Icons.memory, prefixText: 'DISP '),
+                  decoration: _inputDecoration(
+                    'Device ID *',
+                    Icons.memory,
+                    prefixText: 'DISP ',
+                  ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Device ID is required'
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: motorSlotController,
-                  decoration: _inputDecoration('Motor Slot (1-3, optional)', Icons.settings_applications),
+                  decoration: _inputDecoration(
+                    'Motor Slot (1-3) *',
+                    Icons.settings_applications,
+                  ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty)
+                      return 'Motor Slot is required';
+                    final slot = int.tryParse(v);
+                    if (slot == null || slot < 1 || slot > 3)
+                      return 'Must be between 1 and 3';
+                    return null;
+                  },
                 ),
               ],
             ),
           ),
         ),
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 16,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () {
+              // Only close the dialog returning 'true' if the form is valid
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, true);
+              }
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
               foregroundColor: Colors.white,
@@ -159,22 +205,28 @@ class CaregiverMedicationsListPageState
       ),
     );
 
-    if (confirmed == true && formKey.currentState!.validate()) {
+    // If the user clicked "Add" and it passed validation
+    if (confirmed == true) {
       setState(() => _isLoading = true);
-      final result = await MedicationService().addMedication({
+
+      // Because we used validators, we know these text fields contain valid numbers
+      final payload = {
         'medication_name': nameController.text.trim(),
-        'current_inventory': int.tryParse(inventoryController.text) ?? 0,
-        'refill_threshold': int.tryParse(thresholdController.text) ?? 5,
-        if (deviceIdController.text.trim().isNotEmpty)
-          'device_id': int.tryParse(deviceIdController.text),
-        if (motorSlotController.text.trim().isNotEmpty)
-          'motor_slot': int.tryParse(motorSlotController.text),
-      });
+        'current_inventory': int.parse(inventoryController.text.trim()),
+        'refill_threshold': int.parse(thresholdController.text.trim()),
+        'device_id': int.parse(deviceIdController.text.trim()),
+        'motor_slot': int.parse(motorSlotController.text.trim()),
+      };
+
+      final result = await MedicationService().addMedication(payload);
+
+      if (!mounted) return; // Best practice after await
+
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Medication added successfully')),
         );
-        _fetchMedications();
+        _fetchMedications(); // Refresh the list
       } else {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -214,7 +266,10 @@ class CaregiverMedicationsListPageState
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Edit Medication',
-          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPurple),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.primaryPurple,
+          ),
         ),
         content: Form(
           key: formKey,
@@ -222,98 +277,117 @@ class CaregiverMedicationsListPageState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // 1. Name Field
                 TextFormField(
                   controller: nameController,
-                  decoration: _inputDecoration('Medication Name *', Icons.medical_services),
+                  decoration: _inputDecoration(
+                    'Medication Name *',
+                    Icons.medical_services,
+                  ),
                   validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required' : null,
+                      v == null || v.trim().isEmpty ? 'Name is required' : null,
                 ),
                 const SizedBox(height: 16),
+                // 2. Inventory Field
                 TextFormField(
                   controller: inventoryController,
-                  decoration: _inputDecoration('Current Inventory', Icons.inventory),
+                  decoration: _inputDecoration(
+                    'Current Inventory *',
+                    Icons.inventory,
+                  ),
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) => v == null || int.tryParse(v) == null
-                      ? 'Number required'
+                      ? 'Enter a valid number'
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // 3. Threshold Field
                 TextFormField(
                   controller: thresholdController,
-                  decoration: _inputDecoration('Refill Threshold', Icons.warning_amber),
+                  decoration: _inputDecoration(
+                    'Refill Threshold *',
+                    Icons.warning_amber,
+                  ),
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) => v == null || int.tryParse(v) == null
-                      ? 'Number required'
+                      ? 'Enter a valid number'
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // 4. Device ID Field
                 TextFormField(
                   controller: deviceIdController,
-                  decoration: _inputDecoration('Device ID (optional)', Icons.memory, prefixText: 'DISP '),
+                  decoration: _inputDecoration(
+                    'Device ID *',
+                    Icons.memory,
+                    prefixText: 'DISP ',
+                  ),
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Device ID is required'
+                      : null,
                 ),
                 const SizedBox(height: 16),
+                // 5. Motor Slot Field
                 TextFormField(
                   controller: motorSlotController,
-                  decoration: _inputDecoration('Motor Slot (1-3, optional)', Icons.settings_applications),
+                  decoration: _inputDecoration(
+                    'Motor Slot (1-3) *',
+                    Icons.settings_applications,
+                  ),
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  validator: (v) {
+                    final val = int.tryParse(v ?? '');
+                    if (val == null || val < 1 || val > 3)
+                      return 'Enter 1, 2, or 3';
+                    return null;
+                  },
                 ),
               ],
             ),
           ),
         ),
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, true);
+              }
+            },
             child: const Text('Save'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && formKey.currentState!.validate()) {
+    if (confirmed == true) {
       setState(() => _isLoading = true);
-      final result = await MedicationService().updateMedication(
-        medication['medication_id'],
-        {
-          'medication_name': nameController.text.trim(),
-          'current_inventory': int.tryParse(inventoryController.text),
-          'refill_threshold': int.tryParse(thresholdController.text),
-          if (deviceIdController.text.trim().isNotEmpty)
-            'device_id': int.tryParse(deviceIdController.text),
-          if (motorSlotController.text.trim().isNotEmpty)
-            'motor_slot': int.tryParse(motorSlotController.text),
-        },
-      );
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Medication updated')));
-        _fetchMedications();
-      } else {
+      try {
+        final result = await MedicationService()
+            .updateMedication(medication['medication_id'], {
+              'medication_name': nameController.text.trim(),
+              'current_inventory': int.parse(inventoryController.text),
+              'refill_threshold': int.parse(thresholdController.text),
+              'device_id': int.parse(deviceIdController.text),
+              'motor_slot': int.parse(motorSlotController.text),
+            });
+
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Medication updated')));
+          _fetchMedications();
+        } else {
+          throw Exception(result['message'] ?? 'Update failed');
+        }
+      } catch (e) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed: ${result['message'] ?? result['error']}'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     }
@@ -379,12 +453,19 @@ class CaregiverMedicationsListPageState
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          // Add Button moved to AppBar
+          IconButton(
+            icon: const Icon(Icons.add, size: 28),
+            onPressed: _showAddMedicationDialog,
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddMedicationDialog,
-        backgroundColor: AppColors.primaryPurple,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: _showAddMedicationDialog,
+      //   backgroundColor: AppColors.primaryPurple,
+      //   child: const Icon(Icons.add, color: Colors.white),
+      // ),
       body: RefreshIndicator(
         onRefresh: _fetchMedications,
         color: AppColors.primaryPurple,
@@ -436,8 +517,13 @@ class CaregiverMedicationsListPageState
                         m['medication_name'] ?? 'Unknown',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      subtitle: Text(
-                        'Inventory: ${m['current_inventory'] ?? 0}  |  Device: ${m['device_id'] ?? 'None'}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Inventory: ${m['current_inventory'] ?? 0}'),
+                          Text('Device: ${m['device_id'] ?? 'None'}'),
+                          Text('Motor Slot: ${m['motor_slot'] ?? 'Not set'}'),
+                        ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

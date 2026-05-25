@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 23, 2026 at 02:14 PM
+-- Generation Time: May 23, 2026 at 09:14 PM
 -- Server version: 10.11.16-MariaDB-cll-lve
 -- PHP Version: 8.4.21
 
@@ -149,7 +149,7 @@ CREATE TABLE `iot_device` (
 --
 
 INSERT INTO `iot_device` (`device_id`, `device_serial`, `last_reported_battery`, `last_known_ip`, `last_battery_report`, `wifi_rssi`) VALUES
-(1, 'DISP-1', 100, '192.168.0.12', '2026-05-23 14:14:39', -54);
+(1, 'DISP-1', 100, '192.168.0.12', '2026-05-23 21:13:54', -60);
 
 -- --------------------------------------------------------
 
@@ -174,8 +174,8 @@ CREATE TABLE `medications` (
 
 INSERT INTO `medications` (`medication_id`, `medication_name`, `current_inventory`, `refill_threshold`, `device_id`, `motor_slot`, `created_at`, `updated_at`) VALUES
 (1, 'Aspirin', 13, 10, 1, 1, '2026-05-05 15:33:23', '2026-05-20 08:47:33'),
-(2, 'Lisinopril', 10, 5, 1, 3, '2026-05-05 15:33:23', '2026-05-17 01:34:00'),
-(3, 'Metformin', 11, 10, 1, 2, '2026-05-05 15:33:23', '2026-05-20 15:53:22');
+(2, 'Lisinopril', 2, 5, 1, 3, '2026-05-05 15:33:23', '2026-05-23 17:55:07'),
+(3, 'Metformin', 0, 10, 1, 2, '2026-05-05 15:33:23', '2026-05-23 20:07:07');
 
 -- --------------------------------------------------------
 
