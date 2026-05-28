@@ -10,7 +10,8 @@ void setupBuzzer() {
   digitalWrite(buzzerPin, LOW); 
 }
 
-void handleBuzzerOn() {
+void handleBuzzerOn() 
+{
   Serial.println("Buzzer turned ON (Active-High Trigger)");
   // Pull HIGH to send a signal to the 'S' pin and make it sound
   digitalWrite(buzzerPin, HIGH); 

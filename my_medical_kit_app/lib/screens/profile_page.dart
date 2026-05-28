@@ -19,7 +19,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true;
@@ -102,7 +101,7 @@ class _ProfilePageState extends State<ProfilePage> {
             'gender': patient.user.gender?.toString().split('.').last ?? 'Male',
             'dob': patient.user.dateOfBirth,
             'notes': patient.medicalNotes ?? 'No medical notes',
-            'is_active': patient.user.isActive,
+            'is_active': patient.user.isActive == true,
             'profile_photo': patient.user.profilePhoto,
           };
           debugPrint('🔵 Patient data loaded: ${_userData['name']}');
@@ -121,7 +120,9 @@ class _ProfilePageState extends State<ProfilePage> {
             'gender': caregiverData['gender']?.toString() ?? 'Male',
             'dob': _parseDateSafely(caregiverData['date_of_birth']),
             'notes': null,
-            'is_active': caregiverData['is_active'] ?? true,
+            'is_active':
+                (caregiverData['is_active'] == 1) ||
+                (caregiverData['is_active'] == true),
             'profile_photo': caregiverData['profile_photo']?.toString(),
           };
           debugPrint('🔵 Caregiver data loaded: ${_userData['name']}');
@@ -447,7 +448,11 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   const SizedBox(height: 10),
-                  _buildAvatarSection(fullName, _userRole),
+                  _buildAvatarSection(
+                    fullName,
+                    _userRole,
+                    _userData['is_active'] ?? true,
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -789,7 +794,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildAvatarSection(String name, String role) {
+  Widget _buildAvatarSection(String name, String role, bool isActive) {
     final existingPhotoUrl = _userData['profile_photo']?.toString();
 
     // ✅ Build full URL if relative
@@ -878,21 +883,43 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
         const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            role.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-              letterSpacing: 1,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                role.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isActive ? Colors.green : Colors.red,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                isActive ? 'ACTIVE' : 'INACTIVE',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1028,6 +1055,71 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _confirmDeactivateAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deactivate Account'),
+        content: const Text(
+          'Are you sure you want to deactivate your caregiver account?\n\n'
+          'You will be logged out and will not be able to log in again '
+          'until an administrator reactivates your account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _deactivateAccount();
+    }
+  }
+
+  Future<void> _deactivateAccount() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await http.put(
+        Uri.parse('${ApiClient.baseUrl}/caregiver/$_userId/deactivate'),
+        headers: ApiClient.defaultHeaders,
+      );
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success']) {
+        // 停用成功，清除本地会话并跳转到登录页
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LandingPage()),
+            (route) => false,
+          );
+        }
+      } else {
+        throw Exception(result['error'] ?? 'Deactivation failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to deactivate account: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Widget _buildDivider() => Divider(
     height: 1,
     indent: 66,
@@ -1060,6 +1152,38 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           const SizedBox(height: 16),
+          if (_userRole == 'caregiver') ...[
+            ElevatedButton(
+              onPressed: _confirmDeactivateAccount,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.redAccent,
+                minimumSize: const Size(double.infinity, 55),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Colors.redAccent, width: 1.5),
+                ),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.block_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Deactivate Account',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           ElevatedButton(
             onPressed: _logout,
             style: ElevatedButton.styleFrom(

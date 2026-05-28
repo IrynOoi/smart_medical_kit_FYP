@@ -22,15 +22,25 @@ class ApiClient {
     );
   }
 
-  static Future<http.Response> post(String endpoint, {Map<String, dynamic>? body}) async {
-    return await http.post(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: defaultHeaders,
-      body: body != null ? jsonEncode(body) : null,
-    );
+  static Future<http.Response> post(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final response = await http
+        .post(
+          uri,
+          headers: defaultHeaders,
+          body: jsonEncode(body), // assuming JSON body
+        )
+        .timeout(Duration(seconds: 30)); // Increase to 30 seconds
+    return response;
   }
 
-  static Future<http.Response> put(String endpoint, {Map<String, dynamic>? body}) async {
+  static Future<http.Response> put(
+    String endpoint, {
+    Map<String, dynamic>? body,
+  }) async {
     return await http.put(
       Uri.parse('$baseUrl$endpoint'),
       headers: defaultHeaders,

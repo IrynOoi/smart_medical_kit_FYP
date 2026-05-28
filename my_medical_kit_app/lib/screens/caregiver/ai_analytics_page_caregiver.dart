@@ -1112,7 +1112,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
   Widget _buildHybridAIHeaderCard() {
     final overallScore = _toDouble(
       _overview['overall_adherence_prediction'],
-      defaultValue: 85.0,
+      defaultValue: 0,
     );
 
     return Container(

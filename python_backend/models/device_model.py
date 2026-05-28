@@ -61,6 +61,13 @@ def get_patient_by_device(device_id):
         result = cursor.fetchone()
         cursor.close()
     return result
+def get_device_id_by_serial(device_serial):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT device_id FROM iot_device WHERE device_serial = %s', (device_serial,))
+        row = cursor.fetchone()
+        cursor.close()
+    return row[0] if row else None
 
 def add_new_device(device_serial, battery_level, ip_address):
     with get_db_connection() as conn:

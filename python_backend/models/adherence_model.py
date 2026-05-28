@@ -47,7 +47,8 @@ def get_all_recent_logs(caregiver_id, limit):
             JOIN medications m ON pc.medication_id = m.medication_id
             JOIN patient p ON pc.patient_id = p.patient_id
             JOIN users u ON p.patient_id = u.user_id
-            WHERE p.caregiver_id = %s
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s
             ORDER BY al.scheduled_time DESC
             LIMIT %s
         ''', (caregiver_id, limit))
@@ -67,7 +68,8 @@ def get_caregiver_overview_stats(caregiver_id):
             FROM adherence_logs al
             JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
             JOIN patient p ON pc.patient_id = p.patient_id
-            WHERE p.caregiver_id = %s
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s
         ''', (caregiver_id,))
         stats = cursor.fetchone()
 
@@ -75,7 +77,8 @@ def get_caregiver_overview_stats(caregiver_id):
             SELECT COUNT(*) AS total_patients
             FROM patient p
             JOIN users u ON p.patient_id = u.user_id
-            WHERE p.caregiver_id = %s AND u.is_active = true
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s AND u.is_active = true
         ''', (caregiver_id,))
         total_patients = cursor.fetchone()['total_patients'] or 0
 
@@ -84,7 +87,8 @@ def get_caregiver_overview_stats(caregiver_id):
             FROM prescription_config pc
             JOIN medications m ON pc.medication_id = m.medication_id
             JOIN patient p ON pc.patient_id = p.patient_id
-            WHERE p.caregiver_id = %s
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s
               AND m.current_inventory <= m.refill_threshold
         ''', (caregiver_id,))
         low = cursor.fetchone()
@@ -94,12 +98,13 @@ def get_caregiver_overview_stats(caregiver_id):
             SELECT COUNT(DISTINCT m.medication_id) AS low_stock_count
             FROM medications m
             JOIN (
-                SELECT DISTINCT p.caregiver_id, med.device_id
+                SELECT DISTINCT pcm.caregiver_id, med.device_id
                 FROM patient p
                 JOIN users u ON p.patient_id = u.user_id
                 JOIN prescription_config pc ON p.patient_id = pc.patient_id
                 JOIN medications med ON pc.medication_id = med.medication_id
-                WHERE p.caregiver_id = %s
+                JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+                WHERE pcm.caregiver_id = %s
                   AND u.is_active = TRUE
                   AND med.device_id IS NOT NULL
                   AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
@@ -109,8 +114,9 @@ def get_caregiver_overview_stats(caregiver_id):
                   SELECT 1
                   FROM prescription_config pc2
                   JOIN patient p2 ON pc2.patient_id = p2.patient_id
+                  JOIN patient_caregiver_mapping pcm2 ON p2.patient_id = pcm2.patient_id
                   WHERE pc2.medication_id = m.medication_id
-                    AND p2.caregiver_id = dc.caregiver_id
+                    AND pcm2.caregiver_id = dc.caregiver_id
                     AND (pc2.end_date IS NULL OR pc2.end_date >= CURRENT_DATE)
               )
         ''', (caregiver_id,))
@@ -118,12 +124,15 @@ def get_caregiver_overview_stats(caregiver_id):
         low_stock_count += device_low['low_stock_count'] or 0
 
         cursor.execute('''
-            SELECT COUNT(*) AS total_prescriptions
-            FROM prescription_config pc
-            JOIN patient p ON pc.patient_id = p.patient_id
-            WHERE p.caregiver_id = %s
-              AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
-        ''', (caregiver_id,))
+                    SELECT COUNT(*) AS total_prescriptions
+                    FROM prescription_config pc
+                    JOIN patient p ON pc.patient_id = p.patient_id
+                    JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+                    JOIN users u ON p.patient_id = u.user_id   -- 🌟 1. 链接 users 表
+                    WHERE pcm.caregiver_id = %s
+                    AND u.is_active = true                   -- 🌟 2. 确保只计算活跃的病患
+                    AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+                ''', (caregiver_id,))
         total_rx = cursor.fetchone()['total_prescriptions'] or 0
 
         cursor.execute('SELECT COUNT(*) AS distinct_meds FROM medications')
@@ -145,7 +154,8 @@ def get_caregiver_chart_data(caregiver_id, period):
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 JOIN patient p ON pc.patient_id = p.patient_id
-                WHERE p.caregiver_id = %s 
+                JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+                WHERE pcm.caregiver_id = %s 
                   AND DATE(al.scheduled_time) = CURRENT_DATE 
                   AND al.status IN ('TAKEN', 'MISSED')
                 GROUP BY hour
@@ -161,7 +171,8 @@ def get_caregiver_chart_data(caregiver_id, period):
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 JOIN patient p ON pc.patient_id = p.patient_id
-                WHERE p.caregiver_id = %s 
+                JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+                WHERE pcm.caregiver_id = %s 
                   AND al.scheduled_time >= CURRENT_DATE - INTERVAL 28 DAY
                   AND al.status IN ('TAKEN', 'MISSED')
                 GROUP BY week_ago
@@ -177,7 +188,8 @@ def get_caregiver_chart_data(caregiver_id, period):
                 FROM adherence_logs al
                 JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
                 JOIN patient p ON pc.patient_id = p.patient_id
-                WHERE p.caregiver_id = %s 
+                JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+                WHERE pcm.caregiver_id = %s 
                   AND al.scheduled_time >= CURRENT_DATE - INTERVAL 7 DAY
                   AND al.status IN ('TAKEN', 'MISSED')
                 GROUP BY dow
@@ -201,7 +213,8 @@ def get_caregiver_alerts(caregiver_id, limit):
             JOIN medications med ON pc.medication_id = med.medication_id
             JOIN patient p ON pc.patient_id = p.patient_id
             JOIN users u ON p.patient_id = u.user_id
-            WHERE p.caregiver_id = %s
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s
             AND al.status IN ('MISSED', 'PENDING')
             ORDER BY al.scheduled_time DESC
             LIMIT %s
@@ -218,7 +231,8 @@ def get_caregiver_analytics_overview(caregiver_id):
             SELECT COUNT(*) AS total_patients
             FROM patient p
             JOIN users u ON p.patient_id = u.user_id
-            WHERE p.caregiver_id = %s AND u.is_active = true
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s AND u.is_active = true
         ''', (caregiver_id,))
         total = cursor.fetchone()['total_patients']
         
@@ -238,7 +252,8 @@ def get_caregiver_analytics_overview(caregiver_id):
                 ) ranked
                 WHERE rn = 1
             ) a ON p.patient_id = a.patient_id
-            WHERE p.caregiver_id = %s AND u.is_active = true
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            WHERE pcm.caregiver_id = %s AND u.is_active = true
         ''', (caregiver_id,))
         stats = cursor.fetchone()
         cursor.close()

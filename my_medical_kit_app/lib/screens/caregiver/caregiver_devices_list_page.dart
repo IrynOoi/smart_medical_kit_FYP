@@ -1,9 +1,8 @@
 //caregiver_devices_list_page.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
-import 'package:my_medical_kit_app/services/api/medication_service.dart';
-import 'package:my_medical_kit_app/services/api/device_service.dart';
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 class CaregiverDevicesListPage extends StatefulWidget {
   final int caregiverId;
@@ -18,34 +17,32 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   List<Map<String, dynamic>> _devices = [];
   bool _isLoading = true;
   String _error = '';
-  List<Map<String, dynamic>> _medications = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _fetchDevices();
   }
 
-  Future<void> _fetchData() async {
-    await Future.wait([_fetchDevices(), _fetchMedications()]);
-  }
-
+  // Fetch purely hardware devices from the backend
   Future<void> _fetchDevices() async {
     setState(() {
       _isLoading = true;
       _error = '';
     });
     try {
-      final patients = await CaregiverService().getCaregiverPatients(
-        widget.caregiverId,
-      );
-      final devices = patients
-          .where((p) => p['device_serial'] != null)
-          .toList();
-      setState(() {
-        _devices = devices;
-        _isLoading = false;
-      });
+      final response = await ApiClient.get('/devices');
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          setState(() {
+            _devices = List<Map<String, dynamic>>.from(json['data']);
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+      throw Exception('Failed to load devices');
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -54,19 +51,13 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     }
   }
 
-  Future<void> _fetchMedications() async {
-    final meds = await MedicationService().getMedications();
-    setState(() {
-      _medications = meds.cast<Map<String, dynamic>>();
-    });
-  }
-
   // ------------------------------------------------------------------
-  // Add Device Dialog (with full prescription creation)
+  // Add Device Dialog (Hardware Only)
   // ------------------------------------------------------------------
   Future<void> _showAddDeviceDialog() async {
     final serialController = TextEditingController();
-    // 👇 添加监听器，自动把纯数字变成 DISP-xxx
+
+    // Auto-prepend 'DISP-' for pure numbers
     serialController.addListener(() {
       final text = serialController.text;
       if (text.isNotEmpty && RegExp(r'^\d+$').hasMatch(text)) {
@@ -79,329 +70,99 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       }
     });
 
-    final inventoryController = TextEditingController(text: '30');
-    final thresholdController = TextEditingController(text: '10');
     final formKey = GlobalKey<FormState>();
-
-    final patients = await CaregiverService().getCaregiverPatients(
-      widget.caregiverId,
-    );
-    if (!mounted) return;
-    if (patients.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No patients available to assign device to'),
-        ),
-      );
-      return;
-    }
-    if (_medications.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No medications found in system')),
-      );
-      return;
-    }
-
-    final patientOptions = patients.map((p) {
-      return <String, dynamic>{
-        'patient_id': p['patient_id'],
-        'full_name': p['full_name'],
-      };
-    }).toList();
-
-    int? selectedPatientId = patientOptions.first['patient_id'] as int?;
-    int selectedMotorSlot = 1;
-    int? selectedMedicationId = _medications.first['medication_id'] as int?;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('Add New Device & Prescription'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: serialController,
-                    decoration: const InputDecoration(
-                      labelText: 'Device Serial',
-                    ),
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    initialValue: selectedPatientId,
-                    items: patientOptions.map((p) {
-                      return DropdownMenuItem<int>(
-                        value: p['patient_id'] as int,
-                        child: Text(p['full_name'] as String),
-                      );
-                    }).toList(),
-                    onChanged: (newValue) =>
-                        setStateDialog(() => selectedPatientId = newValue),
-                    decoration: const InputDecoration(
-                      labelText: 'Assign to Patient',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    initialValue: selectedMotorSlot,
-                    items: const [
-                      DropdownMenuItem(value: 1, child: Text('Motor Slot 1')),
-                      DropdownMenuItem(value: 2, child: Text('Motor Slot 2')),
-                      DropdownMenuItem(value: 3, child: Text('Motor Slot 3')),
-                    ],
-                    onChanged: (newValue) =>
-                        setStateDialog(() => selectedMotorSlot = newValue!),
-                    decoration: const InputDecoration(labelText: 'Motor Slot'),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    initialValue: selectedMedicationId,
-                    items: _medications.map((med) {
-                      return DropdownMenuItem<int>(
-                        value: med['medication_id'] as int,
-                        child: Text(med['medication_name'] as String),
-                      );
-                    }).toList(),
-                    onChanged: (newValue) =>
-                        setStateDialog(() => selectedMedicationId = newValue),
-                    decoration: const InputDecoration(labelText: 'Medication'),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: inventoryController,
-                    decoration: const InputDecoration(
-                      labelText: 'Initial Inventory',
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: thresholdController,
-                    decoration: const InputDecoration(
-                      labelText: 'Refill Threshold',
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'Required' : null,
-                  ),
-                ],
-              ),
-            ),
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Register New Device',
+          style: TextStyle(
+            color: AppColors.primaryPurple,
+            fontWeight: FontWeight.bold,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryPurple,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Add'),
-            ),
-          ],
         ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Register a new hardware kit. You can assign it to a patient later in the Medications or Prescription pages.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: serialController,
+                decoration: InputDecoration(
+                  labelText: 'Device Serial (e.g. DISP-1)',
+                  prefixIcon: const Icon(
+                    Icons.router,
+                    color: AppColors.primaryPurple,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Serial is required' : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryPurple,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Register'),
+          ),
+        ],
       ),
     );
 
     if (confirmed == true && formKey.currentState!.validate()) {
-      // All-in-one API call expected: create device, link to patient, create prescription
-      final success = await DeviceService().createDeviceWithPrescription({
-        'serial': serialController.text,
-        'patient_id': selectedPatientId!,
-        'motor_slot': selectedMotorSlot,
-        'medication_id': selectedMedicationId!,
-        'inventory': int.parse(inventoryController.text),
-        'threshold': int.parse(thresholdController.text),
-      });
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Device and prescription added')),
-        );
-        _fetchDevices();
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Failed to add device')));
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // Edit Device (assignment + prescription details)
-  // ------------------------------------------------------------------
-  Future<void> _showEditAssignmentDialog(Map<String, dynamic> device) async {
-    final patients = await CaregiverService().getCaregiverPatients(
-      widget.caregiverId,
-    );
-
-    final patientOptions = patients.map((p) {
-      return <String, dynamic>{
-        'patient_id': p['patient_id'],
-        'full_name': p['full_name'],
-      };
-    }).toList();
-
-    if (patientOptions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No patients available to assign')),
-      );
-      return;
-    }
-
-    int? selectedPatientId = device['patient_id'] as int?;
-    if (selectedPatientId == null && patientOptions.isNotEmpty) {
-      selectedPatientId = patientOptions.first['patient_id'] as int;
-    }
-
-    int selectedMotorSlot = 1;
-    int selectedMedicationId = 1;
-    int currentInventory = 30;
-    int refillThreshold = 10;
-
-    // Fetch existing prescription if any
-    if (selectedPatientId != null) {
+      setState(() => _isLoading = true);
       try {
-        final prescription = await DeviceService()
-            .getPrescriptionForDevicePatient(
-              device['device_id'] as int,
-              selectedPatientId,
-            );
-        if (prescription != null) {
-          selectedMotorSlot = (prescription['motor_slot'] as int?) ?? 1;
-          selectedMedicationId = (prescription['medication_id'] as int?) ?? 1;
-          currentInventory = (prescription['current_inventory'] as int?) ?? 30;
-          refillThreshold = (prescription['refill_threshold'] as int?) ?? 10;
+        final response = await ApiClient.post(
+          '/iot_device',
+          body: {'device_serial': serialController.text.trim(), 'battery': 100},
+        );
+
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Device registered successfully!')),
+          );
+          _fetchDevices();
+        } else {
+          throw Exception(json['message'] ?? 'Failed to add device');
         }
-      } catch (_) {}
-    }
-
-    final inventoryController = TextEditingController(
-      text: currentInventory.toString(),
-    );
-    final thresholdController = TextEditingController(
-      text: refillThreshold.toString(),
-    );
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('Edit Device & Prescription'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: selectedPatientId,
-                  items: patientOptions.map((p) {
-                    return DropdownMenuItem<int>(
-                      value: p['patient_id'] as int,
-                      child: Text(p['full_name'] as String),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) {
-                    setStateDialog(() => selectedPatientId = newValue);
-                    // Optionally reload prescription for new patient
-                  },
-                  decoration: const InputDecoration(labelText: 'Patient'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: selectedMotorSlot,
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('Motor Slot 1')),
-                    DropdownMenuItem(value: 2, child: Text('Motor Slot 2')),
-                    DropdownMenuItem(value: 3, child: Text('Motor Slot 3')),
-                  ],
-                  onChanged: (newValue) =>
-                      setStateDialog(() => selectedMotorSlot = newValue!),
-                  decoration: const InputDecoration(labelText: 'Motor Slot'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: selectedMedicationId,
-                  items: _medications.map((med) {
-                    return DropdownMenuItem<int>(
-                      value: med['medication_id'] as int,
-                      child: Text(med['medication_name'] as String),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) =>
-                      setStateDialog(() => selectedMedicationId = newValue!),
-                  decoration: const InputDecoration(labelText: 'Medication'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: inventoryController,
-                  decoration: const InputDecoration(
-                    labelText: 'Current Inventory',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: thresholdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Refill Threshold',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == true && selectedPatientId != null) {
-      final success = await DeviceService()
-          .updateDevicePrescription(device['device_id'] as int, {
-            'patient_id': selectedPatientId!,
-            'motor_slot': selectedMotorSlot,
-            'medication_id': selectedMedicationId,
-            'current_inventory': int.parse(inventoryController.text),
-            'refill_threshold': int.parse(thresholdController.text),
-          });
-      if (success) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Updated')));
-        _fetchDevices();
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Update failed')));
+      } catch (e) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
   // ------------------------------------------------------------------
-  // Edit device serial
+  // Edit device serial ONLY
   // ------------------------------------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> device) async {
     final controller = TextEditingController(text: device['device_serial']);
     final formKey = GlobalKey<FormState>();
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -410,8 +171,13 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           key: formKey,
           child: TextFormField(
             controller: controller,
-            decoration: const InputDecoration(labelText: 'Device Serial'),
-            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+            decoration: InputDecoration(
+              labelText: 'Device Serial',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
           ),
         ),
         actions: [
@@ -423,25 +189,36 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Save'),
           ),
         ],
       ),
     );
+
     if (confirmed == true && formKey.currentState!.validate()) {
-      final success = await DeviceService().updateDevice(device['device_id'], {
-        'device_serial': controller.text,
-      });
-      if (success && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Device updated')));
-        _fetchDevices();
-      } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Update failed')));
+      setState(() => _isLoading = true);
+      try {
+        final response = await ApiClient.put(
+          '/iot_device/${device['device_id']}',
+          body: {'device_serial': controller.text.trim()},
+        );
+
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Device updated successfully')),
+          );
+          _fetchDevices();
+        } else {
+          throw Exception(json['message'] ?? 'Update failed');
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -455,7 +232,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Device'),
         content: Text(
-          'Delete ${device['device_serial']}? This will also unlink it from patients.',
+          'Delete ${device['device_serial']}? This will unlink it from any patients/medications it is attached to.',
         ),
         actions: [
           TextButton(
@@ -464,30 +241,41 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
+
     if (confirm == true) {
-      final success = await DeviceService().deleteDevice(device['device_id']);
-      if (success && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Device deleted')));
-        _fetchDevices();
-      } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Delete failed')));
+      setState(() => _isLoading = true);
+      try {
+        final response = await ApiClient.delete(
+          '/iot_device/${device['device_id']}',
+        );
+        final json = jsonDecode(response.body);
+
+        if (json['success'] == true) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Device deleted')));
+          _fetchDevices();
+        } else {
+          throw Exception(json['message'] ?? 'Delete failed');
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
-  // ------------------------------------------------------------------
-  // Build
-  // ------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -497,7 +285,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
       ),
       appBar: AppBar(
         title: const Text(
-          'Devices',
+          'Hardware Devices',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryPurple,
@@ -507,6 +295,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _showAddDeviceDialog,
+            tooltip: 'Register Device',
           ),
         ],
       ),
@@ -533,7 +322,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                 ),
               )
             : _devices.isEmpty
-            ? const Center(child: Text('No devices registered.'))
+            ? const Center(child: Text('No devices registered in the system.'))
             : ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
@@ -542,6 +331,8 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                   final d = _devices[i];
                   final battery = d['battery_level'] ?? 100;
                   final isLowBattery = battery < 20;
+                  final isOnline = d['last_known_ip'] != null;
+
                   return Card(
                     color: Colors.white,
                     margin: const EdgeInsets.only(bottom: 12),
@@ -551,8 +342,11 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                     ),
                     child: ListTile(
                       leading: Icon(
-                        Icons.devices,
-                        color: isLowBattery ? Colors.red : Colors.green,
+                        Icons.router,
+                        color: isOnline
+                            ? (isLowBattery ? Colors.orange : Colors.green)
+                            : Colors.grey,
+                        size: 32,
                       ),
                       title: Text(
                         d['device_serial'] ?? 'Unknown',
@@ -561,14 +355,25 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          const SizedBox(height: 4),
                           Text(
-                            'Patient: ${d['full_name']} • Battery: $battery%',
-                          ),
-                          if (d['inventory'] != null)
-                            Text(
-                              'Stock: ${d['inventory']} left (Threshold: ${d['refill_threshold']})',
-                              style: const TextStyle(fontSize: 12),
+                            'Battery: $battery%',
+                            style: TextStyle(
+                              color: isLowBattery ? Colors.red : Colors.black87,
+                              fontWeight: isLowBattery
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
+                          ),
+                          Text(
+                            isOnline
+                                ? 'IP: ${d['last_known_ip']}'
+                                : 'Status: Offline',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
                         ],
                       ),
                       trailing: Row(
@@ -576,9 +381,10 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                         children: [
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _showEditAssignmentDialog(d),
+                            onPressed: () => _showEditDialog(
+                              d,
+                            ), // Now triggers purely Serial edit
                           ),
-
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _confirmDelete(d),

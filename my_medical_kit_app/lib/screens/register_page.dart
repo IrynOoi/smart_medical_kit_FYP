@@ -1,8 +1,7 @@
 //register_page.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:my_medical_kit_app/theme/colors.dart';
+import 'package:my_medical_kit_app/services/api/auth_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -29,8 +28,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
   String _selectedRole = 'Patient';
   String _selectedGender = 'Male';
-
-  final String serverIp = "172.20.10.9";
 
   /// Show date picker for selecting date of birth
   Future<void> _selectDate(BuildContext context) async {
@@ -78,40 +75,32 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       );
 
-      final response = await http.post(
-        Uri.parse('http://$serverIp:5000/register'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "role": _selectedRole,
-          "fullname": _nameController.text,
-          "email": _emailController.text,
-          "password": _passwordController.text,
-          "gender": _selectedGender,
-          "phone_no": _phoneController.text,
-          "date_of_birth": _dobController.text,
-          "address": _addressController.text,
-          "medical_notes": _selectedRole == 'Patient'
-              ? _medicalNotesController.text
-              : null,
-          "caregiver_id": 1,
-        }),
-      );
+      final result = await AuthService().register({
+        "role": _selectedRole,
+        "fullname": _nameController.text,
+        "email": _emailController.text,
+        "password": _passwordController.text,
+        "gender": _selectedGender,
+        "phone_no": _phoneController.text,
+        "date_of_birth": _dobController.text,
+        "address": _addressController.text,
+        "medical_notes": _selectedRole == 'Patient'
+            ? _medicalNotesController.text
+            : null,
+        "caregiver_id": null,
+      });
 
       if (!mounted) return;
       Navigator.pop(context);
 
-      final result = jsonDecode(response.body);
-      if (!mounted) return;
-      if (result['success']) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        }
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
       } else {
         throw Exception(result['error'] ?? 'Registration failed');
       }

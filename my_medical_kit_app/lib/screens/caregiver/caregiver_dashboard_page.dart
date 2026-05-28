@@ -4,6 +4,7 @@ import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
+import 'package:my_medical_kit_app/services/api/device_service.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +34,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   List<Map<String, dynamic>> _notifications = [];
   int _unreadCount = 0;
   String _caregiverPhotoUrl = '';
+  int _globalDevicesOnline = 0; // <-- Add this
 
   int _caregiverId = 0;
   String _caregiverName = '';
@@ -226,17 +228,18 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         CaregiverService().getCaregiverAlerts(_caregiverId),
         CaregiverService().getCaregiverNotifications(_caregiverId),
         CaregiverService().getCaregiverLowStockAlerts(_caregiverId),
+        DeviceService().getDevices(), // 🌟 ADD THIS: Fetch all global devices
       ]);
 
-      _lowStockAlerts =
-          results[4] as List<Map<String, dynamic>>; // ✅ keep the data
+      _lowStockAlerts = results[4] as List<Map<String, dynamic>>;
       final overview = results[0] as Map<String, dynamic>;
       final patients = results[1] as List<Map<String, dynamic>>;
       final alerts = results[2] as List<Map<String, dynamic>>;
       _notifications = results[3] as List<Map<String, dynamic>>;
       _unreadCount = _notifications.where((n) => n['is_read'] == 0).length;
 
-      // ❌ removed the line that cleared _lowStockAlerts
+      final allDevices =
+          results[5] as List<dynamic>; // 🌟 ADD THIS: Extract device data
 
       await _fetchChartData('Week');
 
@@ -244,6 +247,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         _overviewStats = overview;
         _patients = patients;
         _recentActivities = alerts.take(5).toList();
+        _globalDevicesOnline =
+            allDevices.length; // 🌟 ADD THIS: Save the global count
         _isLoading = false;
       });
     } catch (e, s) {
@@ -260,8 +265,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   // ──────────────────────────────────────────────────────────────
   int get _totalPatients => _overviewStats['total_patients'] ?? 0;
   int get _totalPrescriptions => _overviewStats['total_prescriptions'] ?? 0;
-  int get _devicesOnline =>
-      _patients.where((p) => p['device_id'] != null).length;
+  int get _devicesOnline => _globalDevicesOnline;
 
   int get _distinctMedications => _overviewStats['distinct_medications'] ?? 0;
 

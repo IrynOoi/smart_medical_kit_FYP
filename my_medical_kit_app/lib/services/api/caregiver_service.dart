@@ -17,6 +17,26 @@ class CaregiverService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getCaregiverPatients(
+    int caregiverId, {
+    String show = 'active', // 'active', 'inactive', 'all'
+  }) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/patients?show=$show',
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success']) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getLowStockAlerts(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -68,23 +88,6 @@ class CaregiverService {
       final response = await ApiClient.get(
         '/caregiver/$caregiverId/all_recent_logs?limit=20',
       );
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['success']) {
-          return List<Map<String, dynamic>>.from(json['data']);
-        }
-      }
-      return [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getCaregiverPatients(
-    int caregiverId,
-  ) async {
-    try {
-      final response = await ApiClient.get('/caregiver/$caregiverId/patients');
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         if (json['success']) {
@@ -242,6 +245,73 @@ class CaregiverService {
       return jsonResponse['success'] == true;
     } catch (e) {
       debugPrint('Error marking notification read: $e');
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAvailablePatients(
+    int caregiverId, {
+    String status = 'all', // 'active', 'inactive', 'all'
+  }) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/available_patients?status=$status',
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching available patients: $e');
+      return [];
+    }
+  }
+
+  Future<bool> deactivateCaregiver(int caregiverId) async {
+    try {
+      final response = await ApiClient.put(
+        '/caregiver/$caregiverId/deactivate',
+      );
+      final json = jsonDecode(response.body);
+      return json['success'] == true;
+    } catch (e) {
+      debugPrint('Error deactivating caregiver: $e');
+      return false;
+    }
+  }
+
+  Future<bool> linkPatient(int caregiverId, int patientId) async {
+    try {
+      final response = await ApiClient.post(
+        '/caregiver/$caregiverId/link_patient',
+        body: {'patient_id': patientId},
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return json['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error linking patient: $e');
+      return false;
+    }
+  }
+
+  Future<bool> unlinkPatient(int caregiverId, int patientId) async {
+    try {
+      final response = await ApiClient.delete(
+        '/caregiver/$caregiverId/unlink_patient/$patientId',
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return json['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error unlinking patient: $e');
       return false;
     }
   }

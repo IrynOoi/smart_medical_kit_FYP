@@ -135,12 +135,12 @@ def get_stock_notifications(caregiver_id):
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/patients', methods=['GET'])
 def get_caregiver_patients(caregiver_id):
     try:
-        patients = get_caregiver_patients_list(caregiver_id)
+        status = request.args.get('show', 'active')
+        patients = get_caregiver_patients_list(caregiver_id, status)
         return jsonify({"success": True, "data": patients})
     except Exception as e:
         print(f"Error in get_caregiver_patients: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 @caregiver_bp.route('/caregiver/<int:caregiver_id>', methods=['GET'])
 def get_caregiver_profile_route(caregiver_id):
     try:
@@ -203,11 +203,16 @@ def get_analytics_overview(caregiver_id):
     try:
         total, stats = get_caregiver_analytics_overview(caregiver_id)
 
-        avg_score = stats['avg_prediction_score']
-        if avg_score is None:
-            avg_score = 85.0
+        # 关键修改：如果没有任何患者，则预测分数应为 0
+        if total == 0:
+            avg_score = 0.0
         else:
-            avg_score = float(avg_score)
+            avg_score = stats['avg_prediction_score']
+            if avg_score is None:
+                # 有患者但从未运行过 AI 预测，默认 85% 作为初始基线
+                avg_score = 85.0
+            else:
+                avg_score = float(avg_score)
         
         return jsonify({
             "success": True,
@@ -220,4 +225,56 @@ def get_analytics_overview(caregiver_id):
         })
     except Exception as e:
         print(f"Analytics overview error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/available_patients', methods=['GET'])
+def get_available_patients_route(caregiver_id):
+    try:
+        # 获取 status 参数，默认为 'all'
+        status = request.args.get('status', 'all')
+        from models.user import get_available_patients
+        patients = get_available_patients(caregiver_id, status_filter=status)
+        return jsonify({"success": True, "data": patients})
+    except Exception as e:
+        print(f"Error getting available patients: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/link_patient', methods=['POST'])
+def link_patient_route(caregiver_id):
+    try:
+        data = request.get_json()
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({"success": False, "message": "patient_id required"}), 400
+            
+        from models.user import link_patient_to_caregiver
+        link_patient_to_caregiver(caregiver_id, patient_id)
+        return jsonify({"success": True, "message": "Patient linked successfully"})
+    except Exception as e:
+        # 打印完整堆栈
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/deactivate', methods=['PUT'])
+def deactivate_caregiver(caregiver_id):
+    try:
+        from models.user import soft_delete_caregiver
+        soft_delete_caregiver(caregiver_id)
+        return jsonify({"success": True, "message": "Caregiver account deactivated"})
+    except Exception as e:
+        print(f"Deactivate caregiver error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/unlink_patient/<int:patient_id>', methods=['DELETE'])
+def unlink_patient_route(caregiver_id, patient_id):
+    try:
+        from models.user import unlink_patient_from_caregiver
+        unlink_patient_from_caregiver(caregiver_id, patient_id)
+        return jsonify({"success": True, "message": "Patient unlinked successfully"})
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

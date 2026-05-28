@@ -24,7 +24,20 @@ class PatientService {
     }
   }
 
-  Future<List<AdherenceLog>> getAdherenceLogs(int patientId, {int? limit}) async {
+  Future<bool> reactivatePatient(int patientId) async {
+    try {
+      final response = await ApiClient.put('/patient/$patientId/reactivate');
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<AdherenceLog>> getAdherenceLogs(
+    int patientId, {
+    int? limit,
+  }) async {
     try {
       String endpoint = '/patient/$patientId/adherence_logs';
       if (limit != null) {
@@ -47,17 +60,29 @@ class PatientService {
 
   Future<Map<String, dynamic>> getAdherenceStats(int patientId) async {
     try {
-      final response = await ApiClient.get('/patient/$patientId/adherence_stats');
+      final response = await ApiClient.get(
+        '/patient/$patientId/adherence_stats',
+      );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         if (jsonResponse['success']) {
           return jsonResponse['data'];
         }
       }
-      return {'taken_count': 0, 'missed_count': 0, 'upcoming_count': 0, 'adherence_score': 0};
+      return {
+        'taken_count': 0,
+        'missed_count': 0,
+        'upcoming_count': 0,
+        'adherence_score': 0,
+      };
     } catch (e) {
       debugPrint('Error getting adherence stats: $e');
-      return {'taken_count': 0, 'missed_count': 0, 'upcoming_count': 0, 'adherence_score': 0};
+      return {
+        'taken_count': 0,
+        'missed_count': 0,
+        'upcoming_count': 0,
+        'adherence_score': 0,
+      };
     }
   }
 
@@ -85,12 +110,15 @@ class PatientService {
     String type = 'REMINDER',
   }) async {
     try {
-      final response = await ApiClient.post('/notifications', body: {
-        'patient_id': patientId,
-        'title': title,
-        'message': message,
-        'type': type,
-      });
+      final response = await ApiClient.post(
+        '/notifications',
+        body: {
+          'patient_id': patientId,
+          'title': title,
+          'message': message,
+          'type': type,
+        },
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -101,7 +129,9 @@ class PatientService {
 
   Future<bool> markNotificationRead(int notificationId) async {
     try {
-      final response = await ApiClient.put('/notification/$notificationId/read');
+      final response = await ApiClient.put(
+        '/notification/$notificationId/read',
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -110,14 +140,24 @@ class PatientService {
     }
   }
 
-  Future<Map<String, dynamic>> updatePatient(int patientId, Map<String, dynamic> formData, {String? photoPath}) async {
+  Future<Map<String, dynamic>> updatePatient(
+    int patientId,
+    Map<String, dynamic> formData, {
+    String? photoPath,
+  }) async {
     try {
-      var request = http.MultipartRequest('PUT', Uri.parse('${ApiClient.baseUrl}/update_patient/$patientId'));
+      var request = http.MultipartRequest(
+        'PUT',
+        Uri.parse('${ApiClient.baseUrl}/update_patient/$patientId'),
+      );
       formData.forEach((key, value) {
         if (value != null) request.fields[key] = value.toString();
       });
       if (photoPath != null && photoPath.isNotEmpty) {
-        var file = await http.MultipartFile.fromPath('profile_photo', photoPath);
+        var file = await http.MultipartFile.fromPath(
+          'profile_photo',
+          photoPath,
+        );
         request.files.add(file);
       }
       request.headers.addAll(ApiClient.defaultHeaders);
@@ -129,7 +169,9 @@ class PatientService {
     }
   }
 
-  Future<Map<String, dynamic>> addPatient(Map<String, dynamic> patientData) async {
+  Future<Map<String, dynamic>> addPatient(
+    Map<String, dynamic> patientData,
+  ) async {
     try {
       final response = await ApiClient.post('/register', body: patientData);
       return jsonDecode(response.body);
@@ -138,9 +180,11 @@ class PatientService {
     }
   }
 
-  Future<bool> deletePatient(int patientId) async {
+  Future<bool> deletePatient(int patientId, {bool hard = false}) async {
     try {
-      final response = await ApiClient.delete('/patient/$patientId');
+      String endpoint = '/patient/$patientId';
+      if (hard) endpoint += '?hard=true';
+      final response = await ApiClient.delete(endpoint);
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -148,7 +192,10 @@ class PatientService {
     }
   }
 
-  Future<bool> markSingleReminderRead(int patientId, String medicationName) async {
+  Future<bool> markSingleReminderRead(
+    int patientId,
+    String medicationName,
+  ) async {
     try {
       final response = await ApiClient.put(
         '/patient/$patientId/reminders/read_single',

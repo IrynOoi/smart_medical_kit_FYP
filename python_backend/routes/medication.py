@@ -1,4 +1,5 @@
 #medication.py
+from db import get_db_connection
 import datetime
 from flask import Blueprint, request, jsonify
 from models.medication_model import (
@@ -148,13 +149,23 @@ def add_medication():
         medication_name = data.get('medication_name')
         current_inventory = data.get('current_inventory', 0)
         refill_threshold = data.get('refill_threshold', 5)
-        device_id = data.get('device_id')
+        device_serial = data.get('device_serial')  # 👈 accept serial instead of id
         motor_slot = data.get('motor_slot')
 
         if not medication_name:
             return jsonify({"success": False, "message": "Medication name is required"}), 400
 
-        success, msg, medication_id = add_new_medication(medication_name, current_inventory, refill_threshold, device_id, motor_slot)
+        # Resolve device_serial to device_id
+        device_id = None
+        if device_serial:
+            from models.device_model import get_device_id_by_serial
+            device_id = get_device_id_by_serial(device_serial)
+            if not device_id:
+                return jsonify({"success": False, "message": f"Device '{device_serial}' not found. Please register the device first."}), 400
+
+        success, msg, medication_id = add_new_medication(
+            medication_name, current_inventory, refill_threshold, device_id, motor_slot
+        )
         if not success:
             return jsonify({"success": False, "message": msg}), 400
 
@@ -166,12 +177,13 @@ def add_medication():
                 "current_inventory": current_inventory,
                 "refill_threshold": refill_threshold,
                 "device_id": device_id,
+                "device_serial": device_serial,
                 "motor_slot": motor_slot
             }
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
+        
 @medication_bp.route('/medications/<int:medication_id>', methods=['PUT'])
 def update_medication(medication_id):
     try:
@@ -179,8 +191,15 @@ def update_medication(medication_id):
         new_name = data.get('medication_name')
         current_inventory = data.get('current_inventory')
         refill_threshold = data.get('refill_threshold')
-        device_id = data.get('device_id')
+        device_serial = data.get('device_serial')
         motor_slot = data.get('motor_slot')
+        
+        device_id = None
+        if device_serial:
+            from models.device_model import get_device_id_by_serial
+            device_id = get_device_id_by_serial(device_serial)
+            if not device_id:
+                return jsonify({"success": False, "message": f"Device '{device_serial}' not found. Please register the device first."}), 400
 
         if not new_name and current_inventory is None and refill_threshold is None and device_id is None and motor_slot is None:
             return jsonify({"success": False, "message": "No fields to update"}), 400

@@ -1,4 +1,5 @@
 #patient.py
+from models.user import hard_delete_patient, soft_delete_patient, reactivate_patient
 import os
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
@@ -18,7 +19,7 @@ def get_patient(patient_id):
         if row:
             patient_data = {
                 "patient_id": row["patient_id"],
-                "caregiver_id": row["caregiver_id"],
+                "caregiver_id": row["cg_id"], # <-- CHANGED THIS LINE
                 "medical_notes": row["medical_notes"],
                 "user": {
                     "user_id": row["user_id"],
@@ -59,6 +60,14 @@ def get_patient(patient_id):
             return jsonify({"success": False, "error": "Patient not found"}), 404
     except Exception as e:
         print(f"Get patient error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@patient_bp.route('/patient/<int:patient_id>/reactivate', methods=['PUT'])
+def api_reactivate_patient(patient_id):
+    try:
+        reactivate_patient(patient_id)   # import from user.py
+        return jsonify({"success": True, "message": "Patient reactivated"})
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 @patient_bp.route('/patient/<int:patient_id>/prescriptions', methods=['GET'])
@@ -171,14 +180,20 @@ def update_patient(patient_id):
         print(f"Update patient error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+# patient.py  (modify the DELETE route)
 @patient_bp.route('/patient/<int:patient_id>', methods=['DELETE'])
 def delete_patient(patient_id):
     try:
-        delete_patient_cascade(patient_id)
-        return jsonify({"success": True, "message": "Patient deleted successfully"})
+        hard = request.args.get('hard', 'false').lower() == 'true'
+        if hard:
+            hard_delete_patient(patient_id)
+            return jsonify({"success": True, "message": "Patient permanently deleted"})
+        else:
+            soft_delete_patient(patient_id)
+            return jsonify({"success": True, "message": "Patient deactivated successfully"})
     except Exception as e:
         print(f"Delete patient error: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 5000
 
 @patient_bp.route('/patient/<int:patient_id>/reminders/read', methods=['PUT'])
 def api_mark_all_reminders_read(patient_id):

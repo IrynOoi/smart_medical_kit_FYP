@@ -2,13 +2,21 @@ import 'package:my_medical_kit_app/services/api/api_client.dart';
 //patient_detail_page.dart
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
+import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 
 import 'edit_patient_page.dart';
 
 class PatientDetailPage extends StatefulWidget {
   final Map<String, dynamic> patient;
+  final List<Map<String, dynamic>> allPatients;
+  final int caregiverId;
 
-  const PatientDetailPage({super.key, required this.patient});
+  const PatientDetailPage({
+    super.key,
+    required this.patient,
+    required this.allPatients,
+    required this.caregiverId,
+  });
 
   @override
   State<PatientDetailPage> createState() => _PatientDetailPageState();
@@ -75,6 +83,39 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          PopupMenuButton<int>(
+            icon: const Icon(Icons.people_alt_outlined),
+            tooltip: 'Switch Patient',
+            onSelected: (newId) {
+              final selected = widget.allPatients.firstWhere((p) => p['patient_id'] == newId);
+              setState(() {
+                patientData = Map<String, dynamic>.from(selected);
+              });
+            },
+            itemBuilder: (context) {
+              // Only display other existing patients not currently selected
+              final otherPatients = widget.allPatients
+                  .where((p) => p['patient_id'] != patientData['patient_id'])
+                  .toList();
+              
+              if (otherPatients.isEmpty) {
+                return [
+                  const PopupMenuItem<int>(
+                    value: -1,
+                    enabled: false,
+                    child: Text('No other patients found'),
+                  )
+                ];
+              }
+
+              return otherPatients.map((p) {
+                return PopupMenuItem<int>(
+                  value: p['patient_id'],
+                  child: Text(p['full_name'] ?? 'Unknown Patient'),
+                );
+              }).toList();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () async {
@@ -130,12 +171,84 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _confirmUnlink,
+                  icon: const Icon(Icons.link_off),
+                  label: const Text('Unlink Patient'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: Colors.red, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmUnlink() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unlink Patient'),
+        content: Text(
+          'Are you sure you want to unlink ${patientData['full_name']} from your account?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Unlink'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // We need to import CaregiverService if not already imported
+      // Actually we'll use CaregiverService directly
+      final success = await CaregiverService().unlinkPatient(widget.caregiverId, patientData['patient_id']);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // pop loading dialog
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patient unlinked successfully')),
+        );
+        Navigator.pop(context, true); // pop back to list page, returning true to refresh
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to unlink patient'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildInfoCard({

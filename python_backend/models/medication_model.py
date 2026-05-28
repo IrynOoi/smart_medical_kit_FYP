@@ -253,14 +253,27 @@ def get_all_medications():
 def add_new_medication(medication_name, current_inventory, refill_threshold, device_id, motor_slot):
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        
+        # Validate device_id is provided
+        if not device_id:
+            return False, "Device is required", None
+        
+        # Check if medication name already exists
         cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
         if cursor.fetchone():
-            return False, "Medication already exists", None
+            return False, "Medication name already exists", None
 
+        # Check if motor slot is already in use for this device
+        cursor.execute('SELECT medication_id FROM medications WHERE device_id = %s AND motor_slot = %s', (device_id, motor_slot))
+        if cursor.fetchone():
+            return False, f"Motor slot {motor_slot} is already in use on this device", None
+
+        # Insert new medication
         cursor.execute('''
             INSERT INTO medications (medication_name, current_inventory, refill_threshold, device_id, motor_slot)
             VALUES (%s, %s, %s, %s, %s)
         ''', (medication_name, current_inventory, refill_threshold, device_id, motor_slot))
+        
         medication_id = cursor.lastrowid
         conn.commit()
         cursor.close()

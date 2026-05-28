@@ -81,9 +81,10 @@ class CaregiverMedicationsListPageState
   Future<void> _showAddMedicationDialog() async {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
+
     final inventoryController = TextEditingController(text: '0');
-    final thresholdController = TextEditingController(text: '5');
-    final deviceIdController = TextEditingController();
+    final thresholdController = TextEditingController(text: '10');
+    final deviceSerialController = TextEditingController(); // ← DECLARE HERE
     final motorSlotController = TextEditingController();
 
     final confirmed = await showDialog<bool>(
@@ -141,16 +142,15 @@ class CaregiverMedicationsListPageState
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: deviceIdController,
+                  controller:
+                      deviceSerialController, // ← Use the declared controller
                   decoration: _inputDecoration(
-                    'Device ID *',
+                    'Device Serial (e.g., DISP-2) *',
                     Icons.memory,
-                    prefixText: 'DISP ',
                   ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: TextInputType.text,
                   validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Device ID is required'
+                      ? 'Device Serial is required'
                       : null,
                 ),
                 const SizedBox(height: 16),
@@ -186,7 +186,6 @@ class CaregiverMedicationsListPageState
           ),
           ElevatedButton(
             onPressed: () {
-              // Only close the dialog returning 'true' if the form is valid
               if (formKey.currentState!.validate()) {
                 Navigator.pop(context, true);
               }
@@ -205,28 +204,27 @@ class CaregiverMedicationsListPageState
       ),
     );
 
-    // If the user clicked "Add" and it passed validation
     if (confirmed == true) {
       setState(() => _isLoading = true);
 
-      // Because we used validators, we know these text fields contain valid numbers
+      // 修改 Flutter 发送的数据：
       final payload = {
         'medication_name': nameController.text.trim(),
         'current_inventory': int.parse(inventoryController.text.trim()),
         'refill_threshold': int.parse(thresholdController.text.trim()),
-        'device_id': int.parse(deviceIdController.text.trim()),
+        'device_serial': deviceSerialController.text.trim(),
         'motor_slot': int.parse(motorSlotController.text.trim()),
       };
 
       final result = await MedicationService().addMedication(payload);
 
-      if (!mounted) return; // Best practice after await
+      if (!mounted) return;
 
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Medication added successfully')),
         );
-        _fetchMedications(); // Refresh the list
+        _fetchMedications();
       } else {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -253,8 +251,8 @@ class CaregiverMedicationsListPageState
     final thresholdController = TextEditingController(
       text: (medication['refill_threshold'] ?? 5).toString(),
     );
-    final deviceIdController = TextEditingController(
-      text: medication['device_id']?.toString() ?? '',
+    final deviceSerialController = TextEditingController(
+      text: medication['device_serial']?.toString() ?? '',
     );
     final motorSlotController = TextEditingController(
       text: medication['motor_slot']?.toString() ?? '',
@@ -314,17 +312,16 @@ class CaregiverMedicationsListPageState
                       : null,
                 ),
                 const SizedBox(height: 16),
-                // 4. Device ID Field
+                // 4. Device Serial Field
                 TextFormField(
-                  controller: deviceIdController,
+                  controller: deviceSerialController,
                   decoration: _inputDecoration(
-                    'Device ID *',
+                    'Device Serial (e.g., DISP-2) *',
                     Icons.memory,
-                    prefixText: 'DISP ',
                   ),
-                  keyboardType: TextInputType.number,
+                  keyboardType: TextInputType.text,
                   validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Device ID is required'
+                      ? 'Device Serial is required'
                       : null,
                 ),
                 const SizedBox(height: 16),
@@ -372,7 +369,7 @@ class CaregiverMedicationsListPageState
               'medication_name': nameController.text.trim(),
               'current_inventory': int.parse(inventoryController.text),
               'refill_threshold': int.parse(thresholdController.text),
-              'device_id': int.parse(deviceIdController.text),
+              'device_serial': deviceSerialController.text.trim(),
               'motor_slot': int.parse(motorSlotController.text),
             });
 
@@ -521,7 +518,9 @@ class CaregiverMedicationsListPageState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Inventory: ${m['current_inventory'] ?? 0}'),
-                          Text('Device: ${m['device_id'] ?? 'None'}'),
+                          Text(
+                            'Device Serial: ${m['device_serial'] ?? 'None'}',
+                          ),
                           Text('Motor Slot: ${m['motor_slot'] ?? 'Not set'}'),
                         ],
                       ),

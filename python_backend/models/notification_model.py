@@ -237,8 +237,9 @@ def _fetch_stock_rows(cursor, caregiver_id=None, patient_id=None, medication_id=
     ]
     params = []
 
+    # Build the join and filter based on the mapping table
     if caregiver_id is not None:
-        conditions.append('p.caregiver_id = %s')
+        conditions.append('pcm.caregiver_id = %s')
         params.append(caregiver_id)
     if patient_id is not None:
         conditions.append('p.patient_id = %s')
@@ -255,7 +256,7 @@ def _fetch_stock_rows(cursor, caregiver_id=None, patient_id=None, medication_id=
         SELECT DISTINCT
             pc.prescription_id,
             p.patient_id,
-            p.caregiver_id,
+            pcm.caregiver_id,                     -- use mapping table
             u.full_name AS patient_name,
             m.medication_id,
             m.medication_name,
@@ -271,6 +272,7 @@ def _fetch_stock_rows(cursor, caregiver_id=None, patient_id=None, medication_id=
             END AS stock_status
         FROM patient p
         JOIN users u ON p.patient_id = u.user_id
+        JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id   -- added
         JOIN prescription_config pc ON p.patient_id = pc.patient_id
         JOIN medications m ON pc.medication_id = m.medication_id
         LEFT JOIN iot_device d ON m.device_id = d.device_id
@@ -289,7 +291,7 @@ def _fetch_device_stock_rows(cursor, caregiver_id=None, medication_id=None, low_
     params = []
 
     if caregiver_id is not None:
-        sub_conditions.append('p.caregiver_id = %s')
+        sub_conditions.append('pcm.caregiver_id = %s')
         params.append(caregiver_id)
     if medication_id is not None:
         outer_conditions.append('m.medication_id = %s')
@@ -321,9 +323,10 @@ def _fetch_device_stock_rows(cursor, caregiver_id=None, medication_id=None, low_
         FROM medications m
         JOIN iot_device d ON m.device_id = d.device_id
         JOIN (
-            SELECT DISTINCT p.caregiver_id, med.device_id
+            SELECT DISTINCT pcm.caregiver_id, med.device_id
             FROM patient p
             JOIN users u ON p.patient_id = u.user_id
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id   -- added
             JOIN prescription_config pc ON p.patient_id = pc.patient_id
             JOIN medications med ON pc.medication_id = med.medication_id
             WHERE {sub_where}
@@ -333,8 +336,9 @@ def _fetch_device_stock_rows(cursor, caregiver_id=None, medication_id=None, low_
               SELECT 1
               FROM prescription_config pc2
               JOIN patient p2 ON pc2.patient_id = p2.patient_id
+              JOIN patient_caregiver_mapping pcm2 ON p2.patient_id = pcm2.patient_id
               WHERE pc2.medication_id = m.medication_id
-                AND p2.caregiver_id = dc.caregiver_id
+                AND pcm2.caregiver_id = dc.caregiver_id
                 AND (pc2.end_date IS NULL OR pc2.end_date >= CURDATE())
           )
     ''', tuple(params))
