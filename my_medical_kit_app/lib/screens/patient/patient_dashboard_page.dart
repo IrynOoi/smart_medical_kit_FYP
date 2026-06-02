@@ -499,6 +499,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       _buildAdherenceChart(),
                       const SizedBox(height: 18),
                       _buildCaregiverCard(),
+                      _buildPrescriptionsList(),
                       const SizedBox(height: 30),
                     ],
                   ),
@@ -1163,69 +1164,142 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     );
   }
 
+  Widget _buildPrescriptionsList() {
+    if (_medications.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        const Text(
+          'My Prescriptions',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ..._medications.map((med) => _buildScheduleCard(med)),
+      ],
+    );
+  }
+
   // ──────────────────────────────────────────
   // PRESCRIPTION SCHEDULE (assigned by caregiver)
   // ──────────────────────────────────────────
   Widget _buildScheduleCard(Prescription med) {
     final scheduleText = _parseCronSchedule(med.dispenseSchedule);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.premiumLight.withValues(alpha: 0.4),
-          width: 1.5,
-        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.premiumDark.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.primaryPurple.withValues(alpha: 0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              Icons.schedule,
-              color: AppColors.primaryPurple,
-              size: 24,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: const BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: AppColors.primaryPurple,
+                width: 6,
+              ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  med.medicationName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primaryPurple.withValues(alpha: 0.15),
+                      AppColors.primaryPurple.withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  scheduleText,
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                child: const Icon(
+                  Icons.medication_liquid_rounded,
+                  color: AppColors.primaryPurple,
+                  size: 28,
                 ),
-                if (med.dosageTablet > 0)
-                  Text(
-                    'Dosage: ${med.dosageTablet.toStringAsFixed(0)} tablet(s)',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                  ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      med.medicationName,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.schedule_rounded,
+                          size: 15,
+                          color: AppColors.primaryPurple,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            scheduleText,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (med.dosageTablet > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.medical_information_outlined,
+                            size: 15,
+                            color: Colors.grey.shade500,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Dosage: ${med.dosageTablet.toStringAsFixed(0)} tablet(s)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1241,23 +1315,26 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     final month = parts[3];
     final dayOfWeek = parts[4];
 
-    String timeStr = '';
+    // Helper to convert a 24‑hour string (like "14") to 12‑hour format
+    String _to12Hour(String hour24) {
+      final h24 = int.parse(hour24);
+      final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
+      final ampm = h24 >= 12 ? 'PM' : 'AM';
+      return '$h12:$minute $ampm';
+    }
+
+    // Handle comma‑separated hours (e.g. "8,14")
+    String timeStr;
     if (hourPart.contains(',')) {
-      final hours = hourPart
-          .split(',')
-          .map((h) => '${h.padLeft(2, '0')}:${minute.padLeft(2, '0')}')
-          .join(', ');
-      timeStr = hours;
+      final hours = hourPart.split(',');
+      final times12 = hours.map((h) => _to12Hour(h)).toList();
+      timeStr = times12.join(', ');
     } else {
-      timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
+      timeStr = _to12Hour(hourPart);
     }
 
     if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
-      if (hourPart.contains(',')) {
-        return 'Daily at $timeStr';
-      } else {
-        return 'Daily at $timeStr';
-      }
+      return 'Daily at $timeStr';
     } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
       final days = dayOfWeek.split(',');
       final dayNames = {

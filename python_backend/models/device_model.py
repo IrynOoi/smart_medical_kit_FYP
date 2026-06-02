@@ -146,12 +146,13 @@ def get_pending_dose_for_device(device_serial):
         cursor.execute('''
             SELECT al.adlog_id, al.scheduled_time, al.prescription_id,
                    pc.dosage_tablet, med.motor_slot, pc.patient_id,
-                   m.medication_name          -- ← 加上这行
+                   m.medication_name,
+                   m.current_inventory  -- 💡 新增：查出当前库存！
             FROM iot_device d
             JOIN medications med ON d.device_id = med.device_id
             JOIN prescription_config pc ON med.medication_id = pc.medication_id
             JOIN adherence_logs al ON pc.prescription_id = al.prescription_id
-            JOIN medications m ON pc.medication_id = m.medication_id   -- ← 加上这个 JOIN
+            JOIN medications m ON pc.medication_id = m.medication_id
             WHERE d.device_serial = %s
               AND al.status = 'PENDING'
               AND al.scheduled_time <= CURRENT_TIMESTAMP

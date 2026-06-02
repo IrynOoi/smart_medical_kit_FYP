@@ -12,7 +12,6 @@
 Preferences prefs;
 String serverIP = "192.168.0.7"; 
 
-
 // String url = "http://" + serverIP + ":5000/device/heartbeat";
 const String deviceSerial = "DISP-1"; 
 
@@ -29,16 +28,23 @@ const unsigned long doseCheckInterval = 10000;
 unsigned long lastBeepTime = 0;
 bool currentBuzzerState = false;
 
-// ⏳ 新增：2分钟超时倒计时器
+// ⏳ 正常出药：超时倒计时器
 unsigned long doseStartTime = 0;
-const unsigned long doseTimeout = 30000; // 120,000 ms = 2 分钟
+const unsigned long doseTimeout = 30000; // 30,000 ms = 30 秒 (如需2分钟可改为 120000)
 
-// 🧠 State Machine Variables
+// 🧠 正常出药 State Machine Variables
 bool isDoseWaiting = false;
 int pendingMotorSlot = 0;
 int pendingAdlogId = 0;
 int pendingPrescriptionId = 0;
 String pendingMedName = "";
+
+// 🚨 新增：缺药 (Out of Stock) 警报状态变量
+bool isOutOfStockBeeping = false;
+unsigned long outOfStockStartTime = 0;
+const unsigned long outOfStockTimeout = 30000; // 缺药警报响 30 秒
+unsigned long lastBuzzerToggleTime = 0;
+bool outOfStockBuzzerState = false;
 
 void setupTouch();  
 void handleTouch(); 
@@ -106,7 +112,7 @@ void connectToWiFi() {
 // --- UPDATED LOGIC ---
 void markDoseAsTaken(int adlogId, int prescriptionId) {
   HTTPClient http;
-String url = "http://" + serverIP + ":5000/device/dispense_success";
+  String url = "http://" + serverIP + ":5000/device/dispense_success";
   
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
@@ -123,7 +129,7 @@ String url = "http://" + serverIP + ":5000/device/dispense_success";
   http.end();
 }
 
-// 🚨 新增：通知后端记录 Missed Dose 的函数
+// 🚨 通知后端记录 Missed Dose 的函数
 void markDoseAsMissed(int adlogId) {
   HTTPClient http;
   String url = "http://" + serverIP + ":5000/device/dispense_missed";
@@ -142,11 +148,12 @@ void markDoseAsMissed(int adlogId) {
   }
   http.end();
 }
+
 // 1. This function automatically polls the server every 10 seconds
 void checkForPendingDose() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-String url = "http://" + serverIP + ":5000/device/" + deviceSerial + "/pending_dose";
+    String url = "http://" + serverIP + ":5000/device/" + deviceSerial + "/pending_dose";
     
     http.begin(url);
     http.addHeader("ngrok-skip-browser-warning", "true");
@@ -156,8 +163,29 @@ String url = "http://" + serverIP + ":5000/device/" + deviceSerial + "/pending_d
       String payload = http.getString();
       DynamicJsonDocument doc(1024);
       deserializeJson(doc, payload);
-      
+
       if (doc["success"] == true && doc["has_pending"] == true) {
+        
+        // 💡 1. 优先检查：是否缺药 (Out of Stock)
+        if (doc["is_empty"] == true) { 
+          pendingMedName = doc["data"]["medication_name"].as<String>();
+          String slotNum = doc["data"]["motor_slot"].as<String>();
+          pendingAdlogId = doc["data"]["adlog_id"]; // 必须抓取，用于记录 Missed
+          
+          Serial.println("⚠️ 缺药警告: " + pendingMedName + " (Slot " + slotNum + ")");
+          updateDisplayState("Slot " + slotNum + " Empty", "Refill " + pendingMedName);
+          
+          // 🚀 启动缺药时的断断续续警报状态
+          isOutOfStockBeeping = true;
+          outOfStockStartTime = millis();
+          lastBuzzerToggleTime = millis();
+          outOfStockBuzzerState = true;
+          triggerBuzzerHardware(true); 
+          
+          return; // 🛑 核心：直接 return，阻止执行正常出药的响铃逻辑
+        }
+
+        // ⚙️ 2. 正常出药逻辑 (库存充足)
         pendingMotorSlot = doc["data"]["motor_slot"];
         pendingAdlogId = doc["data"]["adlog_id"];
         pendingPrescriptionId = doc["data"]["prescription_id"];
@@ -166,9 +194,9 @@ String url = "http://" + serverIP + ":5000/device/" + deviceSerial + "/pending_d
         Serial.println("🚨 Dispense Time Arrived for: " + pendingMedName);
         isDoseWaiting = true;
 
-        triggerBuzzerHardware(true);
+        triggerBuzzerHardware(true); // 正常出药是长鸣
         
-        // ⏳ 核心：记录开始响铃的准确时间！
+        // ⏳ 记录开始响铃的准确时间
         doseStartTime = millis(); 
         
         updateDisplayState("Medicine Due!", pendingMedName);
@@ -178,24 +206,39 @@ String url = "http://" + serverIP + ":5000/device/" + deviceSerial + "/pending_d
   }
 }
 
-// 2. This function fires ONLY when the user touches the button while a dose is waiting
+// 2. This function fires ONLY when the user touches the button
 void executeDispense() {
-  isDoseWaiting = false; 
-  triggerBuzzerHardware(false);
-  
-  Serial.println("⚙️ Dispensing...");
-  updateDisplayState("Dispensing...", pendingMedName);
-  
-  rotateMotorHardware(pendingMotorSlot);
-  markDoseAsTaken(pendingAdlogId, pendingPrescriptionId);
-  
-  updateDisplayState("Finished!", "Take Meds");
-  delay(4000); 
-  
-  // 🌟 修改：不要调用 handleDisplayClear()，而是调用 Ready 状态
-  updateDisplayState("MedSmart System", "Ready!"); 
-}
+  // 💡 如果系统正在进行“缺药警报”，按下 Touch 按钮只是为了关掉警报
+  if (isOutOfStockBeeping) {
+    Serial.println("🛑 User dismissed out-of-stock alarm.");
+    isOutOfStockBeeping = false;
+    triggerBuzzerHardware(false);
+    
+    if (WiFi.status() == WL_CONNECTED) {
+      markDoseAsMissed(pendingAdlogId); 
+    }
+    
+    updateDisplayState("MedSmart System", "Ready!"); 
+    return; // 结束函数，不要去转动电机
+  }
 
+  // ⚙️ 正常的出药逻辑
+  if (isDoseWaiting) {
+    isDoseWaiting = false; 
+    triggerBuzzerHardware(false);
+    
+    Serial.println("⚙️ Dispensing...");
+    updateDisplayState("Dispensing...", pendingMedName);
+    
+    rotateMotorHardware(pendingMotorSlot);
+    markDoseAsTaken(pendingAdlogId, pendingPrescriptionId);
+    
+    updateDisplayState("Finished!", "Take Meds");
+    delay(4000); 
+    
+    updateDisplayState("MedSmart System", "Ready!"); 
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -211,13 +254,6 @@ void setup() {
   setupTouch();
 
   connectToWiFi();
-
-  // // 初始化 mDNS
-  // if (!MDNS.begin("medsmart")) { // 这会让你通过 http://medsmart.local 访问
-  //   Serial.println("Error setting up MDNS responder!");
-  // } else {
-  //   Serial.println("mDNS responder started at http://medsmart.local");
-  // }
 
   // --- API Routes ---
   server.on("/led/on", []() {
@@ -274,24 +310,45 @@ void loop() {
   server.handleClient();
 
   // 1. PROACTIVE WIFI MONITORING & AUTO-RECONNECT
-  // If connection is lost, attempt to reconnect before any network operations
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi connection lost. Reconnecting...");
     WiFi.disconnect();
     WiFi.begin(); 
-    // Small delay to allow the stack to attempt reconnection
     delay(2000); 
   }
 
   // 2. AUTOPILOT CHECK (Only if connected)
   if (WiFi.status() == WL_CONNECTED) {
-    if (!isDoseWaiting && (millis() - lastDoseCheckTime > doseCheckInterval)) {
+    // 💡 只有在既不需要吃药，又不在响缺药警报时，才去问服务器
+    if (!isDoseWaiting && !isOutOfStockBeeping && (millis() - lastDoseCheckTime > doseCheckInterval)) {
       checkForPendingDose();
       lastDoseCheckTime = millis();
     }
   }
 
-  // 3. AUTOPILOT BEEP & 30 seconds TIMEOUT LOGIC
+  // 🚨 3A. 缺药时的断断续续警报 (30 秒)
+  if (isOutOfStockBeeping) {
+    if (millis() - outOfStockStartTime > outOfStockTimeout) {
+      // 30秒到了，停止警报
+      isOutOfStockBeeping = false;
+      triggerBuzzerHardware(false); // 强制关掉 Buzzer
+
+      Serial.println("🛑 Out of stock warning timeout. Marking as missed.");
+      if (WiFi.status() == WL_CONNECTED) {
+        markDoseAsMissed(pendingAdlogId); 
+      }
+      updateDisplayState("MedSmart System", "Ready!");
+    } else {
+      // 每 500ms 切换一次声音（实现断断续续响铃）
+      if (millis() - lastBuzzerToggleTime > 500) {
+        outOfStockBuzzerState = !outOfStockBuzzerState;
+        triggerBuzzerHardware(outOfStockBuzzerState);
+        lastBuzzerToggleTime = millis();
+      }
+    }
+  }
+
+  // 💊 3B. 正常吃药的超时检测逻辑
   if (isDoseWaiting) {
     if (millis() - doseStartTime > doseTimeout) {
       Serial.println("⏰ Time Passed! Patient missed the medicine.");
@@ -301,7 +358,6 @@ void loop() {
       
       updateDisplayState("Missed Dose", pendingMedName);
       
-      // Only attempt to mark as missed if connected
       if (WiFi.status() == WL_CONNECTED) {
         markDoseAsMissed(pendingAdlogId); 
       }
@@ -328,11 +384,10 @@ void loop() {
       
       int httpResponseCode = http.POST(jsonPayload);
       if (httpResponseCode > 0) {
-        Serial.println("Heartbeat Sent Successfully.");
+        // Serial.println("Heartbeat Sent Successfully.");
       } else {
         Serial.print("Error sending heartbeat. Code: ");
         Serial.println(httpResponseCode);
-        // Note: Code -1 often indicates the server is unreachable.
       }
       http.end(); 
     } else {

@@ -438,8 +438,12 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                         final notif = item.notification;
                         final med = item.prescription;
 
+                        // 💡 UPDATED LOGIC: Split into 3 distinct stock states
+                        final isOutOfStock = med.currentInventory <= 0;
                         final isLowStock =
+                            med.currentInventory > 0 &&
                             med.currentInventory <= med.refillThreshold;
+                        final hasStockIssue = isOutOfStock || isLowStock;
 
                         return Container(
                           margin: const EdgeInsets.symmetric(
@@ -473,9 +477,8 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             .withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(18),
                                       ),
-                                      child: Icon(
-                                        Icons
-                                            .notifications_active, // 换个更符合“提醒”的图标
+                                      child: const Icon(
+                                        Icons.notifications_active,
                                         color: AppColors.primaryPurple,
                                         size: 28,
                                       ),
@@ -499,8 +502,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             'Created: ${_formatNotificationTime(notif.createdAt)}',
                                             style: const TextStyle(
                                               fontSize: 14,
-                                              color: AppColors
-                                                  .primaryPurple, // 🌟 CHANGED TO PURPLE
+                                              color: AppColors.primaryPurple,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
@@ -510,7 +512,8 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 16),
-                                // 🌟 NEW: Display Notification Message
+
+                                // Display Notification Message
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
@@ -545,7 +548,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                 ),
                                 const SizedBox(height: 12),
 
-                                // 🌟 NEW: Display Type & Dispense Schedule
+                                // Display Type & Dispense Schedule
                                 Row(
                                   children: [
                                     Expanded(
@@ -580,14 +583,13 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             child: Text(
                                               _getReadableSchedule(
                                                 med.dispenseSchedule,
-                                              ), // 🌟 Now uses the translator!
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 color: Colors.grey.shade700,
                                                 fontWeight: FontWeight.w500,
                                               ),
-                                              overflow: TextOverflow
-                                                  .ellipsis, // Prevents overflow if days list is long
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                         ],
@@ -615,47 +617,60 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                const SizedBox(height: 12),
                                 Wrap(
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   spacing: 8.0,
                                   runSpacing: 12.0,
                                   children: [
+                                    // 💡 UPDATED LOGIC: Stock Badge (Red = Out of Stock, Orange = Low, Green = OK)
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isLowStock
+                                        color: isOutOfStock
                                             ? Colors.red.shade50
-                                            : Colors.green.shade50,
+                                            : (isLowStock
+                                                  ? Colors.orange.shade50
+                                                  : Colors.green.shade50),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            isLowStock
-                                                ? Icons.warning_amber_rounded
-                                                : Icons.check_circle,
+                                            isOutOfStock
+                                                ? Icons.error_outline
+                                                : (isLowStock
+                                                      ? Icons
+                                                            .warning_amber_rounded
+                                                      : Icons.check_circle),
                                             size: 14,
-                                            color: isLowStock
+                                            color: isOutOfStock
                                                 ? Colors.red
-                                                : Colors.green,
+                                                : (isLowStock
+                                                      ? Colors.orange.shade800
+                                                      : Colors.green),
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
-                                            isLowStock
-                                                ? 'Low Stock (${med.currentInventory} left)'
-                                                : 'Stock: ${med.currentInventory}',
+                                            isOutOfStock
+                                                ? 'Out of Stock (0 left)'
+                                                : (isLowStock
+                                                      ? 'Low Stock (${med.currentInventory} left)'
+                                                      : 'Stock: ${med.currentInventory}'),
                                             style: TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
-                                              color: isLowStock
+                                              color: isOutOfStock
                                                   ? Colors.red
-                                                  : Colors.green.shade800,
+                                                  : (isLowStock
+                                                        ? Colors.orange.shade800
+                                                        : Colors
+                                                              .green
+                                                              .shade800),
                                             ),
                                           ),
                                         ],
@@ -700,13 +715,14 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             ],
                                           ),
                                         ),
-
                                         ElevatedButton(
                                           onPressed: () async {
                                             final confirm = await showDialog<bool>(
                                               context: context,
                                               builder: (ctx) => AlertDialog(
-                                                title: Text('Dismiss reminder'),
+                                                title: const Text(
+                                                  'Dismiss reminder',
+                                                ),
                                                 content: Text(
                                                   'This will clear the reminder for ${med.medicationName} from ${_formatNotificationTime(notif.createdAt)}. Are you sure?',
                                                 ),
@@ -741,7 +757,6 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
 
                                             if (confirm != true) return;
 
-                                            // 🌟 核心：使用单独的 markNotificationRead API，精准干掉具体的某一条 Notification!
                                             final success =
                                                 await PatientService()
                                                     .markNotificationRead(
@@ -797,7 +812,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                     ),
                                   ],
                                 ),
-                                if (isLowStock)
+
+                                // 💡 UPDATED LOGIC: Bottom Warning Box changes text based on severity
+                                if (hasStockIssue)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 12),
                                     child: Container(
@@ -819,7 +836,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: Text(
-                                              'Refill soon! Only ${med.currentInventory} tablet(s) left.',
+                                              isOutOfStock
+                                                  ? 'Out of stock! Please refill immediately.'
+                                                  : 'Refill soon! Only ${med.currentInventory} tablet(s) left.',
                                               style: TextStyle(
                                                 color: Colors.red.shade800,
                                                 fontWeight: FontWeight.w500,

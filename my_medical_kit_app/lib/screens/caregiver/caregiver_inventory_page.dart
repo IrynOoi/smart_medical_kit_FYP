@@ -9,7 +9,6 @@ import 'package:my_medical_kit_app/services/api/medication_service.dart';
 import 'package:my_medical_kit_app/services/api/device_service.dart';
 
 class CaregiverInventoryPage extends StatefulWidget {
-  // final String role; // 'patient' or 'caregiver'
   final int userId;
 
   const CaregiverInventoryPage({
@@ -25,6 +24,7 @@ class CaregiverInventoryPage extends StatefulWidget {
 class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   List<Map<String, dynamic>> _deviceInventoryList = [];
   bool _isLoadingDeviceInventory = false;
+  final Set<String> _restockingMedications = {};
 
   // Device dropdown
   List<Map<String, dynamic>> _devicesList = [];
@@ -133,6 +133,63 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
       print("Config error: $e");
     }
   }
+
+  // Future<void> _restockSingleMedicationGroup(
+  //   Map<String, dynamic> medGroup,
+  // ) async {
+  //   final medicationName = medGroup['medication_name'];
+  //   final prescriptions = List<Map<String, dynamic>>.from(
+  //     medGroup['prescriptions'],
+  //   );
+  //   final quantityController = TextEditingController();
+  //   final formKey = GlobalKey<FormState>();
+
+  //   final int? quantity = await showDialog<int>(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: Text('Restock $medicationName'),
+  //       content: Form(
+  //         key: formKey,
+  //         child: TextFormField(
+  //           controller: quantityController,
+  //           keyboardType: TextInputType.number,
+  //           decoration: const InputDecoration(
+  //             labelText: 'Number of pills to add for this medicine',
+  //             border: OutlineInputBorder(),
+  //           ),
+  //           validator: (value) {
+  //             if (value == null || value.isEmpty) return 'Enter a quantity';
+  //             final qty = int.tryParse(value);
+  //             if (qty == null || qty <= 0) return 'Enter a positive number';
+  //             return null;
+  //           },
+  //         ),
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context, null),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         ElevatedButton(
+  //           onPressed: () {
+  //             if (formKey.currentState!.validate()) {
+  //               final qty = int.parse(quantityController.text);
+  //               Navigator.pop(context, qty);
+  //             }
+  //           },
+  //           child: const Text('Restock'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+
+  //   if (quantity != null && quantity > 0) {
+  //     setState(() => _restockingMedications.add(medicationName));
+  //     await _restockAllPrescriptions(prescriptions, medicationName, quantity);
+  //     setState(() => _restockingMedications.remove(medicationName));
+  //     await _loadDeviceInventory(_selectedDeviceId!);
+  //   }
+  // }
 
   Future<void> _onDeviceSelected(int? deviceId) async {
     if (deviceId == null) return;
@@ -1957,7 +2014,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         ? (current / maxInventory).clamp(0.0, 1.0)
         : 0.0;
 
-    // Entire card becomes tappable
+    final medicationName = med['medication_name'];
+    final isRestocking = _restockingMedications.contains(medicationName);
+
     return GestureDetector(
       onTap: () => _showMedicationDetailDialog(med),
       child: Container(
@@ -1986,7 +2045,6 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           children: [
             Row(
               children: [
-                // Icon (unchanged)
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -2012,17 +2070,15 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Medication name + patient preview (no longer tappable separately)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        med['medication_name'],
+                        medicationName,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          // No underline, because the whole card is tappable
                           color: AppColors.primaryPurple,
                         ),
                       ),
@@ -2032,7 +2088,6 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     ],
                   ),
                 ),
-                // Status label (unchanged)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -2062,7 +2117,6 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               ],
             ),
             const SizedBox(height: 12),
-            // Progress bar (unchanged)
             Row(
               children: [
                 Expanded(
@@ -2100,7 +2154,62 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     ],
                   ),
                 ),
-                // Restock button has been REMOVED – now only in dialog
+                // ✅ Show Restock button only when Low Stock or Out of Stock
+                if (isLowStock || isOutOfStock) ...[
+                  const SizedBox(width: 12),
+                  // Wrap button with a GestureDetector to prevent card's onTap from firing
+                  GestureDetector(
+                    onTap: () => _showMedicationDetailDialog(med),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            AppColors.primaryPurple,
+                            Color(0xFF8A4FFF),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryPurple.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: isRestocking
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Row(
+                              children: [
+                                Icon(Icons.add_shopping_cart_rounded, size: 16, color: Colors.white),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Restock',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],

@@ -1,4 +1,4 @@
-#adherence.py
+#adherence_model.py
 from db import get_db_connection
 
 def get_patient_adherence_stats(patient_id):

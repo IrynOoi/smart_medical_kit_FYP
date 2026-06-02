@@ -175,7 +175,22 @@ def get_pending_dose(device_serial):
         dose = get_pending_dose_for_device(device_serial)
         
         if dose:
-            return jsonify({"success": True, "has_pending": True, "data": dose})
+            # 💡 新增逻辑：检查库存是否为 0
+            is_empty = False
+            if dose.get('current_inventory', 0) <= 0:
+                is_empty = True
+                
+            # (可选) 从发给 ESP32 的 data 里删掉库存字段，保持数据精简
+            if 'current_inventory' in dose:
+                del dose['current_inventory']
+
+            # 把 is_empty 塞进 JSON 发出去！
+            return jsonify({
+                "success": True, 
+                "has_pending": True, 
+                "is_empty": is_empty,  # 👈 ESP32 就靠这行代码救命了！
+                "data": dose
+            })
         else:
             return jsonify({"success": True, "has_pending": False})
             
