@@ -1,6 +1,5 @@
 // lib/screens/caregiver_dashboard_page.dart
 import 'dart:math';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -136,13 +135,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   // 👇 RESTORED: This line was missing! 👇
   int get _adherenceRate => _overviewStats['adherence_score']?.toInt() ?? 0;
 
-  int get _pendingAlerts => _overviewStats['pending_count'] ?? 0;
-  int get _missedDoses => _overviewStats['missed_count'] ?? 0;
-  int get _lowStockCount => _overviewStats['low_stock_count'] ?? 0;
-  int get _lowBatteryCount => _patients.where((p) {
-    final b = p['battery_level'];
-    return b != null && (b as int) < 20;
-  }).length;
+
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -771,31 +764,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
-  Widget _buildSummaryStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey.shade500,
-            fontWeight: FontWeight.w500,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildRecentActivities() {
     /* unchanged */

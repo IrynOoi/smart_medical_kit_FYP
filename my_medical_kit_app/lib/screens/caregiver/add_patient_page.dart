@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 
-
 class AddPatientPage extends StatefulWidget {
   final int caregiverId;
   const AddPatientPage({super.key, required this.caregiverId});
@@ -14,7 +13,6 @@ class AddPatientPage extends StatefulWidget {
 
 class _AddPatientPageState extends State<AddPatientPage> {
   final _formKey = GlobalKey<FormState>();
-  
 
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -27,7 +25,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
   String? _selectedGender;
   DateTime? _selectedDob;
   bool _isSaving = false;
-  final List<String> _genders = ['Male', 'Female', 'Other'];
+  final List<String> _genders = ['Male', 'Female'];
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -49,7 +47,6 @@ class _AddPatientPageState extends State<AddPatientPage> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
-
     final data = {
       'role': 'patient',
       'email': _emailCtrl.text.trim(),
@@ -62,9 +59,10 @@ class _AddPatientPageState extends State<AddPatientPage> {
           ? '${_selectedDob!.year}-${_selectedDob!.month.toString().padLeft(2, '0')}-${_selectedDob!.day.toString().padLeft(2, '0')}'
           : null,
       'medical_notes': _medicalNotesCtrl.text.trim(),
-      'caregiver_id': widget.caregiverId,
-    };
 
+      // ❌ REMOVE OR COMMENT OUT THIS LINE
+      // 'caregiver_id': widget.caregiverId,
+    };
     final res = await PatientService().addPatient(data);
 
     if (mounted) {

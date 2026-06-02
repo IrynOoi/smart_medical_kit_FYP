@@ -242,9 +242,13 @@ def get_all_medications():
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT medication_id, medication_name, current_inventory, refill_threshold,
-                   device_id, motor_slot, created_at, updated_at
-            FROM medications ORDER BY medication_name
+            SELECT m.medication_id, m.medication_name, m.current_inventory,
+                   m.refill_threshold, m.device_id, m.motor_slot,
+                   m.created_at, m.updated_at,
+                   d.device_serial
+            FROM medications m
+            LEFT JOIN iot_device d ON m.device_id = d.device_id
+            ORDER BY m.medication_name
         ''')
         meds = cursor.fetchall()
         cursor.close()

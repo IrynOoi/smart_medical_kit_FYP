@@ -1,4 +1,5 @@
 # user.py
+from cleanup_connections import conn
 import mysql.connector
 from db import get_db_connection
 
@@ -83,11 +84,15 @@ def create_new_user(email, password, role, name, phone, address, gender, dob, ca
             ''', (user_id, medical_notes))
             
             # 修改点：只有当 caregiver_id 不为 null 时才进行关联
-            if caregiver_id is not None:
-                cursor.execute('''
-                    INSERT INTO patient_caregiver_mapping (patient_id, caregiver_id, is_primary_contact)
-                    VALUES (%s, %s, 1)
-                ''', (user_id, caregiver_id))
+        if caregiver_id:  
+
+            cursor.execute('''
+
+                INSERT INTO patient_caregiver_mapping (patient_id, caregiver_id)
+
+                VALUES (%s, %s)
+
+            ''', (user_id, caregiver_id))
         
         conn.commit()
         cursor.close()
@@ -119,8 +124,12 @@ def get_patient_profile(patient_id):
                 p.patient_id, p.medical_notes,
                 u.user_id, u.email, u.full_name, u.phone_no, u.address,
                 u.gender, u.date_of_birth, u.is_active, u.created_at, u.updated_at, u.profile_photo,
-                -- Get primary caregiver from mapping table
-                pcam.caregiver_id,
+                -- Get the first caregiver (by mapping_id) as the primary one
+                (SELECT pcam.caregiver_id 
+                 FROM patient_caregiver_mapping pcam 
+                 WHERE pcam.patient_id = p.patient_id 
+                 ORDER BY pcam.mapping_id 
+                 LIMIT 1) AS caregiver_id,
                 c.caregiver_id AS cg_id, 
                 cu.full_name AS cg_full_name, cu.email AS cg_email,
                 cu.phone_no AS cg_phone_no, cu.address AS cg_address, cu.gender AS cg_gender,
@@ -128,8 +137,13 @@ def get_patient_profile(patient_id):
                 cu.created_at AS cg_created_at, cu.updated_at AS cg_updated_at, cu.profile_photo AS cg_profile_photo
             FROM patient p
             JOIN users u ON p.patient_id = u.user_id
-            LEFT JOIN patient_caregiver_mapping pcam ON p.patient_id = pcam.patient_id AND pcam.is_primary_contact = 1
-            LEFT JOIN caregiver c ON pcam.caregiver_id = c.caregiver_id
+            LEFT JOIN caregiver c ON c.caregiver_id = (
+                SELECT pcam.caregiver_id 
+                FROM patient_caregiver_mapping pcam 
+                WHERE pcam.patient_id = p.patient_id 
+                ORDER BY pcam.mapping_id 
+                LIMIT 1
+            )
             LEFT JOIN users cu ON c.caregiver_id = cu.user_id
             WHERE p.patient_id = %s AND u.role = 'patient'
         ''', (patient_id,))
@@ -303,8 +317,8 @@ def link_patient_to_caregiver(caregiver_id, patient_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO patient_caregiver_mapping (patient_id, caregiver_id, is_primary_contact)
-            VALUES (%s, %s, 1)
+            INSERT INTO patient_caregiver_mapping (patient_id, caregiver_id)
+            VALUES (%s, %s)
         ''', (patient_id, caregiver_id))
         conn.commit()
         cursor.close()

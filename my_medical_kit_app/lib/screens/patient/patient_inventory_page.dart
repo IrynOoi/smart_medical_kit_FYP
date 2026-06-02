@@ -1307,37 +1307,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                   ],
                 ),
               ),
-              if (isLowStock || isOutOfStock)
-                Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: ElevatedButton(
-                    onPressed: _isRefreshing
-                        ? null
-                        : () => _showRestockDialog(
-                            med['prescription_id'],
-                            med['medication_name'],
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryPurple,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isRefreshing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Restock',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                  ),
-                ),
+              // ❌ RESTOCK BUTTON REMOVED – patients cannot restock
             ],
           ),
         ],

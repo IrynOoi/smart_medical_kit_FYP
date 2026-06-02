@@ -37,6 +37,23 @@ class CaregiverService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
+    try {
+      final response = await ApiClient.get(
+        '/caregiver/$caregiverId/at_risk_patients',
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'])
+          return List<Map<String, dynamic>>.from(json['data']);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error getting at-risk patients: $e');
+      return [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getLowStockAlerts(int caregiverId) async {
     try {
       final response = await ApiClient.get(

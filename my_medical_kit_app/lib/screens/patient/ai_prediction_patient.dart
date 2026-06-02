@@ -152,7 +152,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.premiumLight.withValues(alpha: 0.1),
+      backgroundColor: AppColors.premiumLight.withOpacity(0.1),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -183,13 +183,12 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                         _buildEmptyState()
                       else ...[
                         _buildMainScoreCard(),
-                        const SizedBox(height: 24),
-                        _buildRiskInsightCard(),
-                        const SizedBox(height: 24),
-                        _buildFactorsCard(),
+                        const SizedBox(
+                          height: 24,
+                        ), // optional spacing before button
+                        // Personalized Advice card removed
+                        // Analysis Context card removed
                         const SizedBox(height: 32),
-
-                        // 🌟 NEW: Predict Again Button
                         ElevatedButton.icon(
                           onPressed: _recalculatePrediction,
                           icon: const Icon(Icons.online_prediction_rounded),

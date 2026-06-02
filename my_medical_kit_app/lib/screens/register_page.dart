@@ -313,7 +313,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                     vertical: 12,
                                   ), // 👈 reduce horizontal padding
                                 ),
-                                items: ['Male', 'Female', 'Other']
+                                items: ['Male', 'Female']
                                     .map(
                                       (g) => DropdownMenuItem(
                                         value: g,

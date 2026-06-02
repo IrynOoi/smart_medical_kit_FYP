@@ -131,8 +131,10 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     String dayOfWeek = _getCurrentDayOfWeek();
     String timeOfDay = _getCurrentTimeOfDay();
 
+    if (!mounted) return;
     Navigator.pop(context); // Close loading dialog
 
+    if (!mounted) return;
     // Show prediction dialog
     showDialog(
       context: context,
@@ -162,7 +164,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
               await _loadData();
             } catch (e) {
               setStateDialog(() => isPredicting = false);
-              if (mounted) {
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Prediction failed: $e'),
@@ -453,58 +455,6 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     );
   }
 
-  // Run prediction for a single patient
-  Future<void> _predictForPatient(
-    int patientId,
-    int age,
-    String dayOfWeek,
-    String timeOfDay,
-    List<int> history,
-  ) async {
-    setState(() {
-      _predictingPatients[patientId] = true;
-    });
-
-    try {
-      final success = await _apiService.predictAndSave(
-        patientId: patientId,
-        age: age,
-        dayOfWeek: dayOfWeek,
-        timeOfDay: timeOfDay,
-        history: history,
-      );
-
-      if (success) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        await _loadData();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Hybrid AI prediction completed successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        throw Exception('Prediction failed');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Prediction failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      setState(() {
-        _predictingPatients[patientId] = false;
-      });
-    }
-  }
 
   // Run batch prediction for all patients
   Future<void> _runBatchPrediction() async {

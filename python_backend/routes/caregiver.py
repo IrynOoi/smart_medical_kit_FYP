@@ -46,6 +46,15 @@ def get_caregiver_overview(caregiver_id):
         print(f"Get caregiver overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@caregiver_bp.route('/caregiver/<int:caregiver_id>/at_risk_patients', methods=['GET'])
+def get_at_risk_patients(caregiver_id):
+    try:
+        from models.analytics_model import get_caregiver_at_risk_patients
+        patients = get_caregiver_at_risk_patients(caregiver_id)
+        return jsonify({"success": True, "data": patients})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/chart_data', methods=['GET'])
 def get_chart_data(caregiver_id):
     try:

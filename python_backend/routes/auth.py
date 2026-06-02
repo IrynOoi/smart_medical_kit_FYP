@@ -44,7 +44,7 @@ def register():
         if not email or not password or not name:
             return jsonify({"success": False, "message": "Email, password, and name are required"}), 400
 
-        caregiver_id = data.get('caregiver_id', 1) if role != 'caregiver' else None
+        caregiver_id = data.get('caregiver_id') if role != 'caregiver' else None
         medical_notes = data.get('medical_notes') if role != 'caregiver' else None
 
         create_new_user(email, password, role, name, phone, address, gender, dob, caregiver_id, medical_notes)

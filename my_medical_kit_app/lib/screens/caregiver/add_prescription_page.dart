@@ -1,4 +1,5 @@
-//add_prescription_page.dart
+// add_prescription_page.dart
+// add_prescription_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -137,11 +138,36 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     return '$minute $hour * * $dayNumbers';
   }
 
+  String _getSchedulePreview() {
+    final timeFormat = DateFormat.jm().format(
+      DateTime(0, 1, 1, _selectedTime.hour, _selectedTime.minute),
+    );
+    if (_selectedDays.isEmpty) {
+      return 'Every day at $timeFormat';
+    } else if (_selectedDays.length == 7) {
+      return 'Every day at $timeFormat';
+    } else {
+      final days = _selectedDays.join(', ');
+      return '$days at $timeFormat';
+    }
+  }
+
   Future<void> _savePrescription() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedMedicationName == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a medication')),
+      );
+      return;
+    }
+
+    // Additional validation: end date cannot be before start date
+    if (_endDate != null && _endDate!.isBefore(_startDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('End date cannot be before start date'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -171,7 +197,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context, true); // Return true to indicate success
+      Navigator.pop(context, true);
     } else {
       if (!mounted) return;
       String errorMsg =
@@ -188,7 +214,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF3E5F5), // Light purple background
       appBar: AppBar(
         title: const Text(
           'Add Prescription',
@@ -204,319 +230,474 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
             )
           : _errorMessage != null
           ? Center(
-              child: Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _fetchMedications,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryPurple,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(20),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Patient Info
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: AppColors.primaryPurple.withValues(
-                            alpha: 0.1,
-                          ),
-                          child: Text(
-                            widget.patient['full_name'][0],
-                            style: const TextStyle(
-                              color: AppColors.primaryPurple,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    // Patient info card (white)
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      color: Colors.white, // explicitly white
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
                           children: [
-                            const Text(
-                              "Prescription for",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundColor: AppColors.primaryPurple
+                                  .withOpacity(0.1),
+                              child: Text(
+                                widget.patient['full_name'][0].toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryPurple,
+                                ),
                               ),
                             ),
-                            Text(
-                              widget.patient['full_name'],
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Prescribing for",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    widget.patient['full_name'],
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Medication Dropdown
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withValues(alpha: 0.08),
-                            blurRadius: 10,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: DropdownButtonFormField<String>(
-                        decoration: InputDecoration(
-                          labelText: 'Select Medication *',
-                          prefixIcon: const Icon(
-                            Icons.medication,
-                            color: AppColors.primaryPurple,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        initialValue: _selectedMedicationName,
-                        items: _medications
-                            .map(
-                              (med) => DropdownMenuItem(
-                                value: med['medication_name'].toString(),
-                                child: Text(
-                                  med['medication_name'],
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => _selectedMedicationName = val),
-                        validator: (v) => v == null ? 'Required' : null,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Dosage
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withValues(alpha: 0.08),
-                            blurRadius: 10,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextFormField(
-                        controller: _dosageController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Dosage (Tablets) *',
-                          prefixIcon: const Icon(
-                            Icons.vaccines,
-                            color: AppColors.primaryPurple,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Required'
-                            : (double.tryParse(v) == null
-                                  ? 'Invalid number'
-                                  : null),
                       ),
                     ),
                     const SizedBox(height: 24),
 
-                    // Dispense Time
-                    const Text(
-                      'Dispense Time',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      tileColor: Colors.grey.shade100,
+                    // Medication section
+                    _buildSectionHeader('Medication Details', Icons.medication),
+                    const SizedBox(height: 12),
+                    Card(
+                      elevation: 2,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      leading: const Icon(
-                        Icons.access_time,
-                        color: AppColors.primaryPurple,
-                      ),
-                      title: Text(
-                        _selectedTime.format(context),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: AppColors.primaryPurple,
-                        ),
-                      ),
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _selectedTime,
-                        );
-                        if (picked != null) {
-                          setState(() => _selectedTime = picked);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Schedule Days
-                    const Text(
-                      'Schedule Days',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _daysOfWeek.map((day) {
-                        final isSelected = _selectedDays.contains(day);
-                        return FilterChip(
-                          label: Text(day),
-                          selected: isSelected,
-                          selectedColor: AppColors.primaryPurple.withValues(
-                            alpha: 0.2,
-                          ),
-                          checkmarkColor: AppColors.primaryPurple,
-                          onSelected: (selected) {
-                            setState(() {
-                              if (selected) {
-                                _selectedDays.add(day);
-                              } else {
-                                _selectedDays.remove(day);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        "Leave empty to dispense every day.",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Start & End Dates
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Start Date *',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _selectDate(context, true),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_today,
-                                        size: 18,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        DateFormat(
-                                          'MMM dd, yyyy',
-                                        ).format(_startDate),
-                                      ),
-                                    ],
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<String>(
+                              decoration: InputDecoration(
+                                labelText: 'Select Medication *',
+                                prefixIcon: const Icon(
+                                  Icons.medication,
+                                  color: AppColors.primaryPurple,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.primaryPurple,
+                                    width: 2,
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'End Date',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _selectDate(context, false),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.event_busy, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _endDate != null
-                                            ? DateFormat(
-                                                'MMM dd, yyyy',
-                                              ).format(_endDate!)
-                                            : 'No end date',
+                              value: _selectedMedicationName,
+                              items: _medications
+                                  .map(
+                                    (med) => DropdownMenuItem(
+                                      value: med['medication_name'].toString(),
+                                      child: Text(
+                                        med['medication_name'],
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                      if (_endDate != null) ...[
-                                        const Spacer(),
-                                        GestureDetector(
-                                          onTap: () =>
-                                              setState(() => _endDate = null),
-                                          child: const Icon(
-                                            Icons.close,
-                                            size: 16,
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) =>
+                                  setState(() => _selectedMedicationName = val),
+                              validator: (v) => v == null ? 'Required' : null,
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _dosageController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Dosage (Tablets) *',
+                                prefixIcon: const Icon(
+                                  Icons.vaccines,
+                                  color: AppColors.primaryPurple,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.primaryPurple,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                              validator: (v) => v == null || v.isEmpty
+                                  ? 'Required'
+                                  : (double.tryParse(v) == null
+                                        ? 'Invalid number'
+                                        : null),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Schedule section
+                    _buildSectionHeader('Schedule', Icons.schedule),
+                    const SizedBox(height: 12),
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Dispense Time',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: _selectedTime,
+                                  builder: (context, child) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        colorScheme: const ColorScheme.light(
+                                          primary: AppColors.primaryPurple,
+                                        ),
+                                      ),
+                                      child: child!,
+                                    );
+                                  },
+                                );
+                                if (picked != null) {
+                                  setState(() => _selectedTime = picked);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.access_time,
+                                      color: AppColors.primaryPurple,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      _selectedTime.format(context),
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    const Icon(
+                                      Icons.arrow_drop_down,
+                                      color: Colors.grey,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            const Text(
+                              'Repeat On',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _daysOfWeek.map((day) {
+                                final isSelected = _selectedDays.contains(day);
+                                return FilterChip(
+                                  label: Text(day),
+                                  selected: isSelected,
+                                  selectedColor: AppColors.primaryPurple
+                                      .withOpacity(0.2),
+                                  checkmarkColor: AppColors.primaryPurple,
+                                  backgroundColor: Colors.grey.shade100,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _selectedDays.add(day);
+                                      } else {
+                                        _selectedDays.remove(day);
+                                      }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              "Leave empty to dispense every day.",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            // Schedule preview
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryPurple.withOpacity(
+                                  0.05,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.primaryPurple.withOpacity(
+                                    0.2,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.preview,
+                                    color: AppColors.primaryPurple,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Schedule preview',
+                                          style: TextStyle(
+                                            fontSize: 12,
                                             color: Colors.grey,
                                           ),
                                         ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _getSchedulePreview(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
                                       ],
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Duration section
+                    _buildSectionHeader('Duration', Icons.date_range),
+                    const SizedBox(height: 12),
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Start Date *',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  InkWell(
+                                    onTap: () => _selectDate(context, true),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 14,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.calendar_today,
+                                            size: 18,
+                                            color: AppColors.primaryPurple,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            DateFormat(
+                                              'MMM dd, yyyy',
+                                            ).format(_startDate),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'End Date (Optional)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  InkWell(
+                                    onTap: () => _selectDate(context, false),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 14,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.event_busy,
+                                            size: 18,
+                                            color: AppColors.primaryPurple,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _endDate != null
+                                                  ? DateFormat(
+                                                      'MMM dd, yyyy',
+                                                    ).format(_endDate!)
+                                                  : 'No end date',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                          if (_endDate != null)
+                                            GestureDetector(
+                                              onTap: () => setState(
+                                                () => _endDate = null,
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                size: 16,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 32),
 
@@ -531,10 +712,16 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(15),
                           ),
+                          elevation: 2,
                         ),
                         child: _isSaving
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
                               )
                             : const Text(
                                 "Save Prescription",
@@ -550,6 +737,19 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.primaryPurple, size: 22),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
     );
   }
 }

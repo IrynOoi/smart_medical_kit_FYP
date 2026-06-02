@@ -824,32 +824,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
               const SizedBox(width: 14),
               Expanded(
                 child: _buildStatCard(
-                  title: 'Prescriptions',
-                  value: _totalPrescriptions.toString(),
-                  subtitle: 'Tap to manage',
-                  icon: Icons.post_add_rounded,
-                  color: AppColors.premiumLight,
-                  onTap: _navigateToPrescriptionSetup,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  title: 'Devices Online',
-                  value: _devicesOnline.toString(),
-                  subtitle: 'Smart Kits',
-                  icon: Icons.router_rounded,
-                  color: AppColors.premiumMid,
-                  onTap: _navigateToDevicesList,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _buildStatCard(
                   title: 'Medications',
                   value: _distinctMedications.toString(),
                   subtitle: 'Active Rx',
@@ -863,6 +837,32 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                       ),
                     );
                   },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  title: 'Prescriptions',
+                  value: _totalPrescriptions.toString(),
+                  subtitle: 'Tap to manage',
+                  icon: Icons.post_add_rounded,
+                  color: AppColors.premiumLight,
+                  onTap: _navigateToPrescriptionSetup,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _buildStatCard(
+                  title: 'Devices Online',
+                  value: _devicesOnline.toString(),
+                  subtitle: 'Smart Kits',
+                  icon: Icons.router_rounded,
+                  color: AppColors.premiumMid,
+                  onTap: _navigateToDevicesList,
                 ),
               ),
             ],

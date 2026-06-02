@@ -100,4 +100,40 @@ def batch_upsert_predictions(predictions_data):
         conn.commit()
         cursor.close()
 
-
+def get_caregiver_at_risk_patients(caregiver_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT 
+                u.user_id,
+                u.full_name,
+                u.date_of_birth,
+                pcm.patient_id,
+                aap.risk_level,
+                aap.prediction_score,
+                aap.predicted_at,
+                (SELECT GROUP_CONCAT(DISTINCT m.medication_name SEPARATOR ', ')
+                 FROM prescription_config pc
+                 JOIN medications m ON pc.medication_id = m.medication_id
+                 WHERE pc.patient_id = u.user_id LIMIT 1) as medication
+            FROM patient_caregiver_mapping pcm
+            JOIN users u ON pcm.patient_id = u.user_id
+            LEFT JOIN ai_adherence_prediction aap ON u.user_id = aap.patient_id
+            WHERE pcm.caregiver_id = %s
+            ORDER BY aap.prediction_score DESC, u.full_name
+        ''', (caregiver_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+    
+    # Format output
+    result = []
+    for row in rows:
+        result.append({
+            "patient_id": row["patient_id"],
+            "name": row["full_name"],
+            "risk_level": row["risk_level"] or "LOW",
+            "forget_probability": float(row["prediction_score"]) if row["prediction_score"] is not None else 0.0,
+            "medication": row["medication"] or "No medication",
+            "temporal_pattern": "Based on latest AI analysis"
+        })
+    return result
