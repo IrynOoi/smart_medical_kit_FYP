@@ -585,43 +585,42 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
               Row(
                 children: [
                   // 1. 通知铃铛 🔔
-                  GestureDetector(
-                    onTap: _showNotificationsSheet, // 点击弹出消息列表
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Icon(
-                          Icons.notifications_none_rounded,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                        // 如果有未读消息，显示小红点！🔴
-                        if (_unreadNotifications > 0)
-                          Positioned(
-                            right: 0,
-                            top: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.redAccent,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '$_unreadNotifications',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                  // GestureDetector(
+                  //   onTap: _showNotificationsSheet, // 点击弹出消息列表
+                  //   child: Stack(
+                  //     clipBehavior: Clip.none,
+                  //     children: [
+                  //       const Icon(
+                  //         Icons.notifications_none_rounded,
+                  //         color: Colors.white,
+                  //         size: 32,
+                  //       ),
+                  //       // 如果有未读消息，显示小红点！🔴
+                  //       if (_unreadNotifications > 0)
+                  //         Positioned(
+                  //           right: 0,
+                  //           top: 2,
+                  //           child: Container(
+                  //             padding: const EdgeInsets.all(4),
+                  //             decoration: const BoxDecoration(
+                  //               color: Colors.redAccent,
+                  //               shape: BoxShape.circle,
+                  //             ),
+                  //             child: Text(
+                  //               '$_unreadNotifications',
+                  //               style: const TextStyle(
+                  //                 color: Colors.white,
+                  //                 fontSize: 10,
+                  //                 fontWeight: FontWeight.bold,
+                  //               ),
+                  //             ),
+                  //           ),
+                  //         ),
+                  //     ],
+                  //   ),
+                  // ),
                   const SizedBox(width: 20), // 两个图标的间距
-                  // 2. 原本的 Reminder icon (PNG)
-                  // 2. 原本的 Reminder icon (PNG) – 加上红点
+
                   GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -634,12 +633,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        Image.asset(
-                          'assets/icon/reminder.png',
-                          height: 36,
-                          width: 36,
+                        const Icon(
+                          Icons.notifications_none_rounded,
                           color: Colors.white,
+                          size: 32,
                         ),
+
                         if (_unreadNotifications > 0)
                           Positioned(
                             right: 0,
@@ -1209,10 +1208,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         child: Container(
           decoration: const BoxDecoration(
             border: Border(
-              left: BorderSide(
-                color: AppColors.primaryPurple,
-                width: 6,
-              ),
+              left: BorderSide(color: AppColors.primaryPurple, width: 6),
             ),
           ),
           padding: const EdgeInsets.all(16),
