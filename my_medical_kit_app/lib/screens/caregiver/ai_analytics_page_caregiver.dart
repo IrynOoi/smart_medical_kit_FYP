@@ -89,9 +89,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       final history = <int>[];
 
       for (var log in logs) {
-        if (log.status == 'TAKEN')
+        if (log.status == 'TAKEN') {
           history.add(1);
-        else if (log.status == 'MISSED')
+        } else if (log.status == 'MISSED')
           history.add(0);
         if (history.length == 3) break;
       }

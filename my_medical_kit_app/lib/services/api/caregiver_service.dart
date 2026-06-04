@@ -44,8 +44,9 @@ class CaregiverService {
       );
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json['success'])
+        if (json['success']) {
           return List<Map<String, dynamic>>.from(json['data']);
+        }
       }
       return [];
     } catch (e) {

@@ -212,18 +212,28 @@ def dispense_success():
 @device_bp.route('/device/heartbeat', methods=['POST'])
 def device_heartbeat():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         device_serial = data.get('device_serial')
         battery = data.get('battery', 100)
         wifi_rssi = data.get('rssi')
-        device_ip = request.remote_addr
+        
+        # Prefer the ESP32's local IP from JSON. request.remote_addr can be the
+        # tunnel/proxy IP instead of the actual device IP.
+        device_ip = (
+            data.get('ip')
+            or data.get('device_ip')
+            or data.get('last_known_ip')
+            or request.remote_addr
+        )
 
         if not device_serial:
             return jsonify({"success": False, "message": "device_serial required"}), 400
 
-        record_device_heartbeat(device_serial, battery, device_ip, wifi_rssi)
+        success, message = record_device_heartbeat(device_serial, battery, device_ip, wifi_rssi)
+        if not success:
+            return jsonify({"success": False, "message": message}), 404
 
-        return jsonify({"success": True, "message": "Heartbeat received"})
+        return jsonify({"success": True, "message": "Heartbeat received", "device_ip": device_ip})
     except Exception as e:
         print(f"Heartbeat error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

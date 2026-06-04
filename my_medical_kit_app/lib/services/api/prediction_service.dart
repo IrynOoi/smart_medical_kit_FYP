@@ -9,8 +9,9 @@ class PredictionService {
       final response = await ApiClient.get('/patient/$patientId/ai_prediction');
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        if (jsonResponse['success'])
+        if (jsonResponse['success']) {
           return AIPrediction.fromJson(jsonResponse['data']);
+        }
       }
       return null;
     } catch (e) {
@@ -26,8 +27,9 @@ class PredictionService {
       );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        if (jsonResponse['success'])
+        if (jsonResponse['success']) {
           return AIPrediction.fromJson(jsonResponse['data']);
+        }
       }
       return null;
     } catch (e) {

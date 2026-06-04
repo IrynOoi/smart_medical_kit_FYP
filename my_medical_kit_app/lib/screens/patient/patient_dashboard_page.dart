@@ -1312,7 +1312,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     final dayOfWeek = parts[4];
 
     // Helper to convert a 24‑hour string (like "14") to 12‑hour format
-    String _to12Hour(String hour24) {
+    String to12Hour(String hour24) {
       final h24 = int.parse(hour24);
       final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
       final ampm = h24 >= 12 ? 'PM' : 'AM';
@@ -1323,10 +1323,10 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     String timeStr;
     if (hourPart.contains(',')) {
       final hours = hourPart.split(',');
-      final times12 = hours.map((h) => _to12Hour(h)).toList();
+      final times12 = hours.map((h) => to12Hour(h)).toList();
       timeStr = times12.join(', ');
     } else {
-      timeStr = _to12Hour(hourPart);
+      timeStr = to12Hour(hourPart);
     }
 
     if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {

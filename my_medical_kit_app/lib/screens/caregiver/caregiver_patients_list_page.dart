@@ -454,7 +454,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                         ),
                         hintText: 'Select a patient',
                       ),
-                      value: _selectedPatientId,
+                      initialValue: _selectedPatientId,
                       items: _availablePatients.map((p) {
                         final bool isActive =
                             p['is_active'] == 1 || p['is_active'] == true;

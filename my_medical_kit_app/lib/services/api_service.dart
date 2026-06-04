@@ -970,8 +970,9 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        if (jsonResponse['success'])
+        if (jsonResponse['success']) {
           return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
       }
       return [];
     } catch (e) {
@@ -1234,8 +1235,9 @@ class ApiService {
     try {
       final body = <String, dynamic>{};
       if (newName != null) body['medication_name'] = newName;
-      if (currentInventory != null)
+      if (currentInventory != null) {
         body['current_inventory'] = currentInventory;
+      }
       if (refillThreshold != null) body['refill_threshold'] = refillThreshold;
       if (deviceId != null) body['device_id'] = deviceId;
       if (motorSlot != null) body['motor_slot'] = motorSlot;

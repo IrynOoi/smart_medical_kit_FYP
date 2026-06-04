@@ -135,8 +135,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   // 👇 RESTORED: This line was missing! 👇
   int get _adherenceRate => _overviewStats['adherence_score']?.toInt() ?? 0;
 
-
-
   String get _greeting {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
@@ -763,8 +761,6 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       ),
     );
   }
-
-
 
   Widget _buildRecentActivities() {
     /* unchanged */
@@ -1440,8 +1436,9 @@ class _PatientsListPageState extends State<_PatientsListPage> {
       final today = DateTime.now();
       int age = today.year - birthDate.year;
       if (today.month < birthDate.month ||
-          (today.month == birthDate.month && today.day < birthDate.day))
+          (today.month == birthDate.month && today.day < birthDate.day)) {
         age--;
+      }
       return age.toString();
     } catch (_) {
       return 'N/A';
@@ -3393,10 +3390,11 @@ class _EditPrescriptionSheetState extends State<_EditPrescriptionSheet> {
                     selectedColor: AppColors.primaryPurple.withOpacity(0.2),
                     onSelected: (selected) {
                       setState(() {
-                        if (selected)
+                        if (selected) {
                           _selectedDays.add(day);
-                        else
+                        } else {
                           _selectedDays.remove(day);
+                        }
                       });
                     },
                   );
@@ -3803,7 +3801,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(
             labelText: label,
             labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
@@ -4211,7 +4209,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(
             labelText: label,
             labelStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),

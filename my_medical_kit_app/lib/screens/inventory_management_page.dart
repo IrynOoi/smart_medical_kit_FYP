@@ -640,7 +640,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ],
         ),
         child: DropdownButtonFormField<int>(
-          value: _selectedDeviceId,
+          initialValue: _selectedDeviceId,
           hint: const Text('Select a device serial'),
           isExpanded: true,
           decoration: const InputDecoration(
@@ -998,7 +998,7 @@ class _InventoryManagementPageState extends State<InventoryManagementPage> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
-            value: _selectedControlPatientId,
+            initialValue: _selectedControlPatientId,
             decoration: InputDecoration(
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),

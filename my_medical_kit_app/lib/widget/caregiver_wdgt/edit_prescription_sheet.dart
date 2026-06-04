@@ -244,7 +244,7 @@ class _EditPrescriptionSheetState extends State<EditPrescriptionSheet> {
               const SizedBox(height: 24),
               // Medication dropdown
               DropdownButtonFormField<String>(
-                value: _selectedMedicationName,
+                initialValue: _selectedMedicationName,
                 items: _medications.map((med) {
                   return DropdownMenuItem<String>(
                     value: med['medication_name'],

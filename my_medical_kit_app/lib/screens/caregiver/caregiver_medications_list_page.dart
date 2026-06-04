@@ -163,11 +163,13 @@ class CaregiverMedicationsListPageState
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty)
+                    if (v == null || v.trim().isEmpty) {
                       return 'Motor Slot is required';
+                    }
                     final slot = int.tryParse(v);
-                    if (slot == null || slot < 1 || slot > 3)
+                    if (slot == null || slot < 1 || slot > 3) {
                       return 'Must be between 1 and 3';
+                    }
                     return null;
                   },
                 ),
@@ -335,8 +337,9 @@ class CaregiverMedicationsListPageState
                   keyboardType: TextInputType.number,
                   validator: (v) {
                     final val = int.tryParse(v ?? '');
-                    if (val == null || val < 1 || val > 3)
+                    if (val == null || val < 1 || val > 3) {
                       return 'Enter 1, 2, or 3';
+                    }
                     return null;
                   },
                 ),

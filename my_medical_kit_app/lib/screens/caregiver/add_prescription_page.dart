@@ -345,7 +345,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                                   ),
                                 ),
                               ),
-                              value: _selectedMedicationName,
+                              initialValue: _selectedMedicationName,
                               items: _medications
                                   .map(
                                     (med) => DropdownMenuItem(

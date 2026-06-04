@@ -146,7 +146,7 @@ def get_ai_prediction(patient_id):
             return jsonify({
                 "success": False, 
                 "error": "No prediction found in database for this patient"
-            }), 404
+            })
             
     except Exception as e:
         print(f"Get AI prediction error: {e}")
