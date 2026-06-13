@@ -1,4 +1,5 @@
 // lib/screens/caregiver/caregiver_notifications_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:my_medical_kit_app/services/reminder_service.dart';
@@ -55,25 +56,26 @@ class _CaregiverNotificationsPageState
     });
 
     try {
-      final data = await _caregiverService.getCaregiverStockNotifications(
+      final data = await _caregiverService.getCaregiverNotifications(
         _caregiverId,
       );
 
       if (!mounted) return;
       setState(() {
-        _notifications = data;
+        // 🔥 FILTER OUT READ NOTIFICATIONS
+        _notifications = data.where((n) => !_isRead(n['is_read'])).toList();
         _isLoading = false;
       });
 
       await ReminderService.checkAndSendCaregiverStockAlerts(
         caregiverId: _caregiverId,
-        notifications: data,
+        notifications: _notifications,
       );
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to load stock notifications: $e';
+        _errorMessage = 'Failed to load notifications: $e';
       });
     }
   }
@@ -97,18 +99,20 @@ class _CaregiverNotificationsPageState
 
     if (success) {
       setState(() {
-        _notifications.removeAt(index); // ✅ remove card from list
+        _notifications.removeAt(index); // remove card from list
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${notif['medication_name']} alert removed'),
+          content: Text(
+            '${notif['medication_name'] ?? 'Notification'} marked as read',
+          ),
           backgroundColor: Colors.teal,
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Failed to mark alert as read'),
+          content: Text('Failed to mark as read'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -122,7 +126,7 @@ class _CaregiverNotificationsPageState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Mark all as read?'),
-        content: const Text('This will dismiss all stock alerts.'),
+        content: const Text('This will dismiss all unread notifications.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -143,28 +147,17 @@ class _CaregiverNotificationsPageState
     if (confirm != true) return;
 
     // Mark each unread notification
-    final List<Map<String, dynamic>> newList = [];
     for (final notif in _notifications) {
       final notifId = _asInt(notif['notification_id']);
       if (notifId != null && !_isRead(notif['is_read'])) {
         await _caregiverService.markCaregiverNotificationRead(notifId);
-      } else {
-        newList.add(notif); // keep already read ones (optional)
       }
     }
 
     if (!mounted) return;
 
-    setState(() {
-      _notifications.clear(); // ✅ clear all (or keep read ones if you prefer)
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('All alerts dismissed'),
-        backgroundColor: Colors.teal,
-      ),
-    );
+    // Reload to get fresh data (only unread ones will appear, which will be none)
+    await _loadNotifications();
   }
 
   Widget _buildHeader() {
@@ -233,7 +226,7 @@ class _CaregiverNotificationsPageState
           ),
           const SizedBox(height: 24),
           const Text(
-            'YOUR STOCK ALERTS',
+            'UNREAD NOTIFICATIONS',
             style: TextStyle(
               fontSize: 14,
               letterSpacing: 1.5,
@@ -243,7 +236,7 @@ class _CaregiverNotificationsPageState
           ),
           const SizedBox(height: 4),
           const Text(
-            'Medicine Inventory',
+            'Alerts & Reminders',
             style: TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.bold,
@@ -279,13 +272,13 @@ class _CaregiverNotificationsPageState
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.inventory_2_outlined,
+              Icons.notifications_off_outlined,
               size: 64,
               color: Colors.grey.shade400,
             ),
             const SizedBox(height: 16),
             Text(
-              'No active stock alerts',
+              'No unread notifications',
               style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
             ),
           ],
@@ -307,12 +300,35 @@ class _CaregiverNotificationsPageState
   }
 
   Widget _buildNotificationCard(Map<String, dynamic> notif, int index) {
+    // We only show unread notifications, but keep the check anyway
     final isRead = _isRead(notif['is_read']);
-    final isOutOfStock = notif['stock_status'] == 'OUT_OF_STOCK';
-    final statusColor = isOutOfStock ? Colors.red : Colors.orange;
-    final statusBackground = isOutOfStock
-        ? Colors.red.shade50
-        : Colors.orange.shade50;
+    // If a read notification somehow appears, we still don't want to show it,
+    // but the filter should prevent that. This is a safeguard.
+    if (isRead) return const SizedBox.shrink();
+
+    final String notifType = (notif['type'] ?? '').toString();
+    final bool isStockAlert =
+        notifType == 'LOW_STOCK' || notifType == 'OUT_OF_STOCK';
+    final bool isOutOfStock = notifType == 'OUT_OF_STOCK';
+
+    late IconData iconData;
+    late Color iconColor;
+    late Color backgroundColor;
+
+    if (isStockAlert) {
+      iconData = isOutOfStock
+          ? Icons.report_problem_rounded
+          : Icons.warning_amber_rounded;
+      iconColor = isOutOfStock ? Colors.red : Colors.orange;
+      backgroundColor = isOutOfStock
+          ? Colors.red.shade50
+          : Colors.orange.shade50;
+    } else {
+      iconData = Icons.notifications_active;
+      iconColor = AppColors.primaryPurple;
+      backgroundColor = AppColors.primaryPurple.withOpacity(0.1);
+    }
+
     final medicationName = (notif['medication_name'] ?? 'Medicine').toString();
     final patientName = (notif['patient_name'] ?? 'Assigned patient')
         .toString();
@@ -342,16 +358,10 @@ class _CaregiverNotificationsPageState
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: statusBackground,
+                    color: backgroundColor,
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: Icon(
-                    isOutOfStock
-                        ? Icons.report_problem_rounded
-                        : Icons.warning_amber_rounded,
-                    color: statusColor,
-                    size: 28,
-                  ),
+                  child: Icon(iconData, color: iconColor, size: 28),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -371,22 +381,22 @@ class _CaregiverNotificationsPageState
                         'Created: ${_formatNotificationTime(notif['created_at'])}',
                         style: TextStyle(
                           fontSize: 14,
-                          color: statusColor,
+                          color: iconColor,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (!isRead)
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                    ),
+                // Unread indicator (always true here, but keep)
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: iconColor,
+                    shape: BoxShape.circle,
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -455,7 +465,7 @@ class _CaregiverNotificationsPageState
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          _readableType(notif['type']),
+                          _readableType(notifType),
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.grey.shade700,
@@ -469,94 +479,86 @@ class _CaregiverNotificationsPageState
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _stockChip(
-                  icon: Icons.inventory_2_outlined,
-                  label: isOutOfStock
-                      ? 'Out of Stock'
-                      : 'Low Stock ($currentInventory left)',
-                  foreground: statusColor,
-                  background: statusBackground,
-                ),
-                _stockChip(
-                  icon: Icons.low_priority_rounded,
-                  label: 'Threshold: $refillThreshold',
-                  foreground: AppColors.primaryPurple,
-                  background: AppColors.primaryPurple.withValues(alpha: 0.1),
-                ),
-                _stockChip(
-                  icon: isRead
-                      ? Icons.notifications_none
-                      : Icons.notifications_active,
-                  label: isRead ? 'Read' : 'Unread',
-                  foreground: isRead ? Colors.grey : statusColor,
-                  background: isRead ? Colors.grey.shade100 : statusBackground,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: statusBackground,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: statusColor.withValues(alpha: 0.25)),
-              ),
-              child: Row(
+            if (isStockAlert) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Icon(
-                    isOutOfStock
-                        ? Icons.priority_high_rounded
-                        : Icons.warning_amber_rounded,
-                    color: statusColor,
-                    size: 20,
+                  _stockChip(
+                    icon: Icons.inventory_2_outlined,
+                    label: isOutOfStock
+                        ? 'Out of Stock'
+                        : 'Low Stock ($currentInventory left)',
+                    foreground: iconColor,
+                    background: backgroundColor,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      isOutOfStock
-                          ? 'Immediate restock needed. No tablet is available for this medicine.'
-                          : 'Refill soon. Only $currentInventory tablet(s) left before the threshold of $refillThreshold.',
-                      style: TextStyle(
-                        color: isOutOfStock
-                            ? Colors.red.shade800
-                            : Colors.orange.shade900,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                  _stockChip(
+                    icon: Icons.low_priority_rounded,
+                    label: 'Threshold: $refillThreshold',
+                    foreground: AppColors.primaryPurple,
+                    background: AppColors.primaryPurple.withOpacity(0.1),
                   ),
                 ],
               ),
-            ),
-            if (!isRead) ...[
               const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton(
-                  onPressed: () => _markAsRead(notif, index),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: iconColor.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isOutOfStock
+                          ? Icons.priority_high_rounded
+                          : Icons.warning_amber_rounded,
+                      color: iconColor,
+                      size: 20,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isOutOfStock
+                            ? 'Immediate restock needed. No tablet is available for this medicine.'
+                            : 'Refill soon. Only $currentInventory tablet(s) left before the threshold of $refillThreshold.',
+                        style: TextStyle(
+                          color: isOutOfStock
+                              ? Colors.red.shade800
+                              : Colors.orange.shade900,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: const Text(
-                    'Mark as Read',
-                    style: TextStyle(fontSize: 12),
-                  ),
+                  ],
                 ),
               ),
             ],
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: () => _markAsRead(notif, index),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: const Text(
+                  'Mark as Read',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -594,7 +596,7 @@ class _CaregiverNotificationsPageState
   }
 
   String _formatNotificationTime(dynamic rawValue) {
-    if (rawValue == null) return 'Synced from inventory';
+    if (rawValue == null) return 'Just now';
     try {
       final time = DateTime.parse(rawValue.toString()).toLocal();
       final year = time.year.toString();
@@ -613,14 +615,18 @@ class _CaregiverNotificationsPageState
     }
   }
 
-  String _readableType(dynamic type) {
-    switch ((type ?? '').toString()) {
+  String _readableType(String type) {
+    switch (type) {
       case 'OUT_OF_STOCK':
         return 'Out of stock';
       case 'LOW_STOCK':
         return 'Low stock';
+      case 'REMINDER':
+        return 'Reminder';
+      case 'ALERT':
+        return 'Alert';
       default:
-        return (type ?? 'Notification').toString();
+        return type;
     }
   }
 

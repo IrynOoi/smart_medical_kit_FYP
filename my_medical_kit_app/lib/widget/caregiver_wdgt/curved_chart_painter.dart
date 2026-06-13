@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 
-
 class CurvedChartPainter extends CustomPainter {
   final List<double> data;
   final List<String> labels;
@@ -28,9 +27,9 @@ class CurvedChartPainter extends CustomPainter {
     final double chartWidth = size.width - leftPadding;
     final double chartHeight = size.height - bottomPadding;
 
-    final double maxV = data.isEmpty || data.every((e) => e == 0)
-        ? 5.0
-        : data.reduce(max).clamp(1.0, double.infinity);
+    double rawMax = data.isEmpty ? 0 : data.reduce(max);
+    // 如果最大值是1，我们将顶部边界设为2，这样线就会在中间
+    final double maxV = rawMax < 2 ? 2.0 : rawMax * 1.2;
 
     // 1. Draw Y-Axis Text
     final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
@@ -89,7 +88,10 @@ class CurvedChartPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [lineColor.withValues(alpha: 0.3), lineColor.withValues(alpha: 0.0)],
+          colors: [
+            lineColor.withValues(alpha: 0.3),
+            lineColor.withValues(alpha: 0.0),
+          ],
         ).createShader(Rect.fromLTWH(0, 0, size.width, chartHeight)),
     );
 

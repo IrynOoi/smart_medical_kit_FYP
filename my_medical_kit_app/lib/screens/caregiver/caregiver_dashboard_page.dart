@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'caregiver_patients_list_page.dart';
 import 'caregiver_devices_list_page.dart';
-import 'caregiver_adherence_details_page.dart';
+
 import '../../widget/caregiver_wdgt/curved_chart_painter.dart';
 import 'caregiver_performance_details_page.dart';
 import 'caregiver_prescription_setup_page.dart';
@@ -56,16 +56,69 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     _loadSession();
   }
 
+  String _formatFullTime(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final ampm = h >= 12 ? 'PM' : 'AM';
+    final hr12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+    return '$hr12:$m $ampm';
+  }
+
   Future<void> _fetchChartData(String period) async {
     setState(() => _selectedPeriod = period);
+
+    if (period == 'Day') {
+      // ---- DAY: use raw logs to match patient dashboard ----
+      try {
+        // Get all recent logs for this caregiver (last 30 days, but we filter to today)
+        final allLogs = await CaregiverService().getAllRecentLogs(_caregiverId);
+        final now = DateTime.now();
+        final todayLogs = allLogs.where((log) {
+          final scheduled = DateTime.tryParse(log['scheduled_time'] ?? '');
+          if (scheduled == null) return false;
+          return scheduled.year == now.year &&
+              scheduled.month == now.month &&
+              scheduled.day == now.day &&
+              log['status'] == 'TAKEN';
+        }).toList();
+
+        // Group by formatted time (e.g., "12:50 AM")
+        Map<String, double> grouped = {};
+        for (var log in todayLogs) {
+          final dt = DateTime.parse(log['scheduled_time']);
+          final timeLabel = _formatFullTime(dt); // reuse patient's formatter
+          grouped[timeLabel] = (grouped[timeLabel] ?? 0) + 1;
+        }
+
+        // If only one dose, add dummy points at 12am and 11pm for better visual
+        if (grouped.length == 1) {
+          final onlyKey = grouped.keys.first;
+          final val = grouped[onlyKey]!;
+          grouped = {'12:00 AM': 0.0, onlyKey: val, '11:00 PM': 0.0};
+        } else if (grouped.isEmpty) {
+          grouped = {'12:00 AM': 0.0, '12:00 PM': 0.0};
+        }
+
+        setState(() {
+          _chartLabels = grouped.keys.toList();
+          _chartData = grouped.values.toList();
+        });
+      } catch (e) {
+        debugPrint('Day chart error: $e');
+        setState(() {
+          _chartLabels = ['12:00 AM', '12:00 PM'];
+          _chartData = [0.0, 0.0];
+        });
+      }
+      return;
+    }
+
+    // ---- WEEK / MONTH: use backend aggregated data ----
     try {
       final data = await CaregiverService().getChartData(_caregiverId, period);
       setState(() {
-        _chartData = data['taken'] ?? []; // 🌟 只取 'taken' 的數據來畫圖表
-
-        if (period == 'Day') {
-          _chartLabels = ['12AM', '4AM', '8AM', '12PM', '4PM', '8PM'];
-        } else if (period == 'Month') {
+        _chartData = data['taken'] ?? [];
+        if (period == 'Month') {
           _chartLabels = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4'];
         } else {
           _chartLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -108,113 +161,113 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     }
   }
 
-  Widget _buildLowStockAlerts() {
-    if (_lowStockAlerts.isEmpty) return const SizedBox.shrink();
+  // Widget _buildLowStockAlerts() {
+  //   if (_lowStockAlerts.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.orange,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Low Stock Alerts',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _lowStockAlerts.length > 5
-                  ? 5
-                  : _lowStockAlerts.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, indent: 20, endIndent: 20),
-              itemBuilder: (context, index) {
-                final alert = _lowStockAlerts[index];
-                final isOutOfStock = alert['current_inventory'] == 0;
-                return ListTile(
-                  leading: Icon(
-                    isOutOfStock ? Icons.cancel : Icons.warning,
-                    color: isOutOfStock ? Colors.red : Colors.orange,
-                  ),
-                  title: Text(alert['medication_name']),
-                  subtitle: Text(
-                    alert['patient_id'] == null
-                        ? 'Device: ${alert['device_serial'] ?? 'Unassigned'}'
-                        : 'Patient: ${alert['patient_name']}',
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${alert['current_inventory']} left',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isOutOfStock ? Colors.red : Colors.orange,
-                        ),
-                      ),
-                      Text(
-                        'Threshold: ${alert['refill_threshold']}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                  onTap: () {
-                    // Optional: navigate to the inventory page for that device
-                    // if (alert['device_id'] != null) { ... }
-                  },
-                );
-              },
-            ),
-            if (_lowStockAlerts.length > 5)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Center(
-                  child: Text(
-                    '+ ${_lowStockAlerts.length - 5} more alerts',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(horizontal: 16),
+  //     child: Container(
+  //       decoration: BoxDecoration(
+  //         color: Colors.white,
+  //         borderRadius: BorderRadius.circular(24),
+  //         boxShadow: [
+  //           BoxShadow(
+  //             color: Colors.black.withValues(alpha: 0.04),
+  //             blurRadius: 10,
+  //             offset: const Offset(0, 3),
+  //           ),
+  //         ],
+  //       ),
+  //       child: Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           const Padding(
+  //             padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+  //             child: Row(
+  //               children: [
+  //                 Icon(
+  //                   Icons.warning_amber_rounded,
+  //                   color: Colors.orange,
+  //                   size: 20,
+  //                 ),
+  //                 SizedBox(width: 8),
+  //                 Text(
+  //                   'Low Stock Alerts',
+  //                   style: TextStyle(
+  //                     fontSize: 16,
+  //                     fontWeight: FontWeight.bold,
+  //                     color: AppColors.textDark,
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           ),
+  //           const Divider(height: 1),
+  //           ListView.separated(
+  //             shrinkWrap: true,
+  //             physics: const NeverScrollableScrollPhysics(),
+  //             itemCount: _lowStockAlerts.length > 5
+  //                 ? 5
+  //                 : _lowStockAlerts.length,
+  //             separatorBuilder: (_, __) =>
+  //                 const Divider(height: 1, indent: 20, endIndent: 20),
+  //             itemBuilder: (context, index) {
+  //               final alert = _lowStockAlerts[index];
+  //               final isOutOfStock = alert['current_inventory'] == 0;
+  //               return ListTile(
+  //                 leading: Icon(
+  //                   isOutOfStock ? Icons.cancel : Icons.warning,
+  //                   color: isOutOfStock ? Colors.red : Colors.orange,
+  //                 ),
+  //                 title: Text(alert['medication_name']),
+  //                 subtitle: Text(
+  //                   alert['patient_id'] == null
+  //                       ? 'Device: ${alert['device_serial'] ?? 'Unassigned'}'
+  //                       : 'Patient: ${alert['patient_name']}',
+  //                 ),
+  //                 trailing: Column(
+  //                   mainAxisAlignment: MainAxisAlignment.center,
+  //                   crossAxisAlignment: CrossAxisAlignment.end,
+  //                   children: [
+  //                     Text(
+  //                       '${alert['current_inventory']} left',
+  //                       style: TextStyle(
+  //                         fontWeight: FontWeight.bold,
+  //                         color: isOutOfStock ? Colors.red : Colors.orange,
+  //                       ),
+  //                     ),
+  //                     Text(
+  //                       'Threshold: ${alert['refill_threshold']}',
+  //                       style: const TextStyle(
+  //                         fontSize: 11,
+  //                         color: Colors.grey,
+  //                       ),
+  //                     ),
+  //                   ],
+  //                 ),
+  //                 onTap: () {
+  //                   // Optional: navigate to the inventory page for that device
+  //                   // if (alert['device_id'] != null) { ... }
+  //                 },
+  //               );
+  //             },
+  //           ),
+  //           if (_lowStockAlerts.length > 5)
+  //             Padding(
+  //               padding: const EdgeInsets.symmetric(vertical: 12),
+  //               child: Center(
+  //                 child: Text(
+  //                   '+ ${_lowStockAlerts.length - 5} more alerts',
+  //                   style: const TextStyle(fontSize: 12, color: Colors.grey),
+  //                 ),
+  //               ),
+  //             ),
+  //           const SizedBox(height: 8),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   Future<void> _loadDashboardData() async {
     setState(() {
@@ -270,15 +323,15 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   int get _distinctMedications => _overviewStats['distinct_medications'] ?? 0;
 
   // 👇 RESTORED: This line was missing! 👇
-  int get _adherenceRate => _overviewStats['adherence_score']?.toInt() ?? 0;
+  // int get _adherenceRate => _overviewStats['adherence_score']?.toInt() ?? 0;
 
-  int get _pendingAlerts => _overviewStats['pending_count'] ?? 0;
-  int get _missedDoses => _overviewStats['missed_count'] ?? 0;
-  int get _lowStockCount => _overviewStats['low_stock_count'] ?? 0;
-  int get _lowBatteryCount => _patients.where((p) {
-    final b = p['battery_level'];
-    return b != null && (b as int) < 20;
-  }).length;
+  // int get _pendingAlerts => _overviewStats['pending_count'] ?? 0;
+  // int get _missedDoses => _overviewStats['missed_count'] ?? 0;
+  // int get _lowStockCount => _overviewStats['low_stock_count'] ?? 0;
+  // int get _lowBatteryCount => _patients.where((p) {
+  //   final b = p['battery_level'];
+  //   return b != null && (b as int) < 20;
+  // }).length;
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -331,15 +384,15 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     );
   }
 
-  void _navigateToAdherenceDetails() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            CaregiverAdherenceDetailsPage(caregiverId: _caregiverId),
-      ),
-    );
-  }
+  // void _navigateToAdherenceDetails() {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (_) =>
+  //           CaregiverAdherenceDetailsPage(caregiverId: _caregiverId),
+  //     ),
+  //   );
+  // }
 
   // void _navigateToAlertsDetails() {
   //   Navigator.push(

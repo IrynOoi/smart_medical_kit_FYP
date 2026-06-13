@@ -29,6 +29,7 @@ def get_patient_adherence_logs(patient_id, limit):
             JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
             JOIN medications m ON pc.medication_id = m.medication_id
             WHERE pc.patient_id = %s
+              AND NOT (al.status = 'MISSED' AND al.scheduled_time < NOW() - INTERVAL 30 MINUTE)
             ORDER BY al.scheduled_time DESC
             LIMIT %s
         ''', (patient_id, limit))
@@ -276,3 +277,52 @@ def get_all_medication_logs():
         logs = cursor.fetchall()
         cursor.close()
     return logs
+
+def retake_missed_dose(adlog_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        # 1. Get prescription_id, status, and scheduled_time
+        cursor.execute('''
+            SELECT prescription_id, status, scheduled_time
+            FROM adherence_logs
+            WHERE adlog_id = %s
+        ''', (adlog_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False, "Log not found"
+        if row['status'] != 'MISSED':
+            return False, "Log not found or already taken"
+
+        scheduled_time = row['scheduled_time']
+
+        # 2. Check retake window: 30 minutes after scheduled_time
+        cursor.execute('''
+            SELECT CASE 
+                WHEN NOW() <= DATE_ADD(%s, INTERVAL 30 MINUTE) THEN 1 
+                ELSE 0 
+            END AS within_window
+        ''', (scheduled_time,))
+        within = cursor.fetchone()['within_window']
+        if not within:
+            return False, "Retake window expired (30 minutes after scheduled time)"
+
+        prescription_id = row['prescription_id']
+
+        # 3. Update the log to TAKEN
+        cursor.execute('''
+            UPDATE adherence_logs
+            SET status = 'TAKEN', dispensed_time = NOW(), recorded_at = NOW()
+            WHERE adlog_id = %s
+        ''', (adlog_id,))
+
+        # 4. Decrement inventory by the prescribed dosage
+        cursor.execute('''
+            UPDATE medications m
+            JOIN prescription_config pc ON m.medication_id = pc.medication_id
+            SET m.current_inventory = m.current_inventory - pc.dosage_tablet
+            WHERE pc.prescription_id = %s
+        ''', (prescription_id,))
+
+        conn.commit()
+        cursor.close()
+        return True, "Retake recorded successfully"

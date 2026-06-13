@@ -11,7 +11,8 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
   final List<String> chartLabels;
   final String period;
 
-  const CaregiverPerformanceDetailsPage({super.key, 
+  const CaregiverPerformanceDetailsPage({
+    super.key,
     required this.caregiverId,
     required this.chartData,
     required this.chartLabels,
@@ -93,22 +94,39 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.teal,
-                  child: Icon(Icons.insights, color: Colors.white),
+            const SizedBox(height: 16),
+            if (totalDoses > 0)
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                title: const Text('Highest Activity'),
-                subtitle: Text(
-                  'The most doses were taken on ${chartLabels[chartData.indexOf(chartData.reduce(max))]}',
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.teal,
+                    child: Icon(Icons.insights, color: Colors.white),
+                  ),
+                  title: const Text('Highest Activity'),
+                  subtitle: Text(
+                    'The most doses were taken on ${chartLabels[chartData.indexOf(chartData.reduce(max))]}',
+                  ),
+                ),
+              )
+            else
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.grey,
+                    child: Icon(Icons.info_outline, color: Colors.white),
+                  ),
+                  title: Text('No Data Available'),
+                  subtitle: Text('No doses recorded during this period.'),
                 ),
               ),
-            ),
             const SizedBox(height: 12),
             Card(
               elevation: 2,

@@ -202,14 +202,14 @@ def record_dispense_from_device(adlog_id, prescription_id):
             WHERE pc.prescription_id = %s AND m.current_inventory > 0
         ''', (prescription_id,))
         
-        if patient_id:
-            cursor.execute('''
-                UPDATE notifications
-                SET is_read = 1
-                WHERE recipient_id = %s
-                  AND type = 'REMINDER'
-                  AND is_read = 0
-            ''', (patient_id,))
+        # if patient_id:
+        #     cursor.execute('''
+        #         UPDATE notifications
+        #         SET is_read = 1
+        #         WHERE recipient_id = %s
+        #           AND type = 'REMINDER'
+        #           AND is_read = 0
+        #     ''', (patient_id,))
         
         conn.commit()
         cursor.close()

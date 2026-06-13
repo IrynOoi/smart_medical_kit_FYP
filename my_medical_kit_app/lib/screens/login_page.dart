@@ -42,6 +42,11 @@ class _LoginPageState extends State<LoginPage> {
 
       if (result['success'] == true) {
         final prefs = await SharedPreferences.getInstance();
+
+        // Clear any previous role/IDs to avoid mixing patient vs caregiver state
+        await prefs.remove('role');
+        await prefs.remove('patient_id');
+        await prefs.remove('caregiver_id');
         final user = result['user'];
 
         await prefs.setString('role', user['role']);
@@ -306,9 +311,7 @@ class _LoginPageState extends State<LoginPage> {
 // ==========================================
 // 🌟 FULLY FUNCTIONAL: Forgot Password Page UI
 // ==========================================
-// ==========================================
-// 🌟 FULLY FUNCTIONAL & STYLED: Forgot Password Page UI
-// ==========================================
+
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
 

@@ -7,6 +7,7 @@ from models.medication_model import (
     restock_medication_inventory, update_prescription_config, delete_prescription_config,
     get_all_medications, add_new_medication, update_medication_info, delete_medication_if_unused
 )
+from models.adherence_model import retake_missed_dose as model_retake_missed_dose
 from models.adherence_model import save_medication_log, get_all_medication_logs
 from services.notification_service import send_new_prescription_notification, send_removed_prescription_notification
 
@@ -244,6 +245,18 @@ def add_log():
         print(f"Add log error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@medication_bp.route('/adherence_log/<int:adlog_id>/retake', methods=['PUT'])
+def retake_missed_dose(adlog_id):
+    try:
+        success, msg = model_retake_missed_dose(adlog_id)   # ✅ now calls the correct function
+        if success:
+            return jsonify({"success": True, "message": msg})
+        else:
+            return jsonify({"success": False, "message": msg}), 400
+    except Exception as e:
+        print(f"Retake error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @medication_bp.route('/get_logs', methods=['GET'])
 def get_logs():
     try:
@@ -251,4 +264,61 @@ def get_logs():
         return jsonify({"success": True, "data": logs})
     except Exception as e:
         print(f"Get logs error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@medication_bp.route('/retake_trigger/<int:adlog_id>', methods=['GET'])
+def trigger_retake(adlog_id):
+    try:
+        # 1. Get the missed dose details
+        with get_db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('''
+                SELECT al.prescription_id, al.scheduled_time, al.status,
+                       pc.dosage_tablet, med.motor_slot, med.device_id,
+                       m.medication_name, med.current_inventory
+                FROM adherence_logs al
+                JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
+                JOIN medications med ON pc.medication_id = med.medication_id
+                JOIN medications m ON pc.medication_id = m.medication_id
+                WHERE al.adlog_id = %s
+            ''', (adlog_id,))
+            dose = cursor.fetchone()
+            cursor.close()
+
+        if not dose:
+            return jsonify({"success": False, "message": "Dose not found"}), 404
+        if dose['status'] != 'MISSED':
+            return jsonify({"success": False, "message": "Dose is not missed"}), 400
+
+        # 2. Check 30‑minute window using a separate connection/cursor
+        with get_db_connection() as conn2:
+            cursor2 = conn2.cursor(dictionary=True)
+            cursor2.execute('''
+                SELECT CASE 
+                    WHEN NOW() <= DATE_ADD(%s, INTERVAL 30 MINUTE) THEN 1 
+                    ELSE 0 
+                END AS within_window
+            ''', (dose['scheduled_time'],))
+            within = cursor2.fetchone()['within_window']
+            cursor2.close()
+
+        if not within:
+            return jsonify({"success": False, "message": "Retake window expired (30 minutes)"}), 400
+
+        # 3. Return the dispense information (status unchanged)
+        return jsonify({
+            "success": True,
+            "data": {
+                "adlog_id": adlog_id,
+                "prescription_id": dose['prescription_id'],
+                "motor_slot": dose['motor_slot'],
+                "device_id": dose['device_id'],
+                "medication_name": dose['medication_name'],
+                "dosage_tablet": dose['dosage_tablet'],
+                "current_inventory": dose['current_inventory'],
+            }
+        })
+    except Exception as e:
+        print(f"Trigger retake error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

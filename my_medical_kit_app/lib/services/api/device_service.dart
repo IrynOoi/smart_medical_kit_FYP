@@ -16,6 +16,21 @@ class DeviceService {
     }
   }
 
+  static Future<String?> getDeviceIp(int deviceId) async {
+    try {
+      final response = await ApiClient.get('/device/$deviceId/ip');
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return jsonResponse['ip'];
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<List<dynamic>> getDevices() async {
     try {
       final response = await ApiClient.get('/devices');
@@ -72,7 +87,10 @@ class DeviceService {
 
   Future<bool> createDeviceWithPrescription(Map<String, dynamic> data) async {
     try {
-      final response = await ApiClient.post('/device/create_with_prescription', body: data);
+      final response = await ApiClient.post(
+        '/device/create_with_prescription',
+        body: data,
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -80,9 +98,14 @@ class DeviceService {
     }
   }
 
-  Future<Map<String, dynamic>?> getPrescriptionForDevicePatient(int deviceId, int patientId) async {
+  Future<Map<String, dynamic>?> getPrescriptionForDevicePatient(
+    int deviceId,
+    int patientId,
+  ) async {
     try {
-      final response = await ApiClient.get('/device/$deviceId/patient/$patientId/prescription');
+      final response = await ApiClient.get(
+        '/device/$deviceId/patient/$patientId/prescription',
+      );
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         if (jsonResponse['success']) return jsonResponse['data'];
@@ -93,9 +116,15 @@ class DeviceService {
     }
   }
 
-  Future<bool> updateDevicePrescription(int id, Map<String, dynamic> data) async {
+  Future<bool> updateDevicePrescription(
+    int id,
+    Map<String, dynamic> data,
+  ) async {
     try {
-      final response = await ApiClient.put('/device/$id/prescription', body: data);
+      final response = await ApiClient.put(
+        '/device/$id/prescription',
+        body: data,
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -125,10 +154,10 @@ class DeviceService {
 
   Future<bool> controlLed(int patientId, bool turnOn) async {
     try {
-      final response = await ApiClient.post('/device/control/led', body: {
-        'patient_id': patientId,
-        'action': turnOn ? 'on' : 'off',
-      });
+      final response = await ApiClient.post(
+        '/device/control/led',
+        body: {'patient_id': patientId, 'action': turnOn ? 'on' : 'off'},
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -138,10 +167,10 @@ class DeviceService {
 
   Future<bool> controlBuzzer(int patientId, bool turnOn) async {
     try {
-      final response = await ApiClient.post('/device/control/buzzer', body: {
-        'patient_id': patientId,
-        'action': turnOn ? 'on' : 'off',
-      });
+      final response = await ApiClient.post(
+        '/device/control/buzzer',
+        body: {'patient_id': patientId, 'action': turnOn ? 'on' : 'off'},
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -151,10 +180,10 @@ class DeviceService {
 
   Future<bool> controlDisplay(int patientId, String command) async {
     try {
-      final response = await ApiClient.post('/device/control/display', body: {
-        'patient_id': patientId,
-        'command': command,
-      });
+      final response = await ApiClient.post(
+        '/device/control/display',
+        body: {'patient_id': patientId, 'command': command},
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
@@ -164,11 +193,10 @@ class DeviceService {
 
   Future<bool> controlStepper(int patientId, int motor, String action) async {
     try {
-      final response = await ApiClient.post('/device/control/stepper', body: {
-        'patient_id': patientId,
-        'motor': motor,
-        'action': action,
-      });
+      final response = await ApiClient.post(
+        '/device/control/stepper',
+        body: {'patient_id': patientId, 'motor': motor, 'action': action},
+      );
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {

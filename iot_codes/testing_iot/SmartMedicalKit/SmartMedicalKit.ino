@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>      
 #include "dispenser_motor.h" 
 #include "buzzer_control.h" 
@@ -107,7 +108,10 @@ void markDoseAsTaken(int adlogId, int prescriptionId) {
   HTTPClient http;
   String url = buildURL("/device/dispense_success");
   
-  http.begin(url);
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // Bypass SSL verification
+
+  http.begin(secureClient, url);
   addCommonHeaders(http);
   
   String payload = "{\"adlog_id\":" + String(adlogId) + ",\"prescription_id\":" + String(prescriptionId) + "}";
@@ -129,7 +133,10 @@ void markDoseAsMissed(int adlogId) {
   HTTPClient http;
   String url = buildURL("/device/dispense_missed");
   
-  http.begin(url);
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+
+  http.begin(secureClient, url);
   addCommonHeaders(http);
   
   String payload = "{\"adlog_id\":" + String(adlogId) + "}";
@@ -153,7 +160,10 @@ void checkForPendingDose() {
   HTTPClient http;
   String url = buildURL("/device/" + deviceSerial + "/pending_dose");
   
-  http.begin(url);
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+
+  http.begin(secureClient, url);
   http.addHeader("ngrok-skip-browser-warning", "true");
   http.setConnectTimeout(10000);
   http.setTimeout(10000);
@@ -290,6 +300,35 @@ void setup() {
   server.on("/stepper3/90",       handleMotor390);
   server.on("/stepper3/180",      handleMotor3180);
 
+
+server.on("/retake", HTTP_GET, []() {
+    if (server.hasArg("adlog_id") && server.hasArg("prescription_id") && server.hasArg("slot")) {
+        int adlogId = server.arg("adlog_id").toInt();
+        int prescriptionId = server.arg("prescription_id").toInt();
+        int motorSlot = server.arg("slot").toInt();
+        String medName = server.hasArg("med_name") ? server.arg("med_name") : "Medicine";
+
+        // Cancel any ongoing out‑of‑stock or normal waiting
+        isOutOfStockBeeping = false;
+        triggerBuzzerHardware(false);
+
+        // Set the device into dose‑waiting mode
+        isDoseWaiting = true;
+        pendingMotorSlot = motorSlot;
+        pendingAdlogId = adlogId;
+        pendingPrescriptionId = prescriptionId;
+        pendingMedName = medName;
+        doseStartTime = millis();
+
+        triggerBuzzerHardware(true);
+        updateDisplayState("Medicine Due!", pendingMedName);
+
+        server.send(200, "text/plain", "Retake started");
+    } else {
+        server.send(400, "text/plain", "Missing parameters: adlog_id, prescription_id, slot");
+    }
+});
+
   // 🔧 Update server URL without reflashing
   // Usage: http://<esp32-ip>/config/seturl?url=https://xxxx.ngrok-free.app
   server.on("/config/seturl", []() {
@@ -377,8 +416,11 @@ void loop() {
 
       Serial.println("💓 Sending heartbeat to: " + url);
 
-      WiFiClient client;
-      if (http.begin(client, url)) {
+      // FIX: Use WiFiClientSecure for HTTPS connections
+      WiFiClientSecure secureClient;
+      secureClient.setInsecure(); // Bypass strict certificate validation for ngrok
+
+      if (http.begin(secureClient, url)) {
         addCommonHeaders(http);
         http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 

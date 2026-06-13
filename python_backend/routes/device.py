@@ -34,6 +34,22 @@ def control_led():
     else:
         return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
 
+
+@device_bp.route('/device/<int:device_id>/ip', methods=['GET'])
+def get_device_ip(device_id):
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('SELECT last_known_ip FROM iot_device WHERE device_id = %s', (device_id,))
+            row = cursor.fetchone()
+            cursor.close()
+        if row and row['last_known_ip']:
+            return jsonify({"success": True, "ip": row['last_known_ip']})
+        else:
+            return jsonify({"success": False, "error": "IP not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @device_bp.route('/device/control/buzzer', methods=['POST'])
 def control_buzzer():
     data = request.get_json()

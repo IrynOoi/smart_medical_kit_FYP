@@ -47,23 +47,32 @@ class ReminderService {
     await _initializeTimeZone();
     await _initializeNotifications();
 
-    // await Workmanager().initialize(reminderCallbackDispatcher);
-    // await Workmanager().registerPeriodicTask(
-    //   'reminderCheck',
-    //   reminderTask,
-    //   frequency: const Duration(minutes: 15),
-    // );
-
     final prefs = await SharedPreferences.getInstance();
     final role = prefs.getString('role');
     final patientId = prefs.getInt('patient_id');
+    final caregiverId = prefs.getInt('caregiver_id');
+
+    // Cancel all pending notifications for caregivers
+    if (role == 'caregiver') {
+      // Cancel all notifications scheduled by this app
+      await _notifications.cancelAll();
+      // Clear stored scheduled IDs
+      if (caregiverId != null) {
+        final scheduledIdsKey = _scheduledIdsKey(caregiverId);
+        await prefs.remove(scheduledIdsKey);
+      }
+      // Do NOT schedule patient reminders
+      return;
+    }
+
+    // For patients (or undefined role, fallback to patient logic)
     if ((role == null || role == 'patient') &&
         patientId != null &&
         patientId > 0) {
       unawaited(scheduleUpcomingMedicationReminders(patientId));
     }
 
-    final caregiverId = prefs.getInt('caregiver_id');
+    // Caregiver stock alerts – remain untouched
     if ((role == null || role == 'caregiver') &&
         caregiverId != null &&
         caregiverId > 0) {

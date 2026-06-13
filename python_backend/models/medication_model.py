@@ -23,13 +23,13 @@ def record_dispense_inventory(prescription_id):
             WHERE medication_id = %s AND current_inventory > 0
         ''', (med_id,))
         
-        cursor.execute('''
-            UPDATE notifications
-            SET is_read = 1
-            WHERE recipient_id = %s
-              AND type = 'REMINDER'
-              AND is_read = 0
-        ''', (patient_id,))
+        # cursor.execute('''
+        #     UPDATE notifications
+        #     SET is_read = 1
+        #     WHERE recipient_id = %s
+        #       AND type = 'REMINDER'
+        #       AND is_read = 0
+        # ''', (patient_id,))
         
         conn.commit()
         cursor.close()

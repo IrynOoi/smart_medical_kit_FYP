@@ -13,7 +13,6 @@ class MedicationHistoryScreen extends StatefulWidget {
 }
 
 class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
-  
   final String serverIp = "172.20.10.9";
 
   List<Map<String, dynamic>> _alerts = [];
@@ -46,7 +45,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         return;
       }
 
-      final overview = await CaregiverService().getCaregiverOverview(_caregiverId);
+      final overview = await CaregiverService().getCaregiverOverview(
+        _caregiverId,
+      );
       final allLogs = await CaregiverService().getAllRecentLogs(_caregiverId);
 
       print("✅ Overview: $overview");

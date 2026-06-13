@@ -78,15 +78,14 @@ def get_chart_data(caregiver_id):
                 if 1 <= w <= 4:
                     taken[4-w] = float(row['taken'])
                     missed[4-w] = float(row['missed'])
-        else:
-            taken = [0.0] * 6
-            missed = [0.0] * 6
+        if period == 'Day':
+            taken = [0.0] * 24
+            missed = [0.0] * 24
             for row in rows:
                 hour = int(row['hour'])
-                idx = hour // 4
-                if 0 <= idx < 6:
-                    taken[idx] += float(row['taken'])
-                    missed[idx] += float(row['missed'])
+                if 0 <= hour < 24:
+                    taken[hour] = float(row['taken'])
+                    missed[hour] = float(row['missed'])
 
         return jsonify({"success": True, "data": {"taken": taken, "missed": missed}})
         
@@ -121,17 +120,19 @@ def get_low_stock_alerts(caregiver_id):
         rows = get_caregiver_stock_notification_rows(caregiver_id)
         return jsonify({"success": True, "data": rows})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
-@caregiver_bp.route('/caregiver/<int:caregiver_id>/stock_notifications', methods=['GET'])
-def get_caregiver_stock_notifications(caregiver_id):
-    try:
-        from models.notification_model import get_caregiver_stock_notification_rows
-        rows = get_caregiver_stock_notification_rows(caregiver_id)
-        return jsonify({"success": True, "data": rows})
-    except Exception as e:
-        print(f"Error in stock_notifications: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+# @caregiver_bp.route('/caregiver/<int:caregiver_id>/stock_notifications', methods=['GET'])
+# def get_caregiver_stock_notifications(caregiver_id):
+#     try:
+#         from models.notification_model import get_caregiver_stock_notification_rows
+#         rows = get_caregiver_stock_notification_rows(caregiver_id)
+#         return jsonify({"success": True, "data": rows})
+#     except Exception as e:
+#         print(f"Error in stock_notifications: {e}")
+#         return jsonify({"success": False, "error": str(e)}), 500
 
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/stock_notifications', methods=['GET'])
 def get_stock_notifications(caregiver_id):

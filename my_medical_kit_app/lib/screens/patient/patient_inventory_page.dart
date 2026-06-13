@@ -332,7 +332,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
               const SizedBox(height: 24),
               _buildInventorySummary(),
               const SizedBox(height: 24),
-              _buildDirectTestSection(), // Renders Photo 1 Card View
+              // _buildDirectTestSection(), // Renders Photo 1 Card View
               const SizedBox(height: 24),
               _buildInventorySection(),
               const SizedBox(height: 32),

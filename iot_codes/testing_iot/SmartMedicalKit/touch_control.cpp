@@ -31,15 +31,15 @@ void handleTouch() {
 
 bool checkTouch() {
   int currentTouchState = digitalRead(touchPin);
-  bool isTouched = false;
   
-  if (currentTouchState == HIGH && lastTouchState == LOW) {
-    if ((millis() - lastDebounceTime) > debounceDelay) {
-      lastDebounceTime = millis();
-      isTouched = true;
+  if (currentTouchState == HIGH) {
+    delay(20); // Small delay to ignore instantaneous spikes
+    if (digitalRead(touchPin) == HIGH) { // Verify it's still HIGH
+      if ((millis() - lastDebounceTime) > debounceDelay) {
+        lastDebounceTime = millis();
+        return true;
+      }
     }
   }
-  
-  lastTouchState = currentTouchState;
-  return isTouched;
+  return false;
 }

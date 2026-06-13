@@ -1,7 +1,10 @@
-import 'package:my_medical_kit_app/services/api/api_client.dart';
 // lib/screens/patient_dashboard_page.dart
+import 'package:my_medical_kit_app/services/api/api_client.dart';
+
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:my_medical_kit_app/services/api/device_service.dart';
 import 'package:my_medical_kit_app/screens/patient/smart_reminder_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
@@ -41,6 +44,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   String _selectedPeriod = 'Week'; // Options: 'Day', 'Week', 'Month'
   List<double> _graphData = [0, 0, 0, 0, 0, 0, 0];
   List<String> _graphLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  List<AdherenceLog> get _missedLogs {
+    return _recentLogs.where((log) => log.status == 'MISSED').toList();
+  }
 
   @override
   void initState() {
@@ -76,6 +82,95 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     } catch (e) {
       _redirectToLogin();
     }
+  }
+
+  // Future<void> _retakeDose(AdherenceLog log) async {
+  //   final success = await PatientService().retakeMissedDose(log.logId);
+  //   if (!mounted) return;
+  //   if (success) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text('✅ Dose recorded as taken!'),
+  //         backgroundColor: Colors.green,
+  //       ),
+  //     );
+  //     await _loadAll(); // refresh dashboard
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text('❌ Failed to retake. Please try again.'),
+  //         backgroundColor: Colors.red,
+  //       ),
+  //     );
+  //   }
+  // }
+
+  Widget _buildMissedDosesSection() {
+    final missed = _missedLogs;
+    if (missed.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Missed Doses – You can still take them',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        ...missed.map((log) => _buildMissedDoseCard(log)),
+      ],
+    );
+  }
+
+  Widget _buildMissedDoseCard(AdherenceLog log) {
+    final timeStr = log.scheduledTime != null
+        ? '${log.scheduledTime!.hour.toString().padLeft(2, '0')}:${log.scheduledTime!.minute.toString().padLeft(2, '0')}'
+        : 'Unknown time';
+    final medicationName = log.medicationName ?? 'Unknown medication';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange,
+              size: 28,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    medicationName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Scheduled at $timeStr',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => _retakeDose(log),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Retake'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _updateChartPeriod(String period) {
@@ -499,6 +594,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                       _buildAdherenceChart(),
                       const SizedBox(height: 18),
                       _buildCaregiverCard(),
+                      const SizedBox(height: 18),
+                      _buildMissedDosesSection(),
+                      const SizedBox(height: 30),
                       _buildPrescriptionsList(),
                       const SizedBox(height: 30),
                     ],
@@ -1298,6 +1396,71 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _retakeDose(AdherenceLog log) async {
+    // 1. Ask backend if retake is still allowed (30‑minute window)
+    final doseData = await PatientService().triggerRetake(log.logId);
+    if (doseData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Retake no longer allowed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 2. Get the device IP for the device_id
+    final deviceId = doseData['device_id'];
+    if (deviceId == null || deviceId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No device assigned'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final deviceIp = await DeviceService.getDeviceIp(deviceId);
+    if (deviceIp == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Device offline'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // 3. Send command to ESP32 to start beeping & wait for touch
+    final url =
+        'http://$deviceIp/retake?adlog_id=${log.logId}&prescription_id=${doseData['prescription_id']}&slot=${doseData['motor_slot']}&med_name=${Uri.encodeComponent(doseData['medication_name'])}';
+    try {
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please touch the device button within 10 seconds'),
+            backgroundColor: Colors.teal,
+          ),
+        );
+        // Refresh after a delay to reflect possible status change
+        Future.delayed(const Duration(seconds: 12), () => _loadAll());
+      } else {
+        throw Exception('Device rejected');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not reach device'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   /// Convert cron‑style schedule (e.g. "0 8 * * *") to human‑readable text.

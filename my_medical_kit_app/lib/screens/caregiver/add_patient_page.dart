@@ -1,4 +1,5 @@
 //add_patient_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
@@ -17,6 +18,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController(); // New controller
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _medicalNotesCtrl = TextEditingController();
@@ -43,7 +45,6 @@ class _AddPatientPageState extends State<AddPatientPage> {
     }
   }
 
-  // Inside _AddPatientPageState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
@@ -59,9 +60,7 @@ class _AddPatientPageState extends State<AddPatientPage> {
           ? '${_selectedDob!.year}-${_selectedDob!.month.toString().padLeft(2, '0')}-${_selectedDob!.day.toString().padLeft(2, '0')}'
           : null,
       'medical_notes': _medicalNotesCtrl.text.trim(),
-
-      // ❌ REMOVE OR COMMENT OUT THIS LINE
-      // 'caregiver_id': widget.caregiverId,
+      // caregiver_id is intentionally omitted (handled by backend association)
     };
     final res = await PatientService().addPatient(data);
 
@@ -78,6 +77,19 @@ class _AddPatientPageState extends State<AddPatientPage> {
       }
     }
     if (mounted) setState(() => _isSaving = false);
+  }
+
+  @override
+  void dispose() {
+    _fullNameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
+    _phoneCtrl.dispose();
+    _addressCtrl.dispose();
+    _medicalNotesCtrl.dispose();
+    _dobCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -148,6 +160,19 @@ class _AddPatientPageState extends State<AddPatientPage> {
                 Icons.lock,
                 obscureText: true,
                 validator: (v) => v!.isEmpty ? 'Required' : null,
+              ),
+              // Confirm Password field
+              _buildInputCard(
+                'Confirm Password',
+                _confirmPasswordCtrl,
+                Icons.lock_outline,
+                obscureText: true,
+                validator: (v) {
+                  if (v == null || v.isEmpty)
+                    return 'Please confirm your password';
+                  if (v != _passwordCtrl.text) return 'Passwords do not match';
+                  return null;
+                },
               ),
               _buildInputCard(
                 'Phone',

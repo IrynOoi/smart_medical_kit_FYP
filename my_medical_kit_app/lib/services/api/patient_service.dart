@@ -208,4 +208,31 @@ class PatientService {
       return false;
     }
   }
+
+  Future<bool> retakeMissedDose(int adlogId) async {
+    try {
+      final response = await ApiClient.put('/adherence_log/$adlogId/retake');
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('Retake error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> triggerRetake(int adlogId) async {
+    try {
+      final response = await ApiClient.get('/retake_trigger/$adlogId');
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return jsonResponse['data'];
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Trigger retake error: $e');
+      return null;
+    }
+  }
 }
