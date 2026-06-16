@@ -204,8 +204,6 @@ class ReminderService {
     final windowEnd = now.add(const Duration(minutes: 15));
 
     for (final p in prescriptions) {
-      if (p.currentInventory <= 0) continue;
-
       final dueTimes = _doseTimesBetween(p, windowStart, windowEnd);
       for (final scheduledAt in dueTimes) {
         final recordedKey = _recordedCacheKey(p.prescriptionId, scheduledAt);
@@ -302,8 +300,6 @@ class ReminderService {
     final scheduledIds = <String>[];
 
     for (final med in meds) {
-      if (med.currentInventory <= 0) continue;
-
       final times = _upcomingDoseTimesFor(med, now, daysAhead: daysAhead);
 
       for (final scheduledAt in times) {

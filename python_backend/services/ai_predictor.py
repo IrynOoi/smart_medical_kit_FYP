@@ -66,7 +66,7 @@ def compute_prediction_for_patient(patient_id):
         print(f"   Final Risk: {forget_prob*100:.1f}%")
 
     # 5. Convert to adherence score and risk level
-    adherence_score = round((1 - forget_prob) * 100, 2)
+    prediction_score = round(forget_prob * 100, 2)
     if forget_prob > 0.5:
         risk_level = "HIGH"
     elif forget_prob > 0.3:
@@ -84,7 +84,7 @@ def compute_prediction_for_patient(patient_id):
     }
 
     # 6. Save to database (UPSERT)
-    new_pred = save_hybrid_ai_prediction(patient_id, adherence_score, risk_level, features_used)
+    new_pred = save_hybrid_ai_prediction(patient_id, prediction_score, risk_level, features_used)
     return new_pred
 
 def get_models():

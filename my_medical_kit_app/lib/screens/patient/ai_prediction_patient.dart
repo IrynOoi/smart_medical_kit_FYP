@@ -1,6 +1,9 @@
 // screens/ai_prediction_patient.dart
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/prediction_service.dart';
 import 'package:my_medical_kit_app/models/ai_prediction.dart';
@@ -50,10 +53,15 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   }
 
   // This loads data from PostgreSQL (does not run AI model)
+  // 🌟 FIX: 改为每次打开页面时，强制让后端重新运行 AI 模型！
   Future<void> _loadPrediction() async {
     setState(() => _isLoading = true);
     try {
-      final prediction = await PredictionService().getAIPrediction(_patientId);
+      // 👇 关键修改：调用重新计算的 API，确保永远获取包含最新 Miss/Take 的结果
+      final prediction = await PredictionService().recalculatePrediction(
+        _patientId,
+      );
+
       setState(() {
         _prediction = prediction;
         _isLoading = false;
@@ -64,9 +72,9 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading prediction: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error running AI prediction: $e')),
+        );
       }
     }
   }
@@ -454,65 +462,199 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     );
   }
 
-  void _showExplanationDialog() {
-    final features = _prediction?.featuresUsed;
-    final age = features?['age'] ?? 'Unknown';
-    final day = features?['day_of_week'] ?? _getCurrentDayOfWeek();
-    final time = features?['time_of_day'] ?? _getCurrentTimeOfDay();
-    final history = features?['recent_history'] ?? [1, 1, 1];
-    final forgetProbRaw =
-        features?['forget_probability_raw'] ??
-        (1 - (_prediction?.predictionScore ?? 85) / 100);
+  // 🌟 NEW FUNCTION: Fetches the REAL history live from the database
+  Future<List<int>> _fetchMyHistory() async {
+    try {
+      final logs = await PatientService().getAdherenceLogs(
+        _patientId,
+        limit: 10,
+      );
+      final history = <int>[];
+
+      for (var log in logs) {
+        // Adapt this if your log.status is mapped differently!
+        final status = log.status.toString().toUpperCase();
+        if (status == 'TAKEN' || status.contains('TAKEN')) {
+          history.add(1);
+        } else if (status == 'MISSED' || status.contains('MISSED')) {
+          history.add(0);
+        }
+        if (history.length == 3) break;
+      }
+
+      while (history.length < 3) {
+        history.insert(0, -1); // -1 is for grey/unknown dots
+      }
+      return history.reversed.toList();
+    } catch (e) {
+      return [-1, -1, -1];
+    }
+  }
+
+  // 🌟 UPDATED FUNCTION: Async dialog that matches Caregiver App
+  Future<void> _showExplanationDialog() async {
+    // 1. Show loading spinner while fetching history
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.psychology, color: AppColors.primaryPurple),
-            SizedBox(width: 8),
-            Expanded(child: Text('How is this calculated?', softWrap: true)),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryPurple),
+      ),
+    );
+
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    // 2. Fetch the real history
+    List<int> history = await _fetchMyHistory();
+
+    // 3. Close the loading spinner
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    // 4. Extract features directly (it is already a Map!)
+    final parsedFeatures = _prediction?.featuresUsed ?? {};
+
+    final age = parsedFeatures['age']?.toString() ?? 'Unknown';
+    final day = parsedFeatures['day_of_week'] ?? _getCurrentDayOfWeek();
+    final time = parsedFeatures['time_of_day'] ?? _getCurrentTimeOfDay();
+    
+    final predictionDate = _prediction != null ? _prediction!.predictedAt : DateTime.now();
+    final exactDate = DateFormat('MMM dd, yyyy').format(predictionDate);
+    final exactTime = DateFormat('hh:mm a').format(predictionDate);
+
+    // 5. Show the UI Dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
             children: [
-              const Text(
-                'Our AI uses a Deep Learning LSTM model that analyses:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              _buildBullet('Your age ($age years)'),
-              _buildBullet('Current day: $day'),
-              _buildBullet('Current time: $time'),
-              _buildBullet(
-                'Your last 3 doses: ${history.map((v) => v == 1 ? '✓ Taken' : '✗ Missed').join(', ')}',
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'The model outputs a "forget probability" between 0 and 1.\n'
-                'The score shown is the adherence probability (1 - forget probability).\n'
-                'Higher score → lower chance of missing your next dose.',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Raw forget probability for this prediction: ${(forgetProbRaw * 100).toStringAsFixed(2)}%',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey,
-                ),
-              ),
+              Icon(Icons.psychology, color: AppColors.primaryPurple),
+              SizedBox(width: 8),
+              Expanded(child: Text('AI Analysis Details', softWrap: true)),
             ],
           ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Our Hybrid AI (LSTM + Random Forest) evaluated the following live data:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Your Context:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildInfoRow('Age', '$age years'),
+                      _buildInfoRow('Date', '$exactDate ($day)'),
+                      _buildInfoRow('Time', '$exactTime ($time)'),
+                      const SizedBox(height: 8),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Recent Adherence History:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: history.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final value = entry.value;
+                          return Column(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: value == 1
+                                      ? Colors.green
+                                      : (value == 0 ? Colors.red : Colors.grey),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    value == 1
+                                        ? Icons.check
+                                        : (value == 0
+                                              ? Icons.close
+                                              : Icons.remove),
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                index == 0
+                                    ? 'Oldest'
+                                    : index == 2
+                                    ? 'Most Recent'
+                                    : '',
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Got it',
+                style: TextStyle(
+                  color: AppColors.primaryPurple,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
+      );
+    }
+  }
+
+  // Helper widget required for the dialog above
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 60,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),
@@ -533,8 +675,8 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   }
 
   Widget _buildMainScoreCard() {
-    final adherenceScore = _prediction!.predictionScore;
-    final chanceOfMissing = 100.0 - adherenceScore;
+    // ✅ FIX 1: The DB now stores Forget Probability directly! No more 100 - score.
+    final chanceOfMissing = _prediction!.predictionScore;
     final riskColor = _getRiskColor();
 
     return Container(
@@ -556,7 +698,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                'Adherence Probability',
+                'Non-Adherence Probability',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey,
@@ -596,6 +738,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
                   Column(
                     children: [
                       Text(
+                        // ✅ FIX 2: Ensure it shows 2 decimal places
                         '${(chanceOfMissing * _animationController.value).toStringAsFixed(2)}%',
                         style: const TextStyle(
                           fontSize: 42,

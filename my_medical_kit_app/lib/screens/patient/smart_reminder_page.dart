@@ -13,9 +13,9 @@ import 'dart:async';
 // 🌟 新增：专门用来组合“通知”和“对应药物详情”的数据类
 class ReminderItem {
   final NotificationModel notification;
-  final Prescription prescription;
+  final Prescription? prescription;
 
-  ReminderItem({required this.notification, required this.prescription});
+  ReminderItem({required this.notification, this.prescription});
 }
 
 class SmartReminderPage extends StatefulWidget {
@@ -75,25 +75,40 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
       // 🌟 核心逻辑：遍历每一个未读通知，为它们各自生成一张卡片！
       for (var notif in unreadNotifications) {
         final title = notif.title.toLowerCase();
-        // 只处理和吃药相关的通知
-        if (title.contains('medication') || title.contains('reminder')) {
-          try {
-            // 在处方列表中找到这个通知对应的是哪个药
-            final matchedMed = allMeds.firstWhere(
-              (med) => notif.message.toLowerCase().contains(
-                med.medicationName.toLowerCase(),
-              ),
-            );
-            // 组装成一个 ReminderItem 添加到列表中
-            items.add(
-              ReminderItem(notification: notif, prescription: matchedMed),
-            );
-          } catch (e) {
-            // 如果这个药已经被删除了，找不到匹配的处方，就跳过这条通知
-            debugPrint(
-              'Could not find prescription for notification ${notif.notificationId}',
-            );
+
+        Prescription? matchedMed;
+        try {
+          // 尝试找到对应的药物
+          matchedMed = allMeds.firstWhere(
+            (med) => notif.message.toLowerCase().contains(
+              med.medicationName.toLowerCase(),
+            ),
+          );
+        } catch (e) {
+          // 找不到对应的药物也没关系，matchedMed 保持为 null
+        }
+
+        // 只要是 Medication/Reminder，或者类型是 ALERT/OUT_OF_STOCK，都显示
+        if (title.contains('medication') ||
+            title.contains('reminder') ||
+            notif.type == 'ALERT' ||
+            notif.type == 'OUT_OF_STOCK' ||
+            notif.type == 'LOW_STOCK') {
+          // 如果是普通的吃药提醒，必须要有 prescription 才能吃药。
+          // 但如果是 ALERT 等其它类型，即使找不到 prescription 也允许显示。
+          if ((title.contains('medication') || title.contains('reminder')) &&
+              matchedMed == null) {
+            continue; // 忽略找不到药的吃药提醒
           }
+
+          items.add(
+            ReminderItem(notification: notif, prescription: matchedMed),
+          );
+        } else {
+          // 其它未知类型的通知也加进来，以防漏掉
+          items.add(
+            ReminderItem(notification: notif, prescription: matchedMed),
+          );
         }
       }
 
@@ -437,6 +452,125 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                         final item = _reminders[index];
                         final notif = item.notification;
                         final med = item.prescription;
+
+                        // If it's a generic alert or we couldn't find a prescription, show a simplified card
+                        if (med == null ||
+                            notif.type == 'ALERT' ||
+                            notif.type == 'OUT_OF_STOCK' ||
+                            notif.type == 'LOW_STOCK') {
+                          return Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primaryPurple.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.info_outline,
+                                          color: Colors.orange,
+                                          size: 28,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              notif.title,
+                                              style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.textDark,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Time: ${_formatNotificationTime(notif.createdAt)}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey.shade200,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      notif.message,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: AppColors.textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: ElevatedButton(
+                                      onPressed: () async {
+                                        final success = await PatientService()
+                                            .markNotificationRead(
+                                              notif.notificationId,
+                                            );
+                                        if (mounted && success)
+                                          _loadMedications();
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            AppColors.primaryPurple,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Mark as read'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
 
                         // 💡 UPDATED LOGIC: Split into 3 distinct stock states
                         final isOutOfStock = med.currentInventory <= 0;

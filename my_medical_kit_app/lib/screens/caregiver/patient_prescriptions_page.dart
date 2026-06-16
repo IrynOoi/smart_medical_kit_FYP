@@ -18,7 +18,6 @@ class PatientPrescriptionsPage extends StatefulWidget {
 }
 
 class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
-  
   List<Map<String, dynamic>> _prescriptions = [];
   bool _isLoading = true;
   String _error = '';
@@ -33,15 +32,23 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     final month = parts[3];
     final dayOfWeek = parts[4];
 
-    String timeStr = '';
+    // Helper: convert "HH" to "h:mm AM/PM"
+    String _formatTime(String hour24, String minute) {
+      int h = int.parse(hour24);
+      int m = int.parse(minute);
+      String period = h >= 12 ? 'PM' : 'AM';
+      int displayHour = h % 12;
+      if (displayHour == 0) displayHour = 12;
+      return '$displayHour:${minute.padLeft(2, '0')} $period';
+    }
+
+    String timeStr;
     if (hourPart.contains(',')) {
-      final hours = hourPart
-          .split(',')
-          .map((h) => '${h.padLeft(2, '0')}:${minute.padLeft(2, '0')}')
-          .join(', ');
-      timeStr = hours;
+      final hours = hourPart.split(',');
+      final times12 = hours.map((h) => _formatTime(h, minute)).toList();
+      timeStr = times12.join(', ');
     } else {
-      timeStr = '${hourPart.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
+      timeStr = _formatTime(hourPart, minute);
     }
 
     if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
@@ -96,9 +103,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => EditPrescriptionPage(
-          prescription: prescription,
-        ),
+        builder: (_) => EditPrescriptionPage(prescription: prescription),
       ),
     );
     if (result == true) {

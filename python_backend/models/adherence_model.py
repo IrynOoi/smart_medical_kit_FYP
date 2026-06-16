@@ -29,7 +29,6 @@ def get_patient_adherence_logs(patient_id, limit):
             JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
             JOIN medications m ON pc.medication_id = m.medication_id
             WHERE pc.patient_id = %s
-              AND NOT (al.status = 'MISSED' AND al.scheduled_time < NOW() - INTERVAL 30 MINUTE)
             ORDER BY al.scheduled_time DESC
             LIMIT %s
         ''', (patient_id, limit))

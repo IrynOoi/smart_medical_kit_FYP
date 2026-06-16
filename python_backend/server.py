@@ -48,6 +48,34 @@ app.register_blueprint(medication_bp)
 app.register_blueprint(device_bp)
 app.register_blueprint(analytics_bp)
 
+import logging
+
+# Silence the default Werkzeug logger
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
+from flask import request
+
+_http_header_printed = False
+
+@app.after_request
+def log_request(response):
+    global _http_header_printed
+    if not _http_header_printed:
+        print("\nHTTP Requests")
+        print("-------------")
+        print()
+        _http_header_printed = True
+        
+    now = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    method = request.method.ljust(4)
+    path = request.path.ljust(30)
+    status_code = response.status_code
+    status_text = response.status.split(' ', 1)[1] if ' ' in response.status else ''
+    
+    print(f"{now} +08 {method} {path} {status_code} {status_text}", flush=True)
+    return response
+
 @app.route('/health', methods=['GET'])
 def health_check():
     lstm_model, _ = get_models()

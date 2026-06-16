@@ -1,6 +1,5 @@
 # app.py
-#backend codes
-# app.py - Complete Flask Backend for IoT-Based Smart Medical Kit
+#backend codes- Complete Flask Backend for IoT-Based Smart Medical Kit
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask.json.provider import DefaultJSONProvider

@@ -213,21 +213,31 @@ def get_analytics_overview(caregiver_id):
     try:
         total, stats = get_caregiver_analytics_overview(caregiver_id)
 
-        # 关键修改：如果没有任何患者，则预测分数应为 0
         if total == 0:
-            avg_score = 0.0
+            avg_score = 0.00
         else:
             avg_score = stats['avg_prediction_score']
             if avg_score is None:
-                # 有患者但从未运行过 AI 预测，默认 85% 作为初始基线
-                avg_score = 85.0
+                avg_score = 85.00
             else:
                 avg_score = float(avg_score)
         
+        # --- NEW CODE: Force 2 decimal places ---
+        final_forecast = round(avg_score, 2)
+        
+        # --- NEW CODE: Print to terminal for debugging ---
+        print("\n" + "="*40)
+        print(f"📊 SYSTEM FORECAST CALCULATION (Caregiver {caregiver_id})")
+        print(f"   Total Active Patients: {total}")
+        print(f"   Raw DB Average Score:  {avg_score}")
+        print(f"   Final Rounded Score:   {final_forecast}%")
+        print("="*40 + "\n")
+
         return jsonify({
             "success": True,
             "data": {
-                "overall_adherence_prediction": round(avg_score, 1),
+                # Update this line to use the new 2-decimal variable
+                "overall_adherence_prediction": final_forecast, 
                 "high_risk_patients": stats['high_risk_patients'] or 0,
                 "medium_risk_patients": stats['medium_risk_patients'] or 0,
                 "total_analyzed": total,
@@ -236,7 +246,6 @@ def get_analytics_overview(caregiver_id):
     except Exception as e:
         print(f"Analytics overview error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 
 

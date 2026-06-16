@@ -45,7 +45,28 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   List<double> _graphData = [0, 0, 0, 0, 0, 0, 0];
   List<String> _graphLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   List<AdherenceLog> get _missedLogs {
-    return _recentLogs.where((log) => log.status == 'MISSED').toList();
+    final now = DateTime.now();
+    return _recentLogs.where((log) {
+      // Must be MISSED and have a scheduled time
+      if (log.status != 'MISSED' || log.scheduledTime == null) return false;
+      // Only allow retake within 30 minutes after scheduled time
+      final minutesSinceScheduled = now
+          .difference(log.scheduledTime!)
+          .inMinutes;
+      if (minutesSinceScheduled > 30) return false;
+
+      // Do not allow retake if out of stock
+      try {
+        final med = _medications.firstWhere(
+          (m) => m.prescriptionId == log.prescriptionId,
+        );
+        if (med.currentInventory <= 0) return false;
+      } catch (e) {
+        return false;
+      }
+
+      return true;
+    }).toList();
   }
 
   @override
@@ -679,88 +700,46 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                 ),
               ),
 
-              // 🔔 新增：右侧图标组合 (铃铛 + 原本的日历)
-              Row(
-                children: [
-                  // 1. 通知铃铛 🔔
-                  // GestureDetector(
-                  //   onTap: _showNotificationsSheet, // 点击弹出消息列表
-                  //   child: Stack(
-                  //     clipBehavior: Clip.none,
-                  //     children: [
-                  //       const Icon(
-                  //         Icons.notifications_none_rounded,
-                  //         color: Colors.white,
-                  //         size: 32,
-                  //       ),
-                  //       // 如果有未读消息，显示小红点！🔴
-                  //       if (_unreadNotifications > 0)
-                  //         Positioned(
-                  //           right: 0,
-                  //           top: 2,
-                  //           child: Container(
-                  //             padding: const EdgeInsets.all(4),
-                  //             decoration: const BoxDecoration(
-                  //               color: Colors.redAccent,
-                  //               shape: BoxShape.circle,
-                  //             ),
-                  //             child: Text(
-                  //               '$_unreadNotifications',
-                  //               style: const TextStyle(
-                  //                 color: Colors.white,
-                  //                 fontSize: 10,
-                  //                 fontWeight: FontWeight.bold,
-                  //               ),
-                  //             ),
-                  //           ),
-                  //         ),
-                  //     ],
-                  //   ),
-                  // ),
-                  const SizedBox(width: 20), // 两个图标的间距
-
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SmartReminderPage(),
-                        ),
-                      );
-                    },
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Icon(
-                          Icons.notifications_none_rounded,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-
-                        if (_unreadNotifications > 0)
-                          Positioned(
-                            right: 0,
-                            top: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.redAccent,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '$_unreadNotifications',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+              // 🔔 TOP RIGHT: Bell Icon ONLY (Navigates to SmartReminderPage)
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SmartReminderPage(),
+                    ),
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(
+                      Icons.notifications_none_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    if (_unreadNotifications > 0)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$_unreadNotifications',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -817,6 +796,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
             ],
           ),
           const SizedBox(height: 20),
+          // Today's Date Pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(

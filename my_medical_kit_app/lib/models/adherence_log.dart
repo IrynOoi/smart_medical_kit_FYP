@@ -2,11 +2,12 @@
 class AdherenceLog {
   final int logId;
   final int patientId;
+  final int? prescriptionId; // 👈 new field
   final String status;
   final DateTime? scheduledTime;
-  final DateTime? takenTime; // holds dispensed_time from API
+  final DateTime? takenTime;
   final String? medicationName;
-  final int? deviceId; // ✅ New field
+  final int? deviceId;
 
   bool get isTaken => status.toUpperCase() == 'TAKEN';
   bool get isMissed => status.toUpperCase() == 'MISSED';
@@ -14,6 +15,7 @@ class AdherenceLog {
   AdherenceLog({
     required this.logId,
     required this.patientId,
+    this.prescriptionId, // 👈 new param
     required this.status,
     this.scheduledTime,
     this.takenTime,
@@ -25,6 +27,7 @@ class AdherenceLog {
     return AdherenceLog(
       logId: json['adlog_id'] ?? 0,
       patientId: json['patient_id'] ?? 0,
+      prescriptionId: json['prescription_id'], // 👈 parse it
       status: json['status'] ?? 'PENDING',
       scheduledTime: json['scheduled_time'] != null
           ? DateTime.tryParse(json['scheduled_time'])
@@ -33,7 +36,9 @@ class AdherenceLog {
           ? DateTime.tryParse(json['dispensed_time'])
           : null,
       medicationName: json['medication_name'] ?? 'Medication',
-      deviceId: json['device_id'], // ✅ Parse device_id
+      deviceId: json['device_id'],
     );
   }
+
+  // Remove the broken getter – use the field directly
 }

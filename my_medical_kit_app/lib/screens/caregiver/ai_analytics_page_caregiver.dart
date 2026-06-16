@@ -5,6 +5,7 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:my_medical_kit_app/services/api/prediction_service.dart';
+import 'package:intl/intl.dart';
 
 class AiAnalyticsPage extends StatefulWidget {
   final int caregiverId;
@@ -60,7 +61,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       await Future.wait(
         allPatients.map((patient) async {
           final pid = patient['patient_id'];
-          final pred = await PredictionService().getAIPrediction(pid);
+          final pred = await PredictionService().recalculatePrediction(pid);
           predictions[pid] = pred;
         }),
       );
@@ -214,10 +215,15 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                 return;
               }
 
-              // 2. Proceed with showing the prediction if successful
-              if (!result.containsKey('prediction_score') ||
-                  !result.containsKey('risk_level')) {
-                throw Exception('Invalid response format');
+              // 2. 剥开后端的 "data" 外壳
+              final predictionData = result['data'] ?? result;
+
+              // 从 predictionData 里面检查字段
+              if (!predictionData.containsKey('prediction_score') ||
+                  !predictionData.containsKey('risk_level')) {
+                throw Exception(
+                  'Invalid response format: Missing score or risk level',
+                );
               }
 
               // ✅ FIX 3: Pop out a NEW window with the AI results!
@@ -233,9 +239,12 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                         color: Colors.green,
                       ),
                     ),
+                    // 从 predictionData 里面提取数据传给 UI
                     content: _buildPredictionResultCard(
-                      (result['prediction_score'] as num?)?.toDouble() ?? 0.0,
-                      result['risk_level']?.toString() ?? 'LOW',
+                      (predictionData['prediction_score'] as num?)
+                              ?.toDouble() ??
+                          0.0,
+                      predictionData['risk_level']?.toString() ?? 'LOW',
                     ),
                     actions: [
                       SizedBox(
@@ -324,9 +333,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 _buildInfoRow('Name', patientName),
-                                _buildInfoRow('Age', age.toString()),
-                                _buildInfoRow('Day', dayOfWeek),
-                                _buildInfoRow('Time', timeOfDay),
+                                _buildInfoRow('Age', '$age years'),
+                                _buildInfoRow('Date', '${DateFormat('MMM dd, yyyy').format(DateTime.now())} ($dayOfWeek)'),
+                                _buildInfoRow('Time', '${DateFormat('hh:mm a').format(DateTime.now())} ($timeOfDay)'),
                                 const SizedBox(height: 8),
                                 const Divider(),
                                 const SizedBox(height: 8),
@@ -372,9 +381,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                                         const SizedBox(height: 4),
                                         Text(
                                           index == 0
-                                              ? 'Most Recent'
+                                              ? 'Oldest' // ✅ 修正：从左到右，第一个是最旧的记录
                                               : index == 2
-                                              ? 'Oldest'
+                                              ? 'Most Recent' // ✅ 修正：最右边的是刚刚发生的记录
                                               : '',
                                           style: const TextStyle(fontSize: 10),
                                         ),
@@ -426,7 +435,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         ? Colors.orange
         : Colors.green;
 
-    final double forgetProbability = 100.0 - score;
+    // ✅ FIX 1: Stop subtracting from 100! Just use the score directly.
+    final double forgetProbability = score;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -440,8 +450,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
         border: Border.all(color: riskColor.withValues(alpha: 0.3)),
       ),
       child: Column(
-        mainAxisSize:
-            MainAxisSize.min, // 🔴 FIX: Shrinks the box to normal size!
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -478,7 +487,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(
-                '${forgetProbability.toStringAsFixed(1)}%',
+                // ✅ FIX 2: Change this to (2) so it shows 45.14% instead of 45.1%
+                '${forgetProbability.toStringAsFixed(2)}%',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -654,7 +664,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     await Future.delayed(const Duration(milliseconds: 200));
 
     try {
-      final prediction = await PredictionService().getAIPrediction(patientId);
+      final prediction = await PredictionService().recalculatePrediction(
+        patientId,
+      );
 
       if (mounted) {
         // 🔴 FIX: Use rootNavigator to safely close the loading spinner without crashing
