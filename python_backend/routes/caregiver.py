@@ -213,6 +213,9 @@ def get_analytics_overview(caregiver_id):
     try:
         total, stats = get_caregiver_analytics_overview(caregiver_id)
 
+        analysed_count = stats.get('analysed_patients', 0)
+        total_score = float(stats.get('total_score') or 0.0)
+
         if total == 0:
             avg_score = 0.00
         else:
@@ -228,9 +231,9 @@ def get_analytics_overview(caregiver_id):
         # --- NEW CODE: Print to terminal for debugging ---
         print("\n" + "="*40)
         print(f"📊 SYSTEM FORECAST CALCULATION (Caregiver {caregiver_id})")
-        print(f"   Total Active Patients: {total}")
-        print(f"   Raw DB Average Score:  {avg_score}")
-        print(f"   Final Rounded Score:   {final_forecast}%")
+        print(f"   Total Score: {total_score}")
+        print(f"   Analysed Patient: {analysed_count}")
+        print(f"   Final Rounded Score:   {final_forecast:.2f}%")
         print("="*40 + "\n")
 
         return jsonify({
@@ -240,7 +243,7 @@ def get_analytics_overview(caregiver_id):
                 "overall_adherence_prediction": final_forecast, 
                 "high_risk_patients": stats['high_risk_patients'] or 0,
                 "medium_risk_patients": stats['medium_risk_patients'] or 0,
-                "total_analyzed": total,
+                "total_analyzed": analysed_count,
             }
         })
     except Exception as e:

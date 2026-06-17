@@ -494,29 +494,9 @@ class ReminderService {
     DateTime from, {
     int daysAhead = 7,
   }) {
-    final parts = prescription.dispenseSchedule.trim().split(RegExp(r'\s+'));
-    if (parts.length != 5) return <DateTime>[];
-
-    final minutes = _parseCronField(parts[0], min: 0, max: 59);
-    final hours = _parseCronField(parts[1], min: 0, max: 23);
-    final daysOfMonth = _parseCronField(parts[2], min: 1, max: 31);
-    final months = _parseCronField(parts[3], min: 1, max: 12);
-    final daysOfWeek = _parseCronField(
-      parts[4],
-      min: 0,
-      max: 7,
-      normalizeSunday: true,
-    );
-
-    if (minutes.isEmpty ||
-        hours.isEmpty ||
-        daysOfMonth.isEmpty ||
-        months.isEmpty ||
-        daysOfWeek.isEmpty) {
-      return <DateTime>[];
-    }
-
     final result = <DateTime>[];
+    if (prescription.dispenseTimes.isEmpty) return result;
+
     final firstDay = DateTime(from.year, from.month, from.day);
     final prescriptionStart = DateTime(
       prescription.startDate.year,
@@ -536,16 +516,13 @@ class ReminderService {
 
     for (int dayOffset = 0; dayOffset <= daysAhead; dayOffset++) {
       final day = firstDay.add(Duration(days: dayOffset));
-      final cronWeekday = day.weekday % 7;
 
-      if (!months.contains(day.month) ||
-          !daysOfMonth.contains(day.day) ||
-          !daysOfWeek.contains(cronWeekday)) {
-        continue;
-      }
-
-      for (final hour in hours) {
-        for (final minute in minutes) {
+      for (var timeStr in prescription.dispenseTimes) {
+        final parts = timeStr.split(':');
+        if (parts.length >= 2) {
+          int hour = int.tryParse(parts[0]) ?? 8;
+          int minute = int.tryParse(parts[1]) ?? 0;
+          
           final candidate = DateTime(
             day.year,
             day.month,
@@ -553,6 +530,7 @@ class ReminderService {
             hour,
             minute,
           );
+          
           if (!candidate.isAfter(from)) continue;
           if (candidate.isBefore(prescriptionStart)) continue;
           if (prescriptionEnd != null && candidate.isAfter(prescriptionEnd)) {
@@ -564,27 +542,6 @@ class ReminderService {
     }
     result.sort();
     return result;
-  }
-
-  static Set<int> _parseCronField(
-    String field, {
-    required int min,
-    required int max,
-    bool normalizeSunday = false,
-  }) {
-    if (field == '*') {
-      if (normalizeSunday) return <int>{0, 1, 2, 3, 4, 5, 6};
-      return {for (int i = min; i <= max; i++) i};
-    }
-    final values = <int>{};
-    for (final rawPart in field.split(',')) {
-      final value = int.tryParse(rawPart.trim());
-      if (value == null) continue;
-      final normalized = normalizeSunday && value == 7 ? 0 : value;
-      if (normalized >= min && normalized <= max) values.add(normalized);
-    }
-    if (normalizeSunday) values.remove(7);
-    return values;
   }
 
   static int _notificationIdFor(int prescriptionId, DateTime scheduledAt) {

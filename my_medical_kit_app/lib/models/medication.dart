@@ -6,7 +6,7 @@ class Medication {
   final int patientId;
   final String medicationName;
   final double dosageTablet;
-  final String dispenseSchedule;
+  final List<String> dispenseTimes;
   final int currentInventory;
   final int refillThreshold;
   final DateTime startDate;
@@ -20,7 +20,7 @@ class Medication {
     required this.patientId,
     required this.medicationName,
     required this.dosageTablet,
-    required this.dispenseSchedule,
+    required this.dispenseTimes,
     required this.currentInventory,
     required this.refillThreshold,
     required this.startDate,
@@ -39,7 +39,9 @@ class Medication {
       patientId: json['patient_id'],
       medicationName: json['medication_name'],
       dosageTablet: json['dosage_tablet'].toDouble(),
-      dispenseSchedule: json['dispense_schedule'],
+      dispenseTimes: json['dispense_times'] != null
+          ? List<String>.from(json['dispense_times'])
+          : [],
       currentInventory: json['current_inventory'] ?? 0,
       refillThreshold: json['refill_threshold'] ?? 5,
       startDate: DateTime.parse(json['start_date']),

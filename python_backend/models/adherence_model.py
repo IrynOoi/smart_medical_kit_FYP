@@ -206,7 +206,7 @@ def get_caregiver_alerts(caregiver_id, limit):
         cursor.execute('''
             SELECT al.adlog_id, u.full_name AS patient_name,
                 med.medication_name, al.scheduled_time, al.status,
-                pc.dosage_tablet, pc.dispense_schedule,
+                pc.dosage_tablet,
                 med.current_inventory
             FROM adherence_logs al
             JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
@@ -240,6 +240,8 @@ def get_caregiver_analytics_overview(caregiver_id):
             SELECT 
                 COUNT(CASE WHEN a.risk_level = 'HIGH' THEN 1 END) AS high_risk_patients,
                 COUNT(CASE WHEN a.risk_level = 'MEDIUM' THEN 1 END) AS medium_risk_patients,
+                COUNT(a.prediction_score) AS analysed_patients,
+                SUM(a.prediction_score) AS total_score,
                 AVG(a.prediction_score) AS avg_prediction_score
             FROM patient p
             JOIN users u ON p.patient_id = u.user_id

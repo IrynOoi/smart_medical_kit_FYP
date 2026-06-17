@@ -36,7 +36,7 @@ def record_dispense_inventory(prescription_id):
     sync_patient_caregiver_stock_notifications(patient_id)
     return True, "Success", patient_id
 
-def create_prescription_config(patient_id, medication_name, dosage_tablet, dispense_schedule, start_date, end_date, current_inventory, refill_threshold, device_id):
+def create_prescription_config(patient_id, medication_name, dosage_tablet, dispense_times, start_date, end_date, current_inventory, refill_threshold, device_id, dispense_days=None):
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         
@@ -48,10 +48,23 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
 
         cursor.execute('''
             INSERT INTO prescription_config 
-            (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date, end_date))
+            (patient_id, medication_id, dosage_tablet, start_date, end_date)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (patient_id, medication_id, dosage_tablet, start_date, end_date))
         new_prescription_id = cursor.lastrowid
+
+        for dt in dispense_times:
+            if dispense_days and len(dispense_days) > 0:
+                for day in dispense_days:
+                    cursor.execute('''
+                        INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
+                        VALUES (%s, %s, %s)
+                    ''', (new_prescription_id, dt, day))
+            else:
+                cursor.execute('''
+                    INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
+                    VALUES (%s, %s, NULL)
+                ''', (new_prescription_id, dt))
 
         if current_inventory is not None:
             cursor.execute('UPDATE medications SET current_inventory = %s WHERE medication_id = %s',
@@ -69,7 +82,8 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
             "medication_id": medication_id,
             "medication_name": medication_name,
             "dosage_tablet": dosage_tablet,
-            "dispense_schedule": dispense_schedule,
+            "dispense_times": dispense_times,
+            "dispense_days": dispense_days,
             "start_date": start_date,
             "end_date": end_date,
             "created_at": datetime.datetime.now(),
@@ -85,7 +99,7 @@ def get_prescription_details(prescription_id):
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
             SELECT pc.prescription_id, pc.patient_id, m.medication_name,
-                   pc.dosage_tablet, pc.dispense_schedule,
+                   pc.dosage_tablet,
                    m.current_inventory, m.refill_threshold,
                    pc.start_date, pc.end_date,
                    pc.created_at, pc.updated_at,
@@ -95,6 +109,14 @@ def get_prescription_details(prescription_id):
             WHERE pc.prescription_id = %s
         ''', (prescription_id,))
         prescription = cursor.fetchone()
+        if prescription:
+            cursor.execute('SELECT DISTINCT dispense_time FROM prescription_schedules WHERE prescription_id = %s ORDER BY dispense_time ASC', (prescription_id,))
+            times = cursor.fetchall()
+            prescription['dispense_times'] = [str(t['dispense_time']) for t in times]
+            
+            cursor.execute('SELECT DISTINCT day_of_week FROM prescription_schedules WHERE prescription_id = %s AND day_of_week IS NOT NULL ORDER BY day_of_week ASC', (prescription_id,))
+            days = cursor.fetchall()
+            prescription['dispense_days'] = [int(d['day_of_week']) for d in days]
         cursor.close()
     return prescription
 
@@ -103,7 +125,7 @@ def get_prescriptions_by_patient(patient_id):
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
             SELECT pc.prescription_id, pc.patient_id, m.medication_name,
-                   pc.dosage_tablet, pc.dispense_schedule,
+                   pc.dosage_tablet,
                    m.current_inventory, m.refill_threshold,
                    pc.start_date, pc.end_date,
                    pc.created_at, pc.updated_at,
@@ -115,6 +137,14 @@ def get_prescriptions_by_patient(patient_id):
             ORDER BY pc.start_date ASC
         ''', (patient_id,))
         prescriptions = cursor.fetchall()
+        for p in prescriptions:
+            cursor.execute('SELECT DISTINCT dispense_time FROM prescription_schedules WHERE prescription_id = %s ORDER BY dispense_time ASC', (p['prescription_id'],))
+            times = cursor.fetchall()
+            p['dispense_times'] = [str(t['dispense_time']) for t in times]
+            
+            cursor.execute('SELECT DISTINCT day_of_week FROM prescription_schedules WHERE prescription_id = %s AND day_of_week IS NOT NULL ORDER BY day_of_week ASC', (p['prescription_id'],))
+            days = cursor.fetchall()
+            p['dispense_days'] = [int(d['day_of_week']) for d in days]
         cursor.close()
     return prescriptions
 
@@ -125,9 +155,9 @@ def get_prescriptions_by_device(device_id):
             SELECT 
                 pc.prescription_id,
                 pc.patient_id,
+                med.medication_id,           -- ✅ ADD THIS LINE
                 med.medication_name,
                 pc.dosage_tablet,
-                pc.dispense_schedule,
                 med.current_inventory,
                 med.refill_threshold,
                 pc.start_date,
@@ -146,6 +176,14 @@ def get_prescriptions_by_device(device_id):
             ORDER BY med.motor_slot ASC
         ''', (device_id,))
         prescriptions = cursor.fetchall()
+        for p in prescriptions:
+            cursor.execute('SELECT DISTINCT dispense_time FROM prescription_schedules WHERE prescription_id = %s ORDER BY dispense_time ASC', (p['prescription_id'],))
+            times = cursor.fetchall()
+            p['dispense_times'] = [str(t['dispense_time']) for t in times]
+            
+            cursor.execute('SELECT DISTINCT day_of_week FROM prescription_schedules WHERE prescription_id = %s AND day_of_week IS NOT NULL ORDER BY day_of_week ASC', (p['prescription_id'],))
+            days = cursor.fetchall()
+            p['dispense_days'] = [int(d['day_of_week']) for d in days]
         cursor.close()
     return prescriptions
 
@@ -164,21 +202,26 @@ def get_prescription_for_device_patient(device_id, patient_id):
         cursor.close()
     return result
 
-def restock_medication_inventory(prescription_id, quantity):
+def restock_medication_inventory(prescription_id, quantity, set_inventory=False):
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE medications m
-            JOIN prescription_config pc ON m.medication_id = pc.medication_id
-            SET m.current_inventory = m.current_inventory + %s,
-                m.updated_at = CURRENT_TIMESTAMP
-            WHERE pc.prescription_id = %s
-        ''', (quantity, prescription_id))
+        # 先获取 medication_id
+        cursor.execute('SELECT medication_id FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
+        row = cursor.fetchone()
+        if not row:
+            return
+        medication_id = row[0]
+        if set_inventory:
+            cursor.execute('UPDATE medications SET current_inventory = %s, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s',
+                           (quantity, medication_id))
+        else:
+            cursor.execute('UPDATE medications SET current_inventory = current_inventory + %s, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s',
+                           (quantity, medication_id))
         conn.commit()
         cursor.close()
-    sync_prescription_stock_notifications(prescription_id)
+    sync_prescription_stock_notifications(prescription_id)  # 确保导入
 
-def update_prescription_config(prescription_id, medication_name, dosage_tablet, dispense_schedule, start_date, end_date, current_inventory, refill_threshold, device_id, check_device_id_none=False):
+def update_prescription_config(prescription_id, medication_name, dosage_tablet, dispense_times, start_date, end_date, current_inventory, refill_threshold, device_id, check_device_id_none=False, dispense_days=None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
@@ -190,10 +233,25 @@ def update_prescription_config(prescription_id, medication_name, dosage_tablet, 
         
         cursor.execute('''
             UPDATE prescription_config 
-            SET medication_id = %s, dosage_tablet = %s, dispense_schedule = %s, 
+            SET medication_id = %s, dosage_tablet = %s, 
                 start_date = %s, end_date = %s, updated_at = CURRENT_TIMESTAMP
             WHERE prescription_id = %s
-        ''', (medication_id, dosage_tablet, dispense_schedule, start_date, end_date, prescription_id))
+        ''', (medication_id, dosage_tablet, start_date, end_date, prescription_id))
+        
+        cursor.execute('DELETE FROM prescription_schedules WHERE prescription_id = %s', (prescription_id,))
+        for dt in dispense_times:
+            if dispense_days and len(dispense_days) > 0:
+                for day in dispense_days:
+                    cursor.execute('''
+                        INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
+                        VALUES (%s, %s, %s)
+                    ''', (prescription_id, dt, day))
+            else:
+                cursor.execute('''
+                    INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
+                    VALUES (%s, %s, NULL)
+                ''', (prescription_id, dt))
+
         
         updates = []
         params = []
@@ -233,6 +291,7 @@ def delete_prescription_config(prescription_id):
         rx_data = cursor.fetchone()
         
         cursor.execute('DELETE FROM adherence_logs WHERE prescription_id = %s', (prescription_id,))
+        cursor.execute('DELETE FROM prescription_schedules WHERE prescription_id = %s', (prescription_id,))
         cursor.execute('DELETE FROM prescription_config WHERE prescription_id = %s', (prescription_id,))
         conn.commit()
         cursor.close()

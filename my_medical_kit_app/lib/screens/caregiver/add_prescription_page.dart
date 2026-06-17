@@ -23,17 +23,8 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     text: '1.0',
   );
 
-  TimeOfDay _selectedTime = const TimeOfDay(hour: 8, minute: 0);
-  final List<String> _selectedDays = [];
-  final List<String> _daysOfWeek = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
+  List<TimeOfDay> _selectedTimes = [const TimeOfDay(hour: 8, minute: 0)];
+  List<int> _selectedDays = []; // 1=Mon, ..., 7=Sun. Empty means Everyday
 
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
@@ -104,54 +95,6 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     }
   }
 
-  String _buildCronExpression() {
-    final minute = _selectedTime.minute.toString().padLeft(2, '0');
-    final hour = _selectedTime.hour.toString().padLeft(2, '0');
-
-    if (_selectedDays.isEmpty || _selectedDays.length == 7) {
-      return '$minute $hour * * *';
-    }
-
-    final dayNumbers = _selectedDays
-        .map((d) {
-          switch (d) {
-            case 'Mon':
-              return '1';
-            case 'Tue':
-              return '2';
-            case 'Wed':
-              return '3';
-            case 'Thu':
-              return '4';
-            case 'Fri':
-              return '5';
-            case 'Sat':
-              return '6';
-            case 'Sun':
-              return '0';
-            default:
-              return '1';
-          }
-        })
-        .join(',');
-
-    return '$minute $hour * * $dayNumbers';
-  }
-
-  String _getSchedulePreview() {
-    final timeFormat = DateFormat.jm().format(
-      DateTime(0, 1, 1, _selectedTime.hour, _selectedTime.minute),
-    );
-    if (_selectedDays.isEmpty) {
-      return 'Every day at $timeFormat';
-    } else if (_selectedDays.length == 7) {
-      return 'Every day at $timeFormat';
-    } else {
-      final days = _selectedDays.join(', ');
-      return '$days at $timeFormat';
-    }
-  }
-
   Future<void> _savePrescription() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedMedicationName == null) {
@@ -172,16 +115,52 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       return;
     }
 
+    try {
+      final patientId = widget.patient['patient_id'];
+      final existing = await MedicationService().getPatientMedications(
+        patientId,
+      );
+      final hasDuplicate = existing.any((p) {
+        // 只检查未结束的处方
+        if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
+          return false;
+        return p.medicationName == _selectedMedicationName;
+      });
+      if (hasDuplicate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '⚠️ This medication has already been prescribed to this patient.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      // 如果获取处方列表失败，可以继续保存（但建议提示错误）
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not verify duplicates: $e')),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
-    final String cronSchedule = _buildCronExpression();
+    final List<String> dispenseTimes = _selectedTimes.map((t) {
+      final hour = t.hour.toString().padLeft(2, '0');
+      final minute = t.minute.toString().padLeft(2, '0');
+      return '$hour:$minute:00';
+    }).toList();
+
     final DateFormat formatter = DateFormat('yyyy-MM-dd');
 
     final data = {
       'patient_id': widget.patient['patient_id'],
       'medication_name': _selectedMedicationName,
       'dosage_tablet': double.tryParse(_dosageController.text) ?? 1.0,
-      'dispense_schedule': cronSchedule,
+      'dispense_times': dispenseTimes,
+      'dispense_days': _selectedDays,
       'start_date': formatter.format(_startDate),
       'end_date': _endDate != null ? formatter.format(_endDate!) : null,
     };
@@ -414,18 +393,113 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Dispense Time',
+                              'Dispense Times',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            InkWell(
-                              onTap: () async {
+                            Column(
+                              children: _selectedTimes.asMap().entries.map((
+                                entry,
+                              ) {
+                                int index = entry.key;
+                                TimeOfDay time = entry.value;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () async {
+                                            final picked = await showTimePicker(
+                                              context: context,
+                                              initialTime: time,
+                                              builder: (context, child) {
+                                                return Theme(
+                                                  data: Theme.of(context).copyWith(
+                                                    colorScheme:
+                                                        const ColorScheme.light(
+                                                          primary: AppColors
+                                                              .primaryPurple,
+                                                        ),
+                                                  ),
+                                                  child: child!,
+                                                );
+                                              },
+                                            );
+                                            if (picked != null) {
+                                              setState(
+                                                () => _selectedTimes[index] =
+                                                    picked,
+                                              );
+                                            }
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 14,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(
+                                                color: Colors.grey.shade300,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.access_time,
+                                                  color:
+                                                      AppColors.primaryPurple,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Text(
+                                                  time.format(context),
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                const Icon(
+                                                  Icons.arrow_drop_down,
+                                                  color: Colors.grey,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_selectedTimes.length > 1)
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                            color: Colors.red,
+                                          ),
+                                          onPressed: () {
+                                            setState(
+                                              () => _selectedTimes.removeAt(
+                                                index,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            TextButton.icon(
+                              onPressed: () async {
                                 final picked = await showTimePicker(
                                   context: context,
-                                  initialTime: _selectedTime,
+                                  initialTime: const TimeOfDay(
+                                    hour: 8,
+                                    minute: 0,
+                                  ),
                                   builder: (context, child) {
                                     return Theme(
                                       data: Theme.of(context).copyWith(
@@ -438,131 +512,51 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                                   },
                                 );
                                 if (picked != null) {
-                                  setState(() => _selectedTime = picked);
+                                  setState(() => _selectedTimes.add(picked));
                                 }
                               },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time,
-                                      color: AppColors.primaryPurple,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      _selectedTime.format(context),
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    const Icon(
-                                      Icons.arrow_drop_down,
-                                      color: Colors.grey,
-                                    ),
-                                  ],
+                              icon: const Icon(
+                                Icons.add,
+                                color: AppColors.primaryPurple,
+                              ),
+                              label: const Text(
+                                'Add Time',
+                                style: TextStyle(
+                                  color: AppColors.primaryPurple,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
+                            const Divider(),
+                            const SizedBox(height: 16),
                             const Text(
-                              'Repeat On',
+                              'Days of the Week',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: _daysOfWeek.map((day) {
-                                final isSelected = _selectedDays.contains(day);
-                                return FilterChip(
-                                  label: Text(day),
-                                  selected: isSelected,
-                                  selectedColor: AppColors.primaryPurple
-                                      .withOpacity(0.2),
-                                  checkmarkColor: AppColors.primaryPurple,
-                                  backgroundColor: Colors.grey.shade100,
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        _selectedDays.add(day);
-                                      } else {
-                                        _selectedDays.remove(day);
-                                      }
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
                             const SizedBox(height: 8),
                             const Text(
-                              "Leave empty to dispense every day.",
+                              'If no days are selected, it will default to Everyday.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            // Schedule preview
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryPurple.withOpacity(
-                                  0.05,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.primaryPurple.withOpacity(
-                                    0.2,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.preview,
-                                    color: AppColors.primaryPurple,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Schedule preview',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _getSchedulePreview(),
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8.0,
+                              runSpacing: 4.0,
+                              children: [
+                                _buildDayChip('Mon', 1),
+                                _buildDayChip('Tue', 2),
+                                _buildDayChip('Wed', 3),
+                                _buildDayChip('Thu', 4),
+                                _buildDayChip('Fri', 5),
+                                _buildDayChip('Sat', 6),
+                                _buildDayChip('Sun', 7),
+                              ],
                             ),
                           ],
                         ),
@@ -750,6 +744,30 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ],
+    );
+  }
+
+  Widget _buildDayChip(String label, int dayIndex) {
+    final isSelected = _selectedDays.contains(dayIndex);
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (bool selected) {
+        setState(() {
+          if (selected) {
+            _selectedDays.add(dayIndex);
+            _selectedDays.sort();
+          } else {
+            _selectedDays.remove(dayIndex);
+          }
+        });
+      },
+      selectedColor: AppColors.primaryPurple.withOpacity(0.2),
+      checkmarkColor: AppColors.primaryPurple,
+      labelStyle: TextStyle(
+        color: isSelected ? AppColors.primaryPurple : Colors.black87,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
     );
   }
 }

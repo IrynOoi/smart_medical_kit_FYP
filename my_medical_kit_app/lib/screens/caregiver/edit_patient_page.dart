@@ -1,5 +1,6 @@
-import 'package:my_medical_kit_app/services/api/api_client.dart';
 //edit_patient_page.dart
+
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +17,6 @@ class EditPatientPage extends StatefulWidget {
 
 class _EditPatientPageState extends State<EditPatientPage> {
   final _formKey = GlobalKey<FormState>();
-  
 
   late TextEditingController _fullNameController;
   late TextEditingController _emailController;
@@ -30,7 +30,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
   String? _photoPath;
   bool _isSaving = false;
 
-  final List<String> _genders = ['Male', 'Female', 'Other'];
+  final List<String> _genders = ['Male', 'Female'];
 
   @override
   void initState() {
@@ -175,7 +175,9 @@ class _EditPatientPageState extends State<EditPatientPage> {
                   ),
                   child: CircleAvatar(
                     radius: 55,
-                    backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
+                    backgroundColor: AppColors.primaryPurple.withValues(
+                      alpha: 0.05,
+                    ),
                     backgroundImage:
                         widget.patient['profile_photo'] != null &&
                             widget.patient['profile_photo'].isNotEmpty

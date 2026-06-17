@@ -1,5 +1,3 @@
-//ai_prediction.dart
-
 // lib/models/ai_prediction.dart
 import 'dart:convert'; // Required for jsonDecode
 import 'package:flutter/foundation.dart'; // This defines debugPrint

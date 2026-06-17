@@ -1,4 +1,6 @@
 // lib/screens/patient_dashboard_page.dart
+import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'dart:math';
@@ -23,7 +25,10 @@ class PatientDashboardPage extends StatefulWidget {
   State<PatientDashboardPage> createState() => _PatientDashboardPageState();
 }
 
-class _PatientDashboardPageState extends State<PatientDashboardPage> {
+class _PatientDashboardPageState extends State<PatientDashboardPage>
+    with WidgetsBindingObserver {
+  Timer? _refreshTimer;
+  bool _isPaused = false;
   // ✅ FIXED: Get patient ID from shared preferences (login session)
   int _currentPatientId = 0;
 
@@ -72,8 +77,40 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadPatientId();
     _requestNotificationPermission();
+    _startPeriodicRefresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh immediately when coming back
+      _loadAll();
+      // Restart timer if it was stopped
+      _startPeriodicRefresh();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPeriodicRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && !_isLoading && _currentPatientId != 0) {
+        _loadAll();
+      }
+    });
   }
 
   Future<void> _requestNotificationPermission() async {
@@ -708,7 +745,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
                     MaterialPageRoute(
                       builder: (_) => const SmartReminderPage(),
                     ),
-                  );
+                  ).then((_) => _loadAll());
                 },
                 child: Stack(
                   clipBehavior: Clip.none,
@@ -1267,7 +1304,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
   // PRESCRIPTION SCHEDULE (assigned by caregiver)
   // ──────────────────────────────────────────
   Widget _buildScheduleCard(Prescription med) {
-    final scheduleText = _parseCronSchedule(med.dispenseSchedule);
+    final scheduleText = _formatDispenseTimes(med.dispenseTimes);
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -1443,54 +1480,22 @@ class _PatientDashboardPageState extends State<PatientDashboardPage> {
     }
   }
 
-  /// Convert cron‑style schedule (e.g. "0 8 * * *") to human‑readable text.
-  String _parseCronSchedule(String cron) {
-    final parts = cron.split(' ');
-    if (parts.length < 5) return cron;
-
-    final minute = parts[0];
-    final hourPart = parts[1];
-    final dayOfMonth = parts[2];
-    final month = parts[3];
-    final dayOfWeek = parts[4];
-
-    // Helper to convert a 24‑hour string (like "14") to 12‑hour format
-    String to12Hour(String hour24) {
-      final h24 = int.parse(hour24);
-      final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
-      final ampm = h24 >= 12 ? 'PM' : 'AM';
-      return '$h12:$minute $ampm';
-    }
-
-    // Handle comma‑separated hours (e.g. "8,14")
-    String timeStr;
-    if (hourPart.contains(',')) {
-      final hours = hourPart.split(',');
-      final times12 = hours.map((h) => to12Hour(h)).toList();
-      timeStr = times12.join(', ');
-    } else {
-      timeStr = to12Hour(hourPart);
-    }
-
-    if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
-      return 'Daily at $timeStr';
-    } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
-      final days = dayOfWeek.split(',');
-      final dayNames = {
-        '0': 'Sun',
-        '1': 'Mon',
-        '2': 'Tue',
-        '3': 'Wed',
-        '4': 'Thu',
-        '5': 'Fri',
-        '6': 'Sat',
-        '7': 'Sun',
-      };
-      final readableDays = days.map((d) => dayNames[d] ?? d).join(', ');
-      return '$readableDays at $timeStr';
-    }
-
-    return cron;
+  String _formatDispenseTimes(List<String> times) {
+    if (times.isEmpty) return 'No schedule';
+    final formattedTimes = times.map((t) {
+      final parts = t.split(':');
+      if (parts.length >= 2) {
+        int h = int.tryParse(parts[0]) ?? 8;
+        int m = int.tryParse(parts[1]) ?? 0;
+        final amPm = h >= 12 ? 'PM' : 'AM';
+        int displayHour = h % 12;
+        if (displayHour == 0) displayHour = 12;
+        final displayMinute = m.toString().padLeft(2, '0');
+        return '$displayHour:$displayMinute $amPm';
+      }
+      return t;
+    }).toList();
+    return 'Daily at ${formattedTimes.join(', ')}';
   }
 
   Widget _card({required Widget child, EdgeInsets? padding}) {

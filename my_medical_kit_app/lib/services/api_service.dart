@@ -446,23 +446,23 @@ class ApiService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/caregiver/$caregiverId/recent_alerts'),
-      );
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['success']) {
-          return List<Map<String, dynamic>>.from(json['data']);
-        }
-      }
-      return [];
-    } catch (e) {
-      print('Error getting caregiver alerts: $e');
-      return [];
-    }
-  }
+  // Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse('$baseUrl/caregiver/$caregiverId/recent_alerts'),
+  //     );
+  //     if (response.statusCode == 200) {
+  //       final json = jsonDecode(response.body);
+  //       if (json['success']) {
+  //         return List<Map<String, dynamic>>.from(json['data']);
+  //       }
+  //     }
+  //     return [];
+  //   } catch (e) {
+  //     print('Error getting caregiver alerts: $e');
+  //     return [];
+  //   }
+  // }
 
   // ==========================================
   // 📊 AI ANALYTICS ENDPOINTS

@@ -6,7 +6,7 @@ import tensorflow as tf
 import datetime
 import json
 from config import MODEL_PATHS
-from models.analytics_model import get_patient_history_for_ai, save_hybrid_ai_prediction
+from models.analytics_model import get_patient_history_for_ai, save_hybrid_ai_prediction, delete_ai_prediction
 
 print("Loading Hybrid AI Models...")
 lstm_model = None
@@ -29,6 +29,7 @@ def compute_prediction_for_patient(patient_id):
 
     if history_vals is None:
         print(f"[AI] Skipping patient {patient_id}: no adherence history.")
+        delete_ai_prediction(patient_id)
         return None
 
     # 3. Current day & time

@@ -1,6 +1,5 @@
 #scheduler_service.py
 from db import get_db_connection
-from croniter import croniter
 from datetime import timedelta
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -15,25 +14,40 @@ def create_tasks_for_hardware_and_app():
             cursor.execute("SET time_zone = '+08:00';")
             
             cursor.execute("""
-                SELECT pc.*, m.medication_name 
+                SELECT pc.*, m.medication_name, ps.dispense_time, ps.day_of_week 
                 FROM prescription_config pc
                 JOIN medications m ON pc.medication_id = m.medication_id
+                JOIN prescription_schedules ps ON pc.prescription_id = ps.prescription_id
                 WHERE pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE
             """)
             prescriptions = cursor.fetchall()
             
             for p in prescriptions:
-                cron_expr = p['dispense_schedule']
+                # Check day of the week matching (1=Mon, ..., 7=Sun)
+                if p['day_of_week'] is not None and p['day_of_week'] != now.isoweekday():
+                    continue
+
+                if isinstance(p['dispense_time'], timedelta):
+                    seconds = p['dispense_time'].total_seconds()
+                    hours = int(seconds // 3600)
+                    minutes = int((seconds % 3600) // 60)
+                else:
+                    hours = p['dispense_time'].hour
+                    minutes = p['dispense_time'].minute
+                    
+                dispense_minutes = hours * 60 + minutes
                 
                 # ==========================================
                 # 📱 Action 1: 提前 2~10 分钟生成 App 通知
                 # ==========================================
                 for minutes_ahead in range(2, 11):
                     check_time = now + timedelta(minutes=minutes_ahead)
-                    if croniter.match(cron_expr, check_time):
+                    check_total_minutes = check_time.hour * 60 + check_time.minute
+                    if check_total_minutes == dispense_minutes:
                         
                         # ✅ FIX: 用精确的计划时间去重，而不是 CURDATE()
-                        scheduled_time_str = check_time.strftime("%Y-%m-%d %I:%M %p")
+                        target_time = now.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+                        scheduled_time_str = target_time.strftime("%Y-%m-%d %I:%M %p")
                         
                         cursor.execute("""
                             SELECT 1 FROM notifications
@@ -66,8 +80,10 @@ def create_tasks_for_hardware_and_app():
                 # ✅ FIX: 检查当前分钟 ±1 分钟，防止 scheduler 漂移导致漏触发
                 for delta in [0, -1, 1]:
                     check_now = now + timedelta(minutes=delta)
-                    if croniter.match(cron_expr, check_now):
-                        formatted_time = check_now.strftime("%Y-%m-%d %H:%M:00")
+                    check_total_minutes = check_now.hour * 60 + check_now.minute
+                    if check_total_minutes == dispense_minutes:
+                        target_time = now.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+                        formatted_time = target_time.strftime("%Y-%m-%d %H:%M:00")
                         cursor.execute("""
                             SELECT 1 FROM adherence_logs 
                             WHERE prescription_id = %s AND scheduled_time = %s

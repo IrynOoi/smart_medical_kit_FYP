@@ -1,5 +1,6 @@
-import 'package:my_medical_kit_app/services/api/api_client.dart';
 //patient_detail_page.dart
+import 'package:my_medical_kit_app/services/api/api_client.dart';
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
@@ -83,39 +84,41 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          PopupMenuButton<int>(
-            icon: const Icon(Icons.people_alt_outlined),
-            tooltip: 'Switch Patient',
-            onSelected: (newId) {
-              final selected = widget.allPatients.firstWhere((p) => p['patient_id'] == newId);
-              setState(() {
-                patientData = Map<String, dynamic>.from(selected);
-              });
-            },
-            itemBuilder: (context) {
-              // Only display other existing patients not currently selected
-              final otherPatients = widget.allPatients
-                  .where((p) => p['patient_id'] != patientData['patient_id'])
-                  .toList();
-              
-              if (otherPatients.isEmpty) {
-                return [
-                  const PopupMenuItem<int>(
-                    value: -1,
-                    enabled: false,
-                    child: Text('No other patients found'),
-                  )
-                ];
-              }
+          // PopupMenuButton<int>(
+          //   // icon: const Icon(Icons.people_alt_outlined),
+          //   tooltip: 'Switch Patient',
+          //   onSelected: (newId) {
+          //     final selected = widget.allPatients.firstWhere(
+          //       (p) => p['patient_id'] == newId,
+          //     );
+          //     setState(() {
+          //       patientData = Map<String, dynamic>.from(selected);
+          //     });
+          //   },
+          //   itemBuilder: (context) {
+          //     // Only display other existing patients not currently selected
+          //     final otherPatients = widget.allPatients
+          //         .where((p) => p['patient_id'] != patientData['patient_id'])
+          //         .toList();
 
-              return otherPatients.map((p) {
-                return PopupMenuItem<int>(
-                  value: p['patient_id'],
-                  child: Text(p['full_name'] ?? 'Unknown Patient'),
-                );
-              }).toList();
-            },
-          ),
+          //     if (otherPatients.isEmpty) {
+          //       return [
+          //         const PopupMenuItem<int>(
+          //           value: -1,
+          //           enabled: false,
+          //           child: Text('No other patients found'),
+          //         ),
+          //       ];
+          //     }
+
+          //     return otherPatients.map((p) {
+          //       return PopupMenuItem<int>(
+          //         value: p['patient_id'],
+          //         child: Text(p['full_name'] ?? 'Unknown Patient'),
+          //       );
+          //     }).toList();
+          //   },
+          // ),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () async {
@@ -221,7 +224,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
 
     if (confirm == true) {
       if (!mounted) return;
-      
+
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -230,8 +233,11 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
 
       // We need to import CaregiverService if not already imported
       // Actually we'll use CaregiverService directly
-      final success = await CaregiverService().unlinkPatient(widget.caregiverId, patientData['patient_id']);
-      
+      final success = await CaregiverService().unlinkPatient(
+        widget.caregiverId,
+        patientData['patient_id'],
+      );
+
       if (!mounted) return;
       Navigator.pop(context); // pop loading dialog
 
@@ -239,7 +245,10 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Patient unlinked successfully')),
         );
-        Navigator.pop(context, true); // pop back to list page, returning true to refresh
+        Navigator.pop(
+          context,
+          true,
+        ); // pop back to list page, returning true to refresh
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

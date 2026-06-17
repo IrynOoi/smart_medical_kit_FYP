@@ -372,7 +372,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       MaterialPageRoute(
         builder: (_) => CaregiverPatientsListPage(caregiverId: _caregiverId),
       ),
-    );
+    ).then((_) => _loadDashboardData());
   }
 
   void _navigateToDevicesList() {
@@ -381,7 +381,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       MaterialPageRoute(
         builder: (_) => CaregiverDevicesListPage(caregiverId: _caregiverId),
       ),
-    );
+    ).then((_) => _loadDashboardData());
   }
 
   // void _navigateToAdherenceDetails() {
@@ -414,7 +414,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           period: _selectedPeriod,
         ),
       ),
-    );
+    ).then((_) => _loadDashboardData());
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -468,7 +468,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                       builder: (_) =>
                           CaregiverNotificationsPage(caregiverId: _caregiverId),
                     ),
-                  );
+                  ).then((_) => _loadDashboardData());
                 },
               ),
             ),
@@ -663,7 +663,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                               caregiverId: _caregiverId,
                             ),
                           ),
-                        ),
+                        ).then((_) => _loadDashboardData()),
                       ),
                       if (_unreadCount > 0)
                         Positioned(
@@ -888,7 +888,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                       MaterialPageRoute(
                         builder: (_) => const CaregiverMedicationsListPage(),
                       ),
-                    );
+                    ).then((_) => _loadDashboardData());
                   },
                 ),
               ),
@@ -933,7 +933,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         builder: (_) =>
             CaregiverPrescriptionSetupPage(caregiverId: _caregiverId),
       ),
-    );
+    ).then((_) => _loadDashboardData());
   }
 
   Widget _buildStatCard({

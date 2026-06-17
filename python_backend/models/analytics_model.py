@@ -137,3 +137,12 @@ def get_caregiver_at_risk_patients(caregiver_id):
             "temporal_pattern": "Based on latest AI analysis"
         })
     return result
+
+def delete_ai_prediction(patient_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM ai_adherence_prediction WHERE patient_id = %s
+        ''', (patient_id,))
+        conn.commit()
+        cursor.close()

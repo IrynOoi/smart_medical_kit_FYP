@@ -399,6 +399,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             'current_inventory_total': 0,
             'refill_threshold': threshold,
             'device_id': medMap['device_id'],
+            'medication_id': medMap['medication_id'],
           };
         }
 
@@ -479,43 +480,56 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
     if (confirmed == true) {
       final quantity = int.parse(quantityController.text);
-      await _restockMedication(prescriptionId, medicationName, quantity);
+
+      setState(() => _isRefreshing = true);
+      final success = await restockMedication(
+        prescriptionId: prescriptionId,
+        quantity: quantity,
+      );
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '✅ Restocked $medicationName with $quantity pills!',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+          await _loadData();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Restock failed for $medicationName'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
-  Future<void> _restockMedication(
-    int prescriptionId,
-    String medicationName,
-    int quantity,
-  ) async {
-    setState(() => _isRefreshing = true);
+  Future<bool> restockMedication({
+    int? prescriptionId,
+    int? medicationId,
+    required int quantity,
+    bool setInventory = false,
+  }) async {
     try {
-      final success = await MedicationService().restockMedication(
-        prescriptionId,
-        quantity,
-      );
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Restocked $medicationName with $quantity pills!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        await _loadData();
-      } else if (mounted) {
-        throw Exception('Restock failed');
+      final body = {'quantity': quantity, 'set_inventory': setInventory};
+      if (prescriptionId != null) {
+        body['prescription_id'] = prescriptionId;
+      } else if (medicationId != null) {
+        body['medication_id'] = medicationId;
+      } else {
+        return false;
       }
+      final response = await ApiClient.post('/restock_medication', body: body);
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Restock failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isRefreshing = false);
+      return false;
     }
   }
 
@@ -1863,11 +1877,13 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   }
 
   void _showMedicationDetailDialog(Map<String, dynamic> medicationGroup) {
+    final medicationId = medicationGroup['medication_id']; // 获取药品ID
+    final medicationName = medicationGroup['medication_name'];
     final prescriptions = List<Map<String, dynamic>>.from(
       medicationGroup['prescriptions'],
     );
     final totalInventory = medicationGroup['current_inventory_total'];
-    final medicationName = medicationGroup['medication_name'];
+
     final quantityController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -1913,7 +1929,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                   controller: quantityController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Number of pills to add for this medicine',
+                    labelText: 'Number of pills to set for this medicine',
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
@@ -1940,9 +1956,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             onPressed: () async {
               if (formKey.currentState!.validate()) {
                 final quantity = int.parse(quantityController.text);
-                Navigator.pop(context); // close dialog
+                Navigator.pop(context);
                 await _restockAllPrescriptions(
-                  prescriptions,
+                  medicationId,
                   medicationName,
                   quantity,
                 );
@@ -1956,48 +1972,40 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   }
 
   Future<void> _restockAllPrescriptions(
-    List<Map<String, dynamic>> prescriptions,
+    int medicationId,
     String medicationName,
-    int quantity,
+    int totalQuantity,
   ) async {
-    // Show a loading indicator
+    // 显示加载指示器
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
-    bool allSuccess = true;
-    for (var p in prescriptions) {
-      final prescriptionId = p['prescription_id'];
-      final success = await MedicationService().restockMedication(
-        prescriptionId,
-        quantity,
-      );
-      if (!success) allSuccess = false;
-    }
+    // 调用补药接口，setInventory=true
+    final success = await restockMedication(
+      medicationId: medicationId,
+      quantity: totalQuantity,
+      setInventory: true, // 新增参数
+    );
 
-    // Dismiss loading dialog
-    if (mounted) Navigator.pop(context);
+    if (mounted) Navigator.pop(context); // 关闭加载
 
     if (!mounted) return;
 
-    if (allSuccess) {
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '✅ Restocked $medicationName with ${quantity * prescriptions.length} total pills!',
-          ),
+          content: Text('✅ Restocked $medicationName to $totalQuantity pills.'),
           backgroundColor: Colors.green,
         ),
       );
-      await _loadDeviceInventory(
-        _selectedDeviceId!,
-      ); // refresh inventory for current device
+      await _loadDeviceInventory(_selectedDeviceId!);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('❌ Some restock operations failed'),
+          content: Text('❌ Restock failed. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -2167,17 +2175,16 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       ),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [
-                            AppColors.primaryPurple,
-                            Color(0xFF8A4FFF),
-                          ],
+                          colors: [AppColors.primaryPurple, Color(0xFF8A4FFF)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primaryPurple.withValues(alpha: 0.3),
+                            color: AppColors.primaryPurple.withValues(
+                              alpha: 0.3,
+                            ),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -2194,7 +2201,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                             )
                           : const Row(
                               children: [
-                                Icon(Icons.add_shopping_cart_rounded, size: 16, color: Colors.white),
+                                Icon(
+                                  Icons.add_shopping_cart_rounded,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
                                 SizedBox(width: 6),
                                 Text(
                                   'Restock',

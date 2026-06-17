@@ -178,56 +178,22 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     return '$day/$month/$year at $hour:$minute $amPm';
   }
 
-  // 🌟 NEW: Translates a cron string (e.g., "53 15 * * *") into readable text
-  String _getReadableSchedule(String cronExp) {
-    try {
-      final parts = cronExp.trim().split(RegExp(r'\s+'));
-      if (parts.length < 5) return cronExp; // Fallback if format is weird
-
-      final minuteStr = parts[0];
-      final hourStr = parts[1];
-      final daysOfWeekStr = parts[4];
-
-      // Format Time
-      String timeString = '';
-      if (minuteStr != '*' && hourStr != '*') {
-        int h = int.parse(hourStr);
-        int m = int.parse(minuteStr);
+  String _getReadableSchedule(List<String> times) {
+    if (times.isEmpty) return 'No schedule';
+    final formattedTimes = times.map((t) {
+      final parts = t.split(':');
+      if (parts.length >= 2) {
+        int h = int.tryParse(parts[0]) ?? 8;
+        int m = int.tryParse(parts[1]) ?? 0;
         final amPm = h >= 12 ? 'PM' : 'AM';
-
         int displayHour = h % 12;
         if (displayHour == 0) displayHour = 12;
         final displayMinute = m.toString().padLeft(2, '0');
-
-        timeString = '$displayHour:$displayMinute $amPm';
-      } else {
-        timeString = 'Various times';
+        return '$displayHour:$displayMinute $amPm';
       }
-
-      // Format Days
-      String daysString = '';
-      if (daysOfWeekStr == '*') {
-        daysString = 'Daily';
-      } else {
-        final dayNames = {
-          '0': 'Sun',
-          '1': 'Mon',
-          '2': 'Tue',
-          '3': 'Wed',
-          '4': 'Thu',
-          '5': 'Fri',
-          '6': 'Sat',
-          '7': 'Sun',
-        };
-        final dayNums = daysOfWeekStr.split(',');
-        final mappedDays = dayNums.map((d) => dayNames[d.trim()] ?? d).toList();
-        daysString = mappedDays.join(', ');
-      }
-
-      return '$daysString at $timeString';
-    } catch (e) {
-      return cronExp; // Fallback to raw cron string if parsing fails
-    }
+      return t;
+    }).toList();
+    return 'Daily at ${formattedTimes.join(', ')}';
   }
 
   Widget _buildHeader() {
@@ -716,7 +682,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                           Flexible(
                                             child: Text(
                                               _getReadableSchedule(
-                                                med.dispenseSchedule,
+                                                med.dispenseTimes,
                                               ),
                                               style: TextStyle(
                                                 fontSize: 13,

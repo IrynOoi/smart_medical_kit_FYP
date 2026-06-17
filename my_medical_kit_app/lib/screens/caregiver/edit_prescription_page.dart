@@ -22,17 +22,8 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
 
   // 🚫 Removed: _inventoryController, _thresholdController, _deviceIdController
 
-  TimeOfDay _selectedTime = const TimeOfDay(hour: 8, minute: 0);
-  final List<String> _selectedDays = [];
-  final List<String> _daysOfWeek = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
+  List<TimeOfDay> _selectedTimes = [];
+  List<int> _selectedDays = [];
 
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
@@ -64,39 +55,27 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       _endDate = DateTime.tryParse(rx['end_date'].toString());
     }
 
-    final cron = rx['dispense_schedule'] ?? '';
-    final parts = cron.split(' ');
-    if (parts.length >= 2) {
-      final hour = int.tryParse(parts[1]) ?? 8;
-      final minute = int.tryParse(parts[0]) ?? 0;
-      _selectedTime = TimeOfDay(hour: hour, minute: minute);
+    _selectedTimes.clear();
+    if (rx['dispense_times'] != null) {
+      final List<dynamic> times = rx['dispense_times'];
+      for (var timeStr in times) {
+        final parts = timeStr.toString().split(':');
+        if (parts.length >= 2) {
+          final hour = int.tryParse(parts[0]) ?? 8;
+          final minute = int.tryParse(parts[1]) ?? 0;
+          _selectedTimes.add(TimeOfDay(hour: hour, minute: minute));
+        }
+      }
+    }
+    if (_selectedTimes.isEmpty) {
+      _selectedTimes.add(const TimeOfDay(hour: 8, minute: 0));
     }
 
-    if (parts.length >= 5) {
-      final dayOfWeekField = parts[4];
-      if (dayOfWeekField != '*') {
-        final dayNumbers = dayOfWeekField.split(',');
-        final dayMap = {
-          '1': 'Mon',
-          '2': 'Tue',
-          '3': 'Wed',
-          '4': 'Thu',
-          '5': 'Fri',
-          '6': 'Sat',
-          '0': 'Sun',
-          '7': 'Sun',
-        };
-        _selectedDays.clear();
-        for (var d in dayNumbers) {
-          final dayName = dayMap[d];
-          if (dayName != null && !_selectedDays.contains(dayName)) {
-            _selectedDays.add(dayName);
-          }
-        }
-      } else {
-        _selectedDays.clear();
-        _selectedDays.addAll(_daysOfWeek);
-      }
+    _selectedDays.clear();
+    if (rx['dispense_days'] != null) {
+      final List<dynamic> days = rx['dispense_days'];
+      _selectedDays.addAll(days.map((d) => int.tryParse(d.toString()) ?? 1));
+      _selectedDays.sort();
     }
   }
 
@@ -166,40 +145,6 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     }
   }
 
-  String _buildCronExpression() {
-    final minute = _selectedTime.minute.toString().padLeft(2, '0');
-    final hour = _selectedTime.hour.toString().padLeft(2, '0');
-
-    if (_selectedDays.isEmpty || _selectedDays.length == 7) {
-      return '$minute $hour * * *';
-    }
-
-    final dayNumbers = _selectedDays
-        .map((d) {
-          switch (d) {
-            case 'Mon':
-              return '1';
-            case 'Tue':
-              return '2';
-            case 'Wed':
-              return '3';
-            case 'Thu':
-              return '4';
-            case 'Fri':
-              return '5';
-            case 'Sat':
-              return '6';
-            case 'Sun':
-              return '0';
-            default:
-              return '1';
-          }
-        })
-        .join(',');
-
-    return '$minute $hour * * $dayNumbers';
-  }
-
   Future<void> _savePrescription() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedMedicationName == null) {
@@ -209,15 +154,61 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       return;
     }
 
+    try {
+      // 从 widget.prescription 获取 patient_id（需确保字段存在）
+      final patientId =
+          widget.prescription['patient_id'] ?? widget.prescription['patientId'];
+      if (patientId == null) {
+        throw Exception('Patient ID not found in prescription data');
+      }
+
+      final existing = await MedicationService().getPatientMedications(
+        patientId,
+      );
+      final currentPrescriptionId = widget.prescription['prescription_id'];
+
+      final hasDuplicate = existing.any((p) {
+        // 排除自身
+        if (p.prescriptionId == currentPrescriptionId) return false;
+        // 只检查未结束的处方（end_date 为 null 或 >= 今天）
+        if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
+          return false;
+        return p.medicationName == _selectedMedicationName;
+      });
+
+      if (hasDuplicate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '⚠️ This medication has already been prescribed to this patient.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not verify duplicates: $e')),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
-    final String cronSchedule = _buildCronExpression();
+    final List<String> dispenseTimes = _selectedTimes.map((t) {
+      final hour = t.hour.toString().padLeft(2, '0');
+      final minute = t.minute.toString().padLeft(2, '0');
+      return '$hour:$minute:00';
+    }).toList();
+
     final DateFormat formatter = DateFormat('yyyy-MM-dd');
 
     final data = {
       'medication_name': _selectedMedicationName,
       'dosage_tablet': double.tryParse(_dosageController.text) ?? 1.0,
-      'dispense_schedule': cronSchedule,
+      'dispense_times': dispenseTimes,
+      'dispense_days': _selectedDays,
       'start_date': formatter.format(_startDate),
       'end_date': _endDate != null ? formatter.format(_endDate!) : null,
       // 🚫 Do NOT send inventory, threshold, device_id – backend keeps existing values
@@ -326,83 +317,117 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Dispense Time
                     const Text(
-                      'Dispense Time',
+                      'Dispense Times',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ListTile(
-                      tileColor: Colors.grey.shade100,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      leading: const Icon(
-                        Icons.access_time,
-                        color: AppColors.primaryPurple,
-                      ),
-                      title: Text(
-                        _selectedTime.format(context),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: AppColors.primaryPurple,
-                        ),
-                      ),
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _selectedTime,
-                        );
-                        if (picked != null) {
-                          setState(() => _selectedTime = picked);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Schedule Days
-                    const Text(
-                      'Schedule Days',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _daysOfWeek.map((day) {
-                        final isSelected = _selectedDays.contains(day);
-                        return FilterChip(
-                          label: Text(day),
-                          selected: isSelected,
-                          selectedColor: AppColors.primaryPurple.withOpacity(
-                            0.2,
+                    Column(
+                      children: _selectedTimes.asMap().entries.map((entry) {
+                        int index = entry.key;
+                        TimeOfDay time = entry.value;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: ListTile(
+                                  tileColor: Colors.grey.shade100,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  leading: const Icon(
+                                    Icons.access_time,
+                                    color: AppColors.primaryPurple,
+                                  ),
+                                  title: Text(
+                                    time.format(context),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: AppColors.primaryPurple,
+                                    ),
+                                  ),
+                                  onTap: () async {
+                                    final picked = await showTimePicker(
+                                      context: context,
+                                      initialTime: time,
+                                    );
+                                    if (picked != null) {
+                                      setState(
+                                        () => _selectedTimes[index] = picked,
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                              if (_selectedTimes.length > 1)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () {
+                                    setState(
+                                      () => _selectedTimes.removeAt(index),
+                                    );
+                                  },
+                                ),
+                            ],
                           ),
-                          checkmarkColor: AppColors.primaryPurple,
-                          onSelected: (selected) {
-                            setState(() {
-                              if (selected) {
-                                _selectedDays.add(day);
-                              } else {
-                                _selectedDays.remove(day);
-                              }
-                            });
-                          },
                         );
                       }).toList(),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        "Leave empty to dispense every day.",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                    TextButton.icon(
+                      onPressed: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: const TimeOfDay(hour: 8, minute: 0),
+                        );
+                        if (picked != null) {
+                          setState(() => _selectedTimes.add(picked));
+                        }
+                      },
+                      icon: const Icon(
+                        Icons.add,
+                        color: AppColors.primaryPurple,
                       ),
+                      label: const Text(
+                        'Add Time',
+                        style: TextStyle(color: AppColors.primaryPurple),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Days of the Week',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'If no days are selected, it will default to Everyday.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      children: [
+                        _buildDayChip('Mon', 1),
+                        _buildDayChip('Tue', 2),
+                        _buildDayChip('Wed', 3),
+                        _buildDayChip('Thu', 4),
+                        _buildDayChip('Fri', 5),
+                        _buildDayChip('Sat', 6),
+                        _buildDayChip('Sun', 7),
+                      ],
                     ),
                     const SizedBox(height: 24),
 
@@ -531,6 +556,30 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildDayChip(String label, int dayIndex) {
+    final isSelected = _selectedDays.contains(dayIndex);
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (bool selected) {
+        setState(() {
+          if (selected) {
+            _selectedDays.add(dayIndex);
+            _selectedDays.sort();
+          } else {
+            _selectedDays.remove(dayIndex);
+          }
+        });
+      },
+      selectedColor: AppColors.primaryPurple.withOpacity(0.2),
+      checkmarkColor: AppColors.primaryPurple,
+      labelStyle: TextStyle(
+        color: isSelected ? AppColors.primaryPurple : Colors.black87,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
     );
   }
 }

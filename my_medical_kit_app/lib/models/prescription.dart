@@ -5,7 +5,8 @@ class Prescription {
   final int patientId;
   final String medicationName;
   final double dosageTablet;
-  final String dispenseSchedule;
+  final List<String> dispenseTimes;
+  final List<int>? dispenseDays;
   final int currentInventory;
   final int refillThreshold;
   final DateTime startDate;
@@ -19,7 +20,8 @@ class Prescription {
     required this.patientId,
     required this.medicationName,
     required this.dosageTablet,
-    required this.dispenseSchedule,
+    required this.dispenseTimes,
+    this.dispenseDays,
     required this.currentInventory,
     required this.refillThreshold,
     required this.startDate,
@@ -46,7 +48,12 @@ class Prescription {
       patientId: json['patient_id'],
       medicationName: json['medication_name'],
       dosageTablet: parseDosage(json['dosage_tablet']),
-      dispenseSchedule: json['dispense_schedule'],
+      dispenseTimes: json['dispense_times'] != null 
+          ? List<String>.from(json['dispense_times']) 
+          : [],
+      dispenseDays: json['dispense_days'] != null
+          ? List<int>.from(json['dispense_days'])
+          : null,
       currentInventory: json['current_inventory'] ?? 0,
       refillThreshold: json['refill_threshold'] ?? 5,
       startDate: DateTime.parse(json['start_date']),
@@ -65,7 +72,8 @@ class Prescription {
       'patient_id': patientId,
       'medication_name': medicationName,
       'dosage_tablet': dosageTablet,
-      'dispense_schedule': dispenseSchedule,
+      'dispense_times': dispenseTimes,
+      'dispense_days': dispenseDays,
       'current_inventory': currentInventory,
       'refill_threshold': refillThreshold,
       'start_date': startDate.toIso8601String().split('T')[0],

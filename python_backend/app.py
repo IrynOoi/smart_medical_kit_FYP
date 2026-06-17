@@ -247,7 +247,7 @@ def get_patient_prescriptions(patient_id):
         
         cursor.execute('''
             SELECT prescription_id, patient_id, medication_name, dosage_tablet, 
-                   dispense_schedule, current_inventory, refill_threshold, 
+                   current_inventory, refill_threshold, 
                    start_date, end_date, created_at, updated_at, device_id
             FROM prescription_config 
             WHERE patient_id = %s AND (end_date IS NULL OR end_date >= CURRENT_DATE)

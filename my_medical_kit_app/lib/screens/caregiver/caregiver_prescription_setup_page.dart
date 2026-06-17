@@ -52,7 +52,7 @@ class _CaregiverPrescriptionSetupPageState
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => AddPrescriptionPage(patient: patient)),
-    );
+    ).then((_) => _fetchPatients());
   }
 
   @override
@@ -104,7 +104,7 @@ class _CaregiverPrescriptionSetupPageState
                         MaterialPageRoute(
                           builder: (_) => PatientPrescriptionsPage(patient: p),
                         ),
-                      );
+                      ).then((_) => _fetchPatients());
                     },
                     child: Padding(
                       padding: const EdgeInsets.all(16),

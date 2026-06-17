@@ -309,9 +309,15 @@ def create_device_with_prescription():
 
         cursor.execute('''
             INSERT INTO prescription_config
-            (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date)
-            VALUES (%s, %s, 1.0, '0 8 * * *', CURRENT_DATE)
+            (patient_id, medication_id, dosage_tablet, start_date)
+            VALUES (%s, %s, 1.0, CURRENT_DATE)
         ''', (patient_id, medication_id))
+        prescription_id = cursor.lastrowid
+        
+        cursor.execute('''
+            INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
+            VALUES (%s, '08:00:00', NULL)
+        ''', (prescription_id,))
 
         cursor.execute('''
             UPDATE medications
@@ -336,9 +342,16 @@ def update_device_prescription(device_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT IGNORE INTO prescription_config (patient_id, medication_id, dosage_tablet, dispense_schedule, start_date)
-            VALUES (%s, %s, 1.0, '0 8 * * *', CURRENT_DATE)
+            INSERT IGNORE INTO prescription_config (patient_id, medication_id, dosage_tablet, start_date)
+            VALUES (%s, %s, 1.0, CURRENT_DATE)
         ''', (patient_id, medication_id))
+        prescription_id = cursor.lastrowid
+        
+        if prescription_id:
+            cursor.execute('''
+                INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
+                VALUES (%s, '08:00:00', NULL)
+            ''', (prescription_id,))
 
         cursor.execute('''
             UPDATE medications

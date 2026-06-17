@@ -22,53 +22,34 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
   bool _isLoading = true;
   String _error = '';
 
-  String _formatSchedule(String cron) {
-    final parts = cron.split(' ');
-    if (parts.length < 5) return cron;
+  String _formatSchedule(List<dynamic> times) {
+    if (times.isEmpty) return 'No schedule';
+    final formattedTimes = times.map((t) {
+      final parts = t.toString().split(':');
+      if (parts.length >= 2) {
+        int h = int.parse(parts[0]);
+        int m = int.parse(parts[1]);
+        String period = h >= 12 ? 'PM' : 'AM';
+        int displayHour = h % 12;
+        if (displayHour == 0) displayHour = 12;
+        return '$displayHour:${parts[1]} $period';
+      }
+      return t.toString();
+    }).toList();
+    return '${formattedTimes.join(', ')}';
+  }
 
-    final minute = parts[0];
-    final hourPart = parts[1];
-    final dayOfMonth = parts[2];
-    final month = parts[3];
-    final dayOfWeek = parts[4];
-
-    // Helper: convert "HH" to "h:mm AM/PM"
-    String _formatTime(String hour24, String minute) {
-      int h = int.parse(hour24);
-      int m = int.parse(minute);
-      String period = h >= 12 ? 'PM' : 'AM';
-      int displayHour = h % 12;
-      if (displayHour == 0) displayHour = 12;
-      return '$displayHour:${minute.padLeft(2, '0')} $period';
-    }
-
-    String timeStr;
-    if (hourPart.contains(',')) {
-      final hours = hourPart.split(',');
-      final times12 = hours.map((h) => _formatTime(h, minute)).toList();
-      timeStr = times12.join(', ');
-    } else {
-      timeStr = _formatTime(hourPart, minute);
-    }
-
-    if (dayOfMonth == '*' && month == '*' && dayOfWeek == '*') {
-      return 'Daily at $timeStr';
-    } else if (dayOfMonth == '*' && month == '*' && dayOfWeek != '*') {
-      final days = dayOfWeek.split(',');
-      final dayNames = {
-        '0': 'Sun',
-        '1': 'Mon',
-        '2': 'Tue',
-        '3': 'Wed',
-        '4': 'Thu',
-        '5': 'Fri',
-        '6': 'Sat',
-        '7': 'Sun',
-      };
-      final readableDays = days.map((d) => dayNames[d] ?? d).join(', ');
-      return '$readableDays at $timeStr';
-    }
-    return cron;
+  String _formatDays(List<dynamic>? days) {
+    if (days == null || days.isEmpty) return 'Everyday';
+    
+    final dayNames = {
+      1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun'
+    };
+    
+    final sortedDays = days.map((e) => int.tryParse(e.toString()) ?? 0).where((d) => d > 0 && d <= 7).toList();
+    sortedDays.sort();
+    
+    return sortedDays.map((d) => dayNames[d]).join(', ');
   }
 
   @override
@@ -226,7 +207,10 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                               'Dosage: ${formatDosage(rx['dosage_tablet'])}',
                             ),
                             Text(
-                              'Schedule: ${_formatSchedule(rx['dispense_schedule'])}',
+                              'Schedule: ${_formatSchedule(rx['dispense_times'] ?? [])}',
+                            ),
+                            Text(
+                              'Days: ${_formatDays(rx['dispense_days'])}',
                             ),
                             Text(
                               'Inventory: ${rx['current_inventory'] ?? 0} left',

@@ -1,4 +1,5 @@
 #medication.py
+from models.notification_model import sync_medication_stock_notifications
 from db import get_db_connection
 import datetime
 from flask import Blueprint, request, jsonify
@@ -39,18 +40,18 @@ def add_prescription():
         patient_id = data.get('patient_id')
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
-        dispense_schedule = data.get('dispense_schedule')
+        dispense_times = data.get('dispense_times')
         current_inventory = data.get('current_inventory', 0)
         refill_threshold = data.get('refill_threshold', 5)
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         device_id = data.get('device_id')
 
-        if not all([patient_id, medication_name, dosage_tablet, dispense_schedule, start_date]):
+        if not all([patient_id, medication_name, dosage_tablet, dispense_times, start_date]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
         success, msg, new_prescription = create_prescription_config(
-            patient_id, medication_name, dosage_tablet, dispense_schedule, 
+            patient_id, medication_name, dosage_tablet, dispense_times, 
             start_date, end_date, current_inventory, refill_threshold, device_id
         )
 
@@ -82,14 +83,33 @@ def restock_medication():
     try:
         data = request.get_json()
         prescription_id = data.get('prescription_id')
+        medication_id = data.get('medication_id')
         quantity = data.get('quantity', 30)
-        
-        if not prescription_id:
-            return jsonify({"success": False, "message": "prescription_id required"}), 400
-        
-        restock_medication_inventory(prescription_id, quantity)
-        
-        return jsonify({"success": True, "message": f"Added {quantity} pills to inventory"})
+        set_inventory = data.get('set_inventory', False)   # 新增
+
+        if not prescription_id and not medication_id:
+            return jsonify({"success": False, "message": "prescription_id or medication_id required"}), 400
+        if quantity < 0:
+            return jsonify({"success": False, "message": "Quantity must be positive"}), 400
+
+        # 如果传了 medication_id，直接使用
+        if medication_id:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                if set_inventory:
+                    cursor.execute('UPDATE medications SET current_inventory = %s, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s',
+                                   (quantity, medication_id))
+                else:
+                    cursor.execute('UPDATE medications SET current_inventory = current_inventory + %s, updated_at = CURRENT_TIMESTAMP WHERE medication_id = %s',
+                                   (quantity, medication_id))
+                conn.commit()
+                cursor.close()
+            sync_medication_stock_notifications(medication_id)  # 需要导入
+            return jsonify({"success": True, "message": f"Inventory set to {quantity} for medication {medication_id}"})
+        else:
+            # 原有逻辑（基于 prescription_id）
+            restock_medication_inventory(prescription_id, quantity, set_inventory)
+            return jsonify({"success": True, "message": f"Updated inventory for prescription {prescription_id}"})
     except Exception as e:
         print(f"Restock error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -100,19 +120,19 @@ def update_prescription(prescription_id):
         data = request.get_json()
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
-        dispense_schedule = data.get('dispense_schedule')
+        dispense_times = data.get('dispense_times')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         current_inventory = data.get('current_inventory')
         refill_threshold = data.get('refill_threshold')
         device_id = data.get('device_id')
         
-        if not all([medication_name, dosage_tablet, dispense_schedule]):
+        if not all([medication_name, dosage_tablet, dispense_times]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
         check_none = 'device_id' in data
         success, msg = update_prescription_config(
-            prescription_id, medication_name, dosage_tablet, dispense_schedule, 
+            prescription_id, medication_name, dosage_tablet, dispense_times, 
             start_date, end_date, current_inventory, refill_threshold, device_id, check_none
         )
         if not success:
