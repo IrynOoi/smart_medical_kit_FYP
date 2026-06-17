@@ -56,8 +56,8 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     }
   }
 
-  Future<void> _loadMedications() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadMedications({bool showLoading = true}) async {
+    if (showLoading) setState(() => _isLoading = true);
     try {
       final allMeds = await MedicationService().getPatientMedications(
         _patientId,
@@ -409,7 +409,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                     ),
                   )
                 : RefreshIndicator(
-                    onRefresh: _loadMedications,
+                    onRefresh: () => _loadMedications(showLoading: false),
                     color: AppColors.primaryPurple,
                     child: ListView.builder(
                       padding: const EdgeInsets.only(top: 16, bottom: 24),

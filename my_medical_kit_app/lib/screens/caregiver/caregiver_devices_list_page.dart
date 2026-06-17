@@ -25,9 +25,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   }
 
   // Fetch purely hardware devices from the backend
-  Future<void> _fetchDevices() async {
+  Future<void> _fetchDevices({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _error = '';
     });
     try {
@@ -300,7 +300,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchDevices,
+        onRefresh: () => _fetchDevices(showLoading: false),
         color: AppColors.primaryPurple,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())

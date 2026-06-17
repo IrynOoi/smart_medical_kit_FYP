@@ -35,9 +35,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     _espIpController.text = _testEspIp; // ✅ Add this
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _errorMessage = '';
     });
 
@@ -321,7 +321,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5F5),
       body: RefreshIndicator(
-        onRefresh: _loadData,
+        onRefresh: () => _loadData(showLoading: false),
         color: AppColors.primaryPurple,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

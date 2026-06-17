@@ -26,9 +26,9 @@ class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
     _fetchData();
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchData({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _error = '';
     });
     try {
@@ -58,7 +58,7 @@ class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
         foregroundColor: Colors.white,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => _fetchData(showLoading: false),
         color: AppColors.primaryPurple,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())

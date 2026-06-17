@@ -38,8 +38,8 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
     }
   }
 
-  Future<void> _loadLogs() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadLogs({bool showLoading = true}) async {
+    if (showLoading) setState(() => _isLoading = true);
     try {
       final logs = await PatientService().getAdherenceLogs(_patientId, limit: 50);
       setState(() {
@@ -145,7 +145,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                 : _logs.isEmpty
                 ? const Center(child: Text('No history available'))
                 : RefreshIndicator(
-                    onRefresh: _loadLogs,
+                    onRefresh: () => _loadLogs(showLoading: false),
                     child: ListView.builder(
                       padding: const EdgeInsets.only(top: 8, bottom: 24),
                       itemCount: _logs.length + 1,

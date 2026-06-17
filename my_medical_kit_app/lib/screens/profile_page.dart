@@ -10,6 +10,7 @@ import 'package:my_medical_kit_app/screens/landing_page.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_medical_kit_app/services/reminder_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -322,6 +323,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // 1. Clear the local session data
     await prefs.clear();
+
+    await ReminderService.cancelAllNotifications();
 
     if (!mounted) return;
 

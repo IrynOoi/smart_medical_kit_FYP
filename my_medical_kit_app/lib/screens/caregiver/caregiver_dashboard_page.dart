@@ -269,9 +269,9 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   //   );
   // }
 
-  Future<void> _loadDashboardData() async {
+  Future<void> _loadDashboardData({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _errorMessage = '';
     });
     try {
@@ -440,7 +440,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
             SafeArea(
               top: false,
               child: RefreshIndicator(
-                onRefresh: _loadDashboardData,
+                onRefresh: () => _loadDashboardData(showLoading: false),
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
@@ -481,7 +481,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
-          onRefresh: _loadDashboardData,
+          onRefresh: () => _loadDashboardData(showLoading: false),
           color: AppColors.primaryPurple,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),

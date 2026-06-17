@@ -43,6 +43,11 @@ class ReminderService {
   static bool _notificationsInitialized = false;
   static bool _timeZoneInitialized = false;
 
+  static Future<void> cancelAllNotifications() async {
+    await _initializeNotifications();
+    await _notifications.cancelAll();
+  }
+
   static Future<void> init() async {
     await _initializeTimeZone();
     await _initializeNotifications();

@@ -23,6 +23,30 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
 
   Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter both email and password.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     try {
       showDialog(
         context: context,
@@ -33,8 +57,8 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       final result = await AuthService().login(
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
+        email,
+        password,
       );
 
       if (!mounted) return;
@@ -337,6 +361,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     if (email.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
+    final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }

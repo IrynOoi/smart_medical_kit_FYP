@@ -238,9 +238,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     }
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _errorMessage = '';
     });
 
@@ -740,7 +740,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5F5),
       body: RefreshIndicator(
-        onRefresh: _loadData,
+        onRefresh: () => _loadData(showLoading: false),
         color: AppColors.primaryPurple,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

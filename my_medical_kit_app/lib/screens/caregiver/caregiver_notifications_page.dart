@@ -48,10 +48,10 @@ class _CaregiverNotificationsPageState
     await _loadNotifications();
   }
 
-  Future<void> _loadNotifications() async {
+  Future<void> _loadNotifications({bool showLoading = true}) async {
     if (!mounted) return;
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _errorMessage = null;
     });
 
@@ -287,7 +287,7 @@ class _CaregiverNotificationsPageState
     }
 
     return RefreshIndicator(
-      onRefresh: _loadNotifications,
+      onRefresh: () => _loadNotifications(showLoading: false),
       color: AppColors.primaryPurple,
       child: ListView.builder(
         padding: const EdgeInsets.only(top: 16, bottom: 24),

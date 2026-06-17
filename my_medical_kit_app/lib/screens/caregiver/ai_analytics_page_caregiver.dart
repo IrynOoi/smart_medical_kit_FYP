@@ -43,9 +43,9 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     return defaultValue;
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _errorMessage = '';
     });
     try {
@@ -880,7 +880,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
-          onRefresh: _loadData,
+          onRefresh: () => _loadData(showLoading: false),
           color: AppColors.primaryPurple,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),

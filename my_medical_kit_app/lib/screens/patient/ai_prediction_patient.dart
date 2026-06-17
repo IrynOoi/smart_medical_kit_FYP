@@ -54,8 +54,8 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
 
   // This loads data from PostgreSQL (does not run AI model)
   // 🌟 FIX: 改为每次打开页面时，强制让后端重新运行 AI 模型！
-  Future<void> _loadPrediction() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadPrediction({bool showLoading = true}) async {
+    if (showLoading) setState(() => _isLoading = true);
     try {
       // 👇 关键修改：调用重新计算的 API，确保永远获取包含最新 Miss/Take 的结果
       final prediction = await PredictionService().recalculatePrediction(
@@ -164,7 +164,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
-          onRefresh: _loadPrediction,
+          onRefresh: () => _loadPrediction(showLoading: false),
           color: AppColors.primaryPurple,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),

@@ -168,9 +168,9 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
-  Future<void> _fetchPatients() async {
+  Future<void> _fetchPatients({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _error = '';
     });
     try {
@@ -603,7 +603,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
       body: Container(
         color: const Color(0xFFEFE8FA),
         child: RefreshIndicator(
-          onRefresh: _fetchPatients,
+          onRefresh: () => _fetchPatients(showLoading: false),
           color: AppColors.primaryPurple,
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())

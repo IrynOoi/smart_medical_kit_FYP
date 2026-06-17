@@ -87,7 +87,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh immediately when coming back
-      _loadAll();
+      _loadAll(showLoading: false);
       // Restart timer if it was stopped
       _startPeriodicRefresh();
     } else if (state == AppLifecycleState.paused ||
@@ -108,7 +108,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted && !_isLoading && _currentPatientId != 0) {
-        _loadAll();
+        _loadAll(showLoading: false);
       }
     });
   }
@@ -389,7 +389,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
                                     .markNotificationRead(notif.notificationId);
                                 if (!mounted) return;
                                 if (success) {
-                                  await _loadAll(); // refresh dashboard data
+                                  await _loadAll(showLoading: false); // refresh dashboard data
                                   if (sheetContext.mounted) {
                                     Navigator.pop(sheetContext); // close sheet
                                   }
@@ -411,13 +411,15 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
     Navigator.pushReplacementNamed(context, '/login');
   }
 
-  Future<void> _loadAll() async {
+  Future<void> _loadAll({bool showLoading = true}) async {
     if (_currentPatientId == 0) return;
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     print('Caregiver name: ${_patient?.caregiver?.user.fullName}');
     try {
       final results = await Future.wait([
@@ -448,7 +450,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
         _adherenceStats = results[3] as Map<String, dynamic>;
         _notifications = notifications;
         _weeklyTaken = _computeWeekly(logs);
-        _isLoading = false;
+        if (showLoading) _isLoading = false;
       });
       _updateChartPeriod(_selectedPeriod);
       try {
@@ -464,7 +466,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
       debugPrint('❌ STACK: $stack');
       setState(() {
         _errorMessage = 'Error: $e';
-        _isLoading = false;
+        if (showLoading) _isLoading = false;
       });
     }
   }
@@ -549,7 +551,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
           backgroundColor: Colors.teal,
         ),
       );
-      _loadAll();
+      _loadAll(showLoading: false);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -614,7 +616,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _loadAll,
+                onPressed: () => _loadAll(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
                 ),
@@ -634,7 +636,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
-          onRefresh: _loadAll,
+          onRefresh: () => _loadAll(showLoading: false),
           color: AppColors.primaryPurple,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -745,7 +747,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
                     MaterialPageRoute(
                       builder: (_) => const SmartReminderPage(),
                     ),
-                  ).then((_) => _loadAll());
+                  ).then((_) => _loadAll(showLoading: false));
                 },
                 child: Stack(
                   clipBehavior: Clip.none,

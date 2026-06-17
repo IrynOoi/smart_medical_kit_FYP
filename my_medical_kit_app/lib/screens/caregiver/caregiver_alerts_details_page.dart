@@ -27,9 +27,9 @@
 //     _fetchAlerts();
 //   }
 
-//   Future<void> _fetchAlerts() async {
+//   Future<void> _fetchAlerts({bool showLoading = true}) async {
 //     setState(() {
-//       _isLoading = true;
+//       if (showLoading) _isLoading = true;
 //       _error = '';
 //     });
 //     try {
@@ -109,7 +109,7 @@
 //       ),
 //       backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
 //       body: RefreshIndicator(
-//         onRefresh: _fetchAlerts,
+//         onRefresh: () => _fetchAlerts(showLoading: false),
 //         color: AppColors.primaryPurple,
 //         child: _isLoading
 //             ? const Center(child: CircularProgressIndicator())

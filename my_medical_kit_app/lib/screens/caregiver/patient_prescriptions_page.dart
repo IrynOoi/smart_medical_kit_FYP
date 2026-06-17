@@ -58,9 +58,9 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     _fetchPrescriptions();
   }
 
-  Future<void> _fetchPrescriptions() async {
+  Future<void> _fetchPrescriptions({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _error = '';
     });
     try {
@@ -168,7 +168,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
               ),
             )
           : RefreshIndicator(
-              onRefresh: _fetchPrescriptions,
+              onRefresh: () => _fetchPrescriptions(showLoading: false),
               color: AppColors.primaryPurple,
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),

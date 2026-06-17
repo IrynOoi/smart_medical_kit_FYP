@@ -411,8 +411,15 @@ class _RegisterPageState extends State<RegisterPage> {
         suffixIcon: suffixIcon, // 👈 ADD THIS
       ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
+        if (value == null || value.trim().isEmpty) {
           return 'Please enter your $label';
+        }
+
+        if (label == 'Email Address') {
+          final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
+          if (!emailRegex.hasMatch(value.trim())) {
+            return 'Please enter a valid email address';
+          }
         }
 
         if (label == 'Confirm Password' && value != _passwordController.text) {

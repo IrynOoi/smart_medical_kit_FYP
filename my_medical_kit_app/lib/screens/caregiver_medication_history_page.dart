@@ -28,9 +28,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     _initializeData();
   }
 
-  Future<void> _initializeData() async {
+  Future<void> _initializeData({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _error = '';
     });
 
@@ -163,7 +163,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
-        onRefresh: _initializeData,
+        onRefresh: () => _initializeData(showLoading: false),
         color: AppColors.primaryPurple,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())

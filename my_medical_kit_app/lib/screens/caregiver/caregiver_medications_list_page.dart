@@ -24,9 +24,9 @@ class CaregiverMedicationsListPageState
     _fetchMedications();
   }
 
-  Future<void> _fetchMedications() async {
+  Future<void> _fetchMedications({bool showLoading = true}) async {
     setState(() {
-      _isLoading = true;
+      if (showLoading) _isLoading = true;
       _error = '';
     });
     try {
@@ -467,7 +467,7 @@ class CaregiverMedicationsListPageState
       //   child: const Icon(Icons.add, color: Colors.white),
       // ),
       body: RefreshIndicator(
-        onRefresh: _fetchMedications,
+        onRefresh: () => _fetchMedications(showLoading: false),
         color: AppColors.primaryPurple,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())

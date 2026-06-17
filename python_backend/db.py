@@ -33,6 +33,6 @@ def init_db():
             cursor.execute('SELECT 1')
             cursor.fetchone()  # 🌟 关键修复：把结果读取出来，解决 "Unread result found" 报错
             cursor.close()
-        print("MySQL (cPanel) connected successfully!") # 把名字改对，不再自己吓自己
+        print("MySQL (cPanel) connected successfully!") 
     except Exception as e:
         print(f"Failed to connect to MySQL: {e}")
