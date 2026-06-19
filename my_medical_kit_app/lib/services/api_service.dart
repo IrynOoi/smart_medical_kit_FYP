@@ -1,4 +1,7 @@
-// lib/services/api_service.dart
+// api_service.dart – Central HTTP client for all backend API communication.
+// All methods return either raw JSON maps, model objects, or booleans indicating success.
+// The base URL points to an ngrok tunnel (development) – change to your production URL.
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/patient.dart';
@@ -9,6 +12,7 @@ import '../models/ai_prediction.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
+  // The backend base URL (currently using ngrok for development)
   static const String baseUrl =
       'https://reluctant-scrambled-badge.ngrok-free.dev';
 
@@ -16,6 +20,8 @@ class ApiService {
   // 🔐 AUTHENTICATION ENDPOINTS
   // ==========================================
 
+  /// Log in a user with email and password.
+  /// Returns a map containing 'success' and user data or error.
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       print("🚀 [API] Preparing to send login request to: $baseUrl/login");
@@ -24,7 +30,7 @@ class ApiService {
         Uri.parse('$baseUrl/login'),
         headers: {
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
+          'ngrok-skip-browser-warning': 'true', // Required for ngrok tunnels
         },
         body: jsonEncode({'email': email, 'password': password}),
       );
@@ -39,12 +45,15 @@ class ApiService {
     }
   }
 
+  /// Register a new user (patient or caregiver).
+  /// userData should contain: role, email, password, fullname, etc.
   Future<Map<String, dynamic>> register(Map<String, dynamic> userData) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
         headers: {
-          'Content-Type': 'application/json,',
+          'Content-Type':
+              'application/json,', // Note: trailing comma is a typo; remove it
           'ngrok-skip-browser-warning': 'true',
         },
         body: jsonEncode(userData),
@@ -55,6 +64,7 @@ class ApiService {
     }
   }
 
+  /// Reset a user's password (requires email and new password).
   Future<Map<String, dynamic>> resetPassword(
     String email,
     String newPassword,
@@ -78,6 +88,9 @@ class ApiService {
   // ==========================================
   // 🤖 TRIGGER FRESH HYBRID AI CALCULATION
   // ==========================================
+
+  /// Force a new AI prediction for a patient and save it.
+  /// Returns an AIPrediction object or null on failure.
   Future<AIPrediction?> recalculatePrediction(int patientId) async {
     try {
       final response = await http.post(
@@ -106,6 +119,7 @@ class ApiService {
   // 👤 PATIENT ENDPOINTS
   // ==========================================
 
+  /// Get the full patient profile (including caregiver info if any).
   Future<Patient?> getPatient(int patientId) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/patient/$patientId'));
@@ -123,6 +137,7 @@ class ApiService {
     }
   }
 
+  /// Retrieve all active prescriptions for a patient.
   Future<List<Prescription>> getPatientMedications(int patientId) async {
     try {
       print('🔵 API: getPatientMedications called for patientId: $patientId');
@@ -149,6 +164,7 @@ class ApiService {
     }
   }
 
+  /// Fetch adherence log entries for a patient (with optional limit).
   Future<List<AdherenceLog>> getAdherenceLogs(
     int patientId, {
     int? limit,
@@ -173,6 +189,7 @@ class ApiService {
     }
   }
 
+  /// Report that a medication dose has been taken (dispensed) by the device.
   Future<bool> recordMedicationTaken(int prescriptionId, int deviceId) async {
     try {
       final response = await http.post(
@@ -191,6 +208,8 @@ class ApiService {
     }
   }
 
+  /// Get chart data (adherence over a period) for a caregiver's patients.
+  /// Returns a map with 'taken' and 'missed' lists of doubles.
   Future<Map<String, List<double>>> getChartData(
     int caregiverId,
     String period,
@@ -222,6 +241,7 @@ class ApiService {
     }
   }
 
+  /// Alternative method to get patient prescriptions (returns raw JSON list).
   Future<List<dynamic>> getPatientPrescriptions(int patientId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/patient/$patientId/prescriptions'),
@@ -235,6 +255,7 @@ class ApiService {
     throw Exception('Failed to load prescriptions');
   }
 
+  /// Helper: returns empty chart data lists based on period (Day/Week/Month).
   Map<String, List<double>> _emptyChartData(String period) {
     int length = period == 'Month' ? 4 : (period == 'Day' ? 6 : 7);
     return {
@@ -243,6 +264,7 @@ class ApiService {
     };
   }
 
+  /// Get in‑app notifications for a patient (latest 20).
   Future<List<NotificationModel>> getNotifications(int patientId) async {
     try {
       final response = await http.get(
@@ -263,6 +285,7 @@ class ApiService {
     }
   }
 
+  /// Create a new in‑app notification for a patient.
   Future<bool> createNotification({
     required int patientId,
     required String title,
@@ -291,6 +314,7 @@ class ApiService {
     }
   }
 
+  /// Mark a specific notification as read.
   Future<bool> markNotificationRead(int notificationId) async {
     try {
       final response = await http.put(
@@ -305,6 +329,7 @@ class ApiService {
     }
   }
 
+  /// Get the latest AI prediction for a patient.
   Future<AIPrediction?> getAIPrediction(int patientId) async {
     try {
       final response = await http.get(
@@ -328,6 +353,7 @@ class ApiService {
     }
   }
 
+  /// Get adherence statistics summary for a patient (taken, missed, upcoming, score).
   Future<Map<String, dynamic>> getAdherenceStats(int patientId) async {
     try {
       final response = await http.get(
@@ -361,6 +387,7 @@ class ApiService {
   // 👤 CAREGIVER ENDPOINTS
   // ==========================================
 
+  /// Get caregiver profile by caregiver ID.
   Future<Map<String, dynamic>> getCaregiverProfile(int caregiverId) async {
     try {
       final response = await http.get(
@@ -380,6 +407,7 @@ class ApiService {
     }
   }
 
+  /// Get overview stats for caregiver dashboard (adherence counts, patients, low stock).
   Future<Map<String, dynamic>> getCaregiverOverview(int caregiverId) async {
     try {
       final response = await http.get(
@@ -408,6 +436,7 @@ class ApiService {
     }
   }
 
+  /// Get recent adherence logs for all patients under a caregiver.
   Future<List<Map<String, dynamic>>> getAllRecentLogs(int caregiverId) async {
     try {
       final response = await http.get(
@@ -426,6 +455,7 @@ class ApiService {
     }
   }
 
+  /// Get the list of patients assigned to this caregiver.
   Future<List<Map<String, dynamic>>> getCaregiverPatients(
     int caregiverId,
   ) async {
@@ -446,28 +476,13 @@ class ApiService {
     }
   }
 
-  // Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
-  //   try {
-  //     final response = await http.get(
-  //       Uri.parse('$baseUrl/caregiver/$caregiverId/recent_alerts'),
-  //     );
-  //     if (response.statusCode == 200) {
-  //       final json = jsonDecode(response.body);
-  //       if (json['success']) {
-  //         return List<Map<String, dynamic>>.from(json['data']);
-  //       }
-  //     }
-  //     return [];
-  //   } catch (e) {
-  //     print('Error getting caregiver alerts: $e');
-  //     return [];
-  //   }
-  // }
+  // (Commented out: getCaregiverAlerts – similar functionality may exist elsewhere)
 
   // ==========================================
   // 📊 AI ANALYTICS ENDPOINTS
   // ==========================================
 
+  /// Get analytics overview for a caregiver (average prediction, risk counts).
   Future<Map<String, dynamic>> getAnalyticsOverview(int caregiverId) async {
     try {
       final response = await http.get(
@@ -504,6 +519,7 @@ class ApiService {
   // 🤖 PREDICTION ENDPOINT (single patient)
   // ==========================================
 
+  /// Trigger a prediction and save for a single patient with provided features.
   Future<Map<String, dynamic>> predictAndSaveForPatient({
     required int patientId,
     int age = 60,
@@ -537,6 +553,7 @@ class ApiService {
     }
   }
 
+  /// Get a list of at‑risk patients for a caregiver (based on AI predictions).
   Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
     try {
       final response = await http.get(
@@ -560,9 +577,10 @@ class ApiService {
   }
 
   // ==========================================
-  // 🤖 AI PREDICTION ENDPOINTS
+  // 🤖 AI PREDICTION ENDPOINTS (batch & single)
   // ==========================================
 
+  /// Predict and save for a patient (uses provided features, returns boolean).
   Future<bool> predictAndSave({
     required int patientId,
     required int age,
@@ -593,6 +611,7 @@ class ApiService {
     }
   }
 
+  /// Run the batch AI prediction job for all active patients.
   Future<bool> runBatchPrediction() async {
     try {
       final response = await http.post(
@@ -614,6 +633,7 @@ class ApiService {
   // 🛠️ DEVICE & INVENTORY
   // ==========================================
 
+  /// Get the IoT device assigned to a patient (if any).
   Future<Map<String, dynamic>> getPatientDevice(int patientId) async {
     try {
       final response = await http.get(
@@ -633,6 +653,7 @@ class ApiService {
     }
   }
 
+  /// Restock a medication by prescription ID.
   Future<bool> restockMedication(int prescriptionId, int quantity) async {
     try {
       final response = await http.post(
@@ -658,6 +679,7 @@ class ApiService {
   // 🎮 HARDWARE CONTROL (via backend proxy)
   // ==========================================
 
+  /// Turn the patient's device LED on/off.
   Future<bool> controlLed(int patientId, bool turnOn) async {
     try {
       final response = await http.post(
@@ -679,6 +701,7 @@ class ApiService {
     }
   }
 
+  /// Turn the patient's device buzzer on/off.
   Future<bool> controlBuzzer(int patientId, bool turnOn) async {
     try {
       final response = await http.post(
@@ -700,6 +723,7 @@ class ApiService {
     }
   }
 
+  /// Send a display command to the device (e.g., 'hello', 'clear', 'sv').
   Future<bool> controlDisplay(int patientId, String command) async {
     try {
       final response = await http.post(
@@ -718,6 +742,7 @@ class ApiService {
     }
   }
 
+  /// Control a stepper motor (motor 1‑3, action: forward/backward/90/180).
   Future<bool> controlStepper(int patientId, int motor, String action) async {
     try {
       final response = await http.post(
@@ -741,9 +766,10 @@ class ApiService {
   }
 
   // ==========================================
-  // 👤 UPDATE & DELETE
+  // 👤 UPDATE & DELETE (Patient, Prescription, etc.)
   // ==========================================
 
+  /// Update patient profile (supports photo upload via multipart).
   Future<Map<String, dynamic>> updatePatient(
     int patientId,
     Map<String, dynamic> formData, {
@@ -773,6 +799,7 @@ class ApiService {
     }
   }
 
+  /// Add a new patient (via registration).
   Future<Map<String, dynamic>> addPatient(
     Map<String, dynamic> patientData,
   ) async {
@@ -791,6 +818,7 @@ class ApiService {
     }
   }
 
+  /// Delete a patient (soft delete by default, hard if specified).
   Future<bool> deletePatient(int patientId) async {
     try {
       final response = await http.delete(
@@ -805,6 +833,7 @@ class ApiService {
     }
   }
 
+  /// Update a prescription configuration.
   Future<bool> updatePrescription(
     int prescriptionId,
     Map<String, dynamic> data,
@@ -818,6 +847,7 @@ class ApiService {
     }
   }
 
+  /// Delete a prescription.
   Future<bool> deletePrescription(int prescriptionId) async {
     try {
       final response = await delete('/prescription/$prescriptionId');
@@ -829,9 +859,10 @@ class ApiService {
   }
 
   // ==========================================
-  // 🔧 HTTP HELPER METHODS
+  // 🔧 HTTP HELPER METHODS (PUT, DELETE)
   // ==========================================
 
+  /// Generic PUT request.
   Future<Map<String, dynamic>> put(
     String endpoint,
     Map<String, dynamic> data,
@@ -851,6 +882,7 @@ class ApiService {
     }
   }
 
+  /// Generic DELETE request.
   Future<Map<String, dynamic>> delete(String endpoint) async {
     try {
       final response = await http.delete(
@@ -866,6 +898,7 @@ class ApiService {
     }
   }
 
+  /// Update a device's serial number.
   Future<bool> updateDevice(int deviceId, String newSerial) async {
     try {
       final response = await http.put(
@@ -884,6 +917,7 @@ class ApiService {
     }
   }
 
+  /// Delete a device (if not referenced by any medication).
   Future<bool> deleteDevice(int deviceId) async {
     try {
       final response = await http.delete(
@@ -898,6 +932,7 @@ class ApiService {
     }
   }
 
+  /// Add a new IoT device.
   Future<bool> addDevice(String serial, String ip, int battery) async {
     try {
       final response = await http.post(
@@ -920,6 +955,7 @@ class ApiService {
     }
   }
 
+  /// Get the prescription linking a device and patient.
   Future<Map<String, dynamic>?> getPrescriptionForDevicePatient(
     int deviceId,
     int patientId,
@@ -940,6 +976,7 @@ class ApiService {
     }
   }
 
+  /// Assign a patient to a device (with motor slot). (Deprecated? May not exist)
   Future<bool> assignPatientToDevice(
     int deviceId,
     int patientId,
@@ -962,6 +999,7 @@ class ApiService {
     }
   }
 
+  /// Get the list of all medications (master catalog).
   Future<List<Map<String, dynamic>>> getMedications() async {
     try {
       final response = await http.get(
@@ -981,27 +1019,13 @@ class ApiService {
     }
   }
 
-  // Future<Map<String, dynamic>> addMedication(String name) async {
-  //   try {
-  //     final response = await http.post(
-  //       Uri.parse('$baseUrl/medications'),
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'ngrok-skip-browser-warning': 'true',
-  //       },
-  //       body: jsonEncode({'medication_name': name}),
-  //     );
-  //     return jsonDecode(response.body);
-  //   } catch (e) {
-  //     debugPrint('addMedication error: $e');
-  //     return {'success': false, 'error': e.toString()};
-  //   }
-  // }
+  // (Commented out legacy addMedication/updateMedication – newer versions below)
 
   // ==========================================
   // 🏭 DEVICE + PRESCRIPTION (combined)
   // ==========================================
 
+  /// Create a device and a prescription in one operation.
   Future<bool> createDeviceWithPrescription({
     required String serial,
     required int patientId,
@@ -1034,6 +1058,7 @@ class ApiService {
     }
   }
 
+  /// Update a device's linked prescription and inventory.
   Future<bool> updateDevicePrescription({
     required int deviceId,
     required int patientId,
@@ -1065,26 +1090,7 @@ class ApiService {
     }
   }
 
-  // Future<Map<String, dynamic>> updateMedication(
-  //   int medicationId,
-  //   String newName,
-  // ) async {
-  //   try {
-  //     final response = await http.put(
-  //       Uri.parse('$baseUrl/medications/$medicationId'),
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'ngrok-skip-browser-warning': 'true',
-  //       },
-  //       body: jsonEncode({'medication_name': newName}),
-  //     );
-  //     return jsonDecode(response.body);
-  //   } catch (e) {
-  //     debugPrint('updateMedication error: $e');
-  //     return {'success': false, 'error': e.toString()};
-  //   }
-  // }
-
+  /// Delete a medication from the master catalog (if unused).
   Future<Map<String, dynamic>> deleteMedication(int medicationId) async {
     try {
       final response = await http.delete(
@@ -1098,6 +1104,7 @@ class ApiService {
     }
   }
 
+  /// Add a new prescription (links patient, medication, times, etc.).
   Future<Map<String, dynamic>> addPrescription(
     Map<String, dynamic> data,
   ) async {
@@ -1117,6 +1124,7 @@ class ApiService {
     }
   }
 
+  /// Get all devices in the system.
   Future<List<Map<String, dynamic>>> getDevices() async {
     try {
       final response = await http.get(
@@ -1136,6 +1144,7 @@ class ApiService {
     }
   }
 
+  /// Get a single device by ID.
   Future<Map<String, dynamic>> getDevice(int deviceId) async {
     try {
       final response = await http.get(
@@ -1155,6 +1164,7 @@ class ApiService {
     }
   }
 
+  /// Get the patient ID linked to a device (if any).
   Future<int?> getPatientIdFromDevice(int deviceId) async {
     try {
       final response = await http.get(
@@ -1174,6 +1184,7 @@ class ApiService {
     }
   }
 
+  /// Get all prescriptions linked to a device (via medications).
   Future<List<Prescription>> getDevicePrescriptions(int deviceId) async {
     try {
       final response = await http.get(
@@ -1194,7 +1205,11 @@ class ApiService {
     }
   }
 
-  // Add medication with extra fields
+  // ==========================================
+  // 📦 MEDICATION CRUD (master catalog)
+  // ==========================================
+
+  /// Add a new medication with extended fields.
   Future<Map<String, dynamic>> addMedication({
     required String name,
     int currentInventory = 0,
@@ -1223,7 +1238,7 @@ class ApiService {
     }
   }
 
-  // Update medication with all fields
+  /// Update a medication's fields.
   Future<Map<String, dynamic>> updateMedication({
     required int medicationId,
     String? newName,
@@ -1256,7 +1271,11 @@ class ApiService {
     }
   }
 
-  // Add this inside your ApiService class
+  // ==========================================
+  // 🔔 REMINDER NOTIFICATION MARKING
+  // ==========================================
+
+  /// Mark reminders for a specific medication as read (patient).
   Future<bool> markSingleReminderRead(
     int patientId,
     String medicationName,
@@ -1278,6 +1297,7 @@ class ApiService {
     }
   }
 
+  /// Mark all reminders for a patient as read.
   Future<bool> markAllRemindersRead(int patientId) async {
     try {
       final response = await http.put(

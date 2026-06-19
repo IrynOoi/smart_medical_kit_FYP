@@ -389,7 +389,9 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
                                     .markNotificationRead(notif.notificationId);
                                 if (!mounted) return;
                                 if (success) {
-                                  await _loadAll(showLoading: false); // refresh dashboard data
+                                  await _loadAll(
+                                    showLoading: false,
+                                  ); // refresh dashboard data
                                   if (sheetContext.mounted) {
                                     Navigator.pop(sheetContext); // close sheet
                                   }

@@ -1,4 +1,8 @@
-//patient_detail_page.dart
+// patient_detail_page.dart
+// Displays detailed information about a single patient (for caregiver view).
+// Shows personal info, medical notes, and allows unlinking the patient.
+// Also provides an edit button to navigate to EditPatientPage.
+
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'package:flutter/material.dart';
@@ -8,9 +12,10 @@ import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'edit_patient_page.dart';
 
 class PatientDetailPage extends StatefulWidget {
-  final Map<String, dynamic> patient;
-  final List<Map<String, dynamic>> allPatients;
-  final int caregiverId;
+  final Map<String, dynamic> patient; // Patient data to display
+  final List<Map<String, dynamic>>
+  allPatients; // List of all patients (for switching, though commented out)
+  final int caregiverId; // Caregiver's ID (used for unlinking)
 
   const PatientDetailPage({
     super.key,
@@ -24,7 +29,8 @@ class PatientDetailPage extends StatefulWidget {
 }
 
 class _PatientDetailPageState extends State<PatientDetailPage> {
-  late Map<String, dynamic> patientData;
+  late Map<String, dynamic>
+  patientData; // Mutable copy of patient data (can be updated)
 
   @override
   void initState() {
@@ -33,6 +39,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     patientData = Map<String, dynamic>.from(widget.patient);
   }
 
+  // Helper to format a date string (YYYY-MM-DD) to DD/MM/YYYY.
   String _formatDate(String? dateStr) {
     if (dateStr == null) return 'Not provided';
     try {
@@ -43,6 +50,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     }
   }
 
+  // Builds the profile photo widget (NetworkImage if available, otherwise initials).
   Widget _buildProfilePhoto() {
     final photoUrl = patientData['profile_photo'];
     if (photoUrl != null && photoUrl.toString().isNotEmpty) {
@@ -60,6 +68,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
       );
     }
 
+    // Fallback: initials circle if no photo.
     return CircleAvatar(
       radius: 50,
       backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.2),
@@ -84,8 +93,8 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // (Commented out) Switch Patient popup menu – not used in current implementation.
           // PopupMenuButton<int>(
-          //   // icon: const Icon(Icons.people_alt_outlined),
           //   tooltip: 'Switch Patient',
           //   onSelected: (newId) {
           //     final selected = widget.allPatients.firstWhere(
@@ -96,11 +105,9 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
           //     });
           //   },
           //   itemBuilder: (context) {
-          //     // Only display other existing patients not currently selected
           //     final otherPatients = widget.allPatients
           //         .where((p) => p['patient_id'] != patientData['patient_id'])
           //         .toList();
-
           //     if (otherPatients.isEmpty) {
           //       return [
           //         const PopupMenuItem<int>(
@@ -110,7 +117,6 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
           //         ),
           //       ];
           //     }
-
           //     return otherPatients.map((p) {
           //       return PopupMenuItem<int>(
           //         value: p['patient_id'],
@@ -122,7 +128,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () async {
-              // Wait for the updated data from EditPatientPage
+              // Navigate to EditPatientPage and wait for updated data.
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -130,7 +136,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                 ),
               );
 
-              // If we received updated data, update the UI immediately
+              // If we received updated data, update the UI immediately.
               if (result != null && result is Map<String, dynamic>) {
                 setState(() {
                   patientData = result;
@@ -148,6 +154,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
             children: [
               Center(child: _buildProfilePhoto()),
               const SizedBox(height: 16),
+              // Personal Information card
               _buildInfoCard(
                 title: 'Personal Information',
                 icon: Icons.person,
@@ -164,6 +171,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                 ],
               ),
               const SizedBox(height: 16),
+              // Medical Information card
               _buildInfoCard(
                 title: 'Medical Information',
                 icon: Icons.health_and_safety,
@@ -175,6 +183,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                 ],
               ),
               const SizedBox(height: 24),
+              // Unlink Patient button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -200,6 +209,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     );
   }
 
+  // Shows a confirmation dialog before unlinking the patient.
   Future<void> _confirmUnlink() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -225,14 +235,14 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     if (confirm == true) {
       if (!mounted) return;
 
+      // Show loading spinner while unlinking.
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => const Center(child: CircularProgressIndicator()),
       );
 
-      // We need to import CaregiverService if not already imported
-      // Actually we'll use CaregiverService directly
+      // Call the API to unlink the patient.
       final success = await CaregiverService().unlinkPatient(
         widget.caregiverId,
         patientData['patient_id'],
@@ -260,6 +270,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     }
   }
 
+  // Helper to build a consistent information card with title and children.
   Widget _buildInfoCard({
     required String title,
     required IconData icon,
@@ -296,6 +307,7 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
     );
   }
 
+  // Helper to build a label-value row.
   Widget _infoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),

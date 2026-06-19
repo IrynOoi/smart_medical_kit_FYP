@@ -1,27 +1,46 @@
-#patient.py
-from models.user import hard_delete_patient, soft_delete_patient, reactivate_patient
-import os
-from flask import Blueprint, request, jsonify
-from werkzeug.utils import secure_filename
-from models.user import get_patient_profile, update_patient_profile, delete_patient_cascade
-from models.medication_model import get_prescriptions_by_patient
-from models.adherence_model import get_patient_adherence_stats, get_patient_adherence_logs
-from models.notification_model import get_patient_notifications, mark_single_reminder_read, mark_all_reminders_read as mark_all_reminders_read_model, insert_notification, mark_notification_as_read
-from models.analytics_model import get_latest_ai_prediction
+# patient.py - Blueprint for patient-related API endpoints
 
+# Import required model functions for user operations (soft/hard delete, reactivation)
+from models.user import hard_delete_patient, soft_delete_patient, reactivate_patient
+import os  # For file path operations
+from flask import Blueprint, request, jsonify  # Flask components for routing and request handling
+from werkzeug.utils import secure_filename  # Sanitize uploaded filenames
+
+# Additional user model functions: profile retrieval, update, cascade delete (unused)
+from models.user import get_patient_profile, update_patient_profile, delete_patient_cascade
+from models.medication_model import get_prescriptions_by_patient  # Fetch prescriptions
+from models.adherence_model import get_patient_adherence_stats, get_patient_adherence_logs  # Adherence data
+from models.notification_model import (  # Notification-related operations
+    get_patient_notifications,
+    mark_single_reminder_read,
+    mark_all_reminders_read as mark_all_reminders_read_model,  # Alias to avoid name conflict
+    insert_notification,
+    mark_notification_as_read
+)
+from models.analytics_model import get_latest_ai_prediction  # AI prediction
+
+# Create a Flask Blueprint for patient routes; will be registered with a URL prefix in the main app
 patient_bp = Blueprint('patient', __name__)
 
+
+# ---------------------- GET Patient Profile ----------------------
 @patient_bp.route('/patient/<int:patient_id>', methods=['GET'])
 def get_patient(patient_id):
+    """
+    Retrieve full patient profile including user details and associated caregiver info.
+    Returns 404 if patient not found.
+    """
     try:
+        # Fetch the patient row (joined with user and caregiver tables)
         row = get_patient_profile(patient_id)
 
         if row:
+            # Build the base patient data object
             patient_data = {
                 "patient_id": row["patient_id"],
-                "caregiver_id": row["cg_id"], # <-- CHANGED THIS LINE
+                "caregiver_id": row["cg_id"],  # Direct caregiver ID (from join)
                 "medical_notes": row["medical_notes"],
-                "user": {
+                "user": {  # Nested user object
                     "user_id": row["user_id"],
                     "email": row["email"],
                     "full_name": row["full_name"],
@@ -35,6 +54,7 @@ def get_patient(patient_id):
                     "profile_photo": row["profile_photo"]
                 }
             }
+            # If caregiver exists (cg_id not null), add a caregiver object with user details
             if row["cg_id"] is not None:
                 patient_data["caregiver"] = {
                     "caregiver_id": row["cg_id"],
@@ -53,7 +73,7 @@ def get_patient(patient_id):
                     }
                 }
             else:
-                patient_data["caregiver"] = None
+                patient_data["caregiver"] = None  # Explicitly set to null
 
             return jsonify({"success": True, "data": patient_data})
         else:
@@ -62,16 +82,26 @@ def get_patient(patient_id):
         print(f"Get patient error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Reactivate Patient ----------------------
 @patient_bp.route('/patient/<int:patient_id>/reactivate', methods=['PUT'])
 def api_reactivate_patient(patient_id):
+    """
+    Reactivate a soft-deleted patient (set is_active = True).
+    """
     try:
-        reactivate_patient(patient_id)   # import from user.py
+        reactivate_patient(patient_id)   # Call model function
         return jsonify({"success": True, "message": "Patient reactivated"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Get Prescriptions ----------------------
 @patient_bp.route('/patient/<int:patient_id>/prescriptions', methods=['GET'])
 def get_patient_prescriptions(patient_id):
+    """
+    Retrieve all prescriptions for a given patient.
+    """
     try:
         prescriptions = get_prescriptions_by_patient(patient_id)
         return jsonify({"success": True, "data": prescriptions})
@@ -79,15 +109,23 @@ def get_patient_prescriptions(patient_id):
         print(f"Get prescriptions error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Mark Single Medication Reminders as Read ----------------------
 @patient_bp.route('/patient/<int:patient_id>/reminders/read_single', methods=['PUT'])
 def api_mark_single_reminder_read(patient_id):
+    """
+    Mark all reminders for a specific medication as read.
+    Expects JSON body with 'medication_name'.
+    """
     try:
         data = request.get_json()
         medication_name = data.get('medication_name')
         
+        # Validate required field
         if not medication_name:
             return jsonify({"success": False, "message": "medication_name required"}), 400
 
+        # Call model to mark reminders for this medication as read
         mark_single_reminder_read(patient_id, medication_name)
             
         return jsonify({"success": True, "message": f"Reminders for {medication_name} marked as read"})
@@ -95,27 +133,42 @@ def api_mark_single_reminder_read(patient_id):
         print(f"Error marking single reminder read: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Get Adherence Statistics ----------------------
 @patient_bp.route('/patient/<int:patient_id>/adherence_stats', methods=['GET'])
 def get_adherence_stats(patient_id):
+    """
+    Return summary adherence counts (taken, missed, upcoming) and a computed adherence score.
+    """
     try:
+        # Get raw stats from model
         stats = get_patient_adherence_stats(patient_id)
 
         taken = stats['taken_count'] or 0
         missed = stats['missed_count'] or 0
         total = taken + missed
+        # Score = (taken / total) * 100; if no records, assume perfect adherence (100)
         score = int((taken / total) * 100) if total > 0 else 100
 
         return jsonify({"success": True, "data": {
-            "taken_count": taken, "missed_count": missed,
-            "upcoming_count": stats['upcoming_count'] or 0, "adherence_score": score
+            "taken_count": taken,
+            "missed_count": missed,
+            "upcoming_count": stats['upcoming_count'] or 0,
+            "adherence_score": score
         }})
     except Exception as e:
         print(f"Get adherence stats error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Get Adherence Logs ----------------------
 @patient_bp.route('/patient/<int:patient_id>/adherence_logs', methods=['GET'])
 def get_adherence_logs(patient_id):
+    """
+    Retrieve recent adherence logs (dose events) with an optional limit query parameter.
+    """
     try:
+        # Default limit = 20 if not provided
         limit = request.args.get('limit', default=20, type=int)
         logs = get_patient_adherence_logs(patient_id, limit)
         return jsonify({"success": True, "data": logs})
@@ -123,8 +176,13 @@ def get_adherence_logs(patient_id):
         print(f"Get adherence logs error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Get Notifications ----------------------
 @patient_bp.route('/patient/<int:patient_id>/notifications', methods=['GET'])
 def get_notifications(patient_id):
+    """
+    Fetch all in-app notifications for the patient.
+    """
     try:
         notifications = get_patient_notifications(patient_id)
         return jsonify({"success": True, "data": notifications})
@@ -132,8 +190,14 @@ def get_notifications(patient_id):
         print(f"Get notifications error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Get AI Prediction ----------------------
 @patient_bp.route('/patient/<int:patient_id>/ai_prediction', methods=['GET'])
 def get_ai_prediction(patient_id):
+    """
+    Retrieve the latest AI-generated prediction (e.g., adherence risk) for the patient.
+    Returns 404-like error if no prediction exists.
+    """
     try:
         prediction = get_latest_ai_prediction(patient_id)
             
@@ -143,6 +207,7 @@ def get_ai_prediction(patient_id):
                 "data": prediction
             })
         else:
+            # No prediction found
             return jsonify({
                 "success": False, 
                 "error": "No prediction found in database for this patient"
@@ -152,9 +217,17 @@ def get_ai_prediction(patient_id):
         print(f"Get AI prediction error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Update Patient Profile ----------------------
 @patient_bp.route('/update_patient/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
+    """
+    Update patient profile fields and optionally upload a new profile photo.
+    Expects multipart/form-data with fields: full_name, phone_no, address, email,
+    gender, date_of_birth, medical_notes, and optionally profile_photo file.
+    """
     try:
+        # Extract form fields
         full_name = request.form.get('full_name')
         phone_no = request.form.get('phone_no')
         address = request.form.get('address')
@@ -164,25 +237,35 @@ def update_patient(patient_id):
         medical_notes = request.form.get('medical_notes')
 
         photo_url = None
+        # Handle file upload if present
         if 'profile_photo' in request.files:
             file = request.files['profile_photo']
             if file.filename != '':
+                # Secure the filename and prepend patient_id to avoid collisions
                 filename = secure_filename(f"patient_{patient_id}_{file.filename}")
                 filepath = os.path.join('static', 'profiles')
-                os.makedirs(filepath, exist_ok=True)
+                os.makedirs(filepath, exist_ok=True)  # Create directory if it doesn't exist
                 file.save(os.path.join(filepath, filename))
-                photo_url = f"/static/profiles/{filename}"
+                photo_url = f"/static/profiles/{filename}"  # URL to access the photo
 
-        update_patient_profile(patient_id, full_name, phone_no, address, email, gender, date_of_birth, medical_notes, photo_url)
+        # Call model to update patient profile (all fields are passed, including photo_url)
+        update_patient_profile(patient_id, full_name, phone_no, address, email,
+                               gender, date_of_birth, medical_notes, photo_url)
             
         return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url})
     except Exception as e:
         print(f"Update patient error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-# patient.py  (modify the DELETE route)
+
+# ---------------------- Delete Patient (Soft or Hard) ----------------------
 @patient_bp.route('/patient/<int:patient_id>', methods=['DELETE'])
 def delete_patient(patient_id):
+    """
+    Delete a patient. By default performs a soft delete (sets is_active = False).
+    If query parameter ?hard=true is provided, performs a permanent hard delete.
+    NOTE: There is a typo in the error status code (5000 instead of 500).
+    """
     try:
         hard = request.args.get('hard', 'false').lower() == 'true'
         if hard:
@@ -193,18 +276,30 @@ def delete_patient(patient_id):
             return jsonify({"success": True, "message": "Patient deactivated successfully"})
     except Exception as e:
         print(f"Delete patient error: {e}")
+        # TYPO: status code should be 500, not 5000
         return jsonify({"success": False, "error": str(e)}), 5000
 
+
+# ---------------------- Mark All Reminders as Read ----------------------
 @patient_bp.route('/patient/<int:patient_id>/reminders/read', methods=['PUT'])
 def api_mark_all_reminders_read(patient_id):
+    """
+    Mark all reminders for the patient as read (across all medications).
+    """
     try:
         mark_all_reminders_read_model(patient_id)
         return jsonify({"success": True, "message": "All reminders marked as read"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Create In-App Notification ----------------------
 @patient_bp.route('/notifications', methods=['POST'])
 def create_notification():
+    """
+    Create a new in-app notification for a patient.
+    Expects JSON body: patient_id, title, message, and optional type (default 'REMINDER').
+    """
     try:
         data = request.get_json()
         patient_id = data.get('patient_id')
@@ -212,6 +307,7 @@ def create_notification():
         message = data.get('message')
         notif_type = data.get('type', 'REMINDER')
 
+        # Validate required fields
         if not all([patient_id, title, message]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
@@ -222,8 +318,13 @@ def create_notification():
         print(f"Create notification error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ---------------------- Mark Single Notification as Read ----------------------
 @patient_bp.route('/notification/<int:notification_id>/read', methods=['PUT'])
 def mark_notification_read(notification_id):
+    """
+    Mark a specific notification as read by its ID.
+    """
     try:
         mark_notification_as_read(notification_id)
         return jsonify({"success": True, "message": "Notification marked as read"})

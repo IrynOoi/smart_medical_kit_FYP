@@ -1,4 +1,8 @@
-//caregiver_medication_history_page.dart
+// caregiver_medication_history_page.dart – Caregiver view of medication adherence history.
+// Shows all patients assigned to the caregiver, with their dose status (TAKEN, MISSED, PENDING)
+// and a total doses counter. Uses the ApiService to fetch data, with pull-to-refresh support.
+// (The AI Doctor feature is commented out – it was a patient‑specific feature.)
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api_service.dart';
@@ -13,21 +17,28 @@ class MedicationHistoryScreen extends StatefulWidget {
 }
 
 class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
+  // Service instance for API calls
   final ApiService _apiService = ApiService();
+
+  // ⚠️ Hardcoded IP – this was used for the AI feature but is not used in the current logic.
   final String serverIp = "172.20.10.9";
 
-  List<Map<String, dynamic>> _alerts = [];
-  int _totalDoses = 0;
-  bool _isLoading = true;
-  String _error = '';
-  int _caregiverId = 0;
+  // State variables
+  List<Map<String, dynamic>> _alerts = []; // List of dose records (log entries)
+  int _totalDoses = 0; // Total doses taken across all patients
+  bool _isLoading = true; // Loading indicator
+  String _error = ''; // Error message if any
+  int _caregiverId = 0; // Logged‑in caregiver's ID
 
   @override
   void initState() {
     super.initState();
-    _initializeData();
+    _initializeData(); // Start loading data when the screen is created
   }
 
+  /// Fetches caregiver data from the API.
+  /// If `showLoading` is true (default), shows the loading spinner; otherwise,
+  /// updates data silently (used for pull‑to‑refresh).
   Future<void> _initializeData({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -35,10 +46,11 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     });
 
     try {
-      // Fetch the caregiverId from session since this is a Bottom Nav tab
+      // Get the caregiver ID from SharedPreferences (set during login)
       final prefs = await SharedPreferences.getInstance();
       _caregiverId = prefs.getInt('caregiver_id') ?? 0;
 
+      // If no caregiver ID is found, show an error.
       if (_caregiverId == 0) {
         setState(() {
           _error = 'Session error. Please log in again.';
@@ -47,13 +59,13 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         return;
       }
 
-      // Fetch data using the robust ApiService
+      // Fetch overview stats (including total doses) and recent logs.
       final overview = await _apiService.getCaregiverOverview(_caregiverId);
       final allLogs = await _apiService.getAllRecentLogs(_caregiverId);
 
       setState(() {
         _totalDoses = overview['total_doses'] ?? 0;
-        _alerts = allLogs; // Contains TAKEN + MISSED + PENDING
+        _alerts = allLogs; // Contains TAKEN, MISSED, and PENDING entries
         _isLoading = false;
       });
     } catch (e) {
@@ -65,6 +77,11 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
   }
 
   /*
+  // ------------------------------------------------------------------
+  // (Commented out) AI Doctor feature – originally used a hardcoded patient
+  // and called a local prediction endpoint. This was probably moved
+  // to a separate screen or is no longer used in the caregiver flow.
+  // ------------------------------------------------------------------
   Future<void> _askAIDoctor() async {
     final String apiUrl = "http://$serverIp:5000/predict";
     final Map<String, dynamic> patientData = {
@@ -163,11 +180,14 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
+        // Enables pull‑to‑refresh – calls _initializeData without showing the loading spinner.
         onRefresh: () => _initializeData(showLoading: false),
         color: AppColors.primaryPurple,
         child: _isLoading
+            // Show a spinner while loading.
             ? const Center(child: CircularProgressIndicator())
             : _error.isNotEmpty
+            // Show an error message with a Retry button.
             ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -186,7 +206,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
               )
             : Column(
                 children: [
-                  // Total Doses Card
+                  // ------------------------------------------------------------------
+                  // Total Doses Card – shows the total count of taken doses.
+                  // ------------------------------------------------------------------
                   Container(
                     margin: const EdgeInsets.all(16),
                     padding: const EdgeInsets.all(20),
@@ -216,6 +238,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                       ),
                     ),
                   ),
+                  // Section title: "Recent Activity"
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Align(
@@ -230,7 +253,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // List of Logs
+                  // ------------------------------------------------------------------
+                  // List of logs: each log shows patient name, medication, status, and time.
+                  // ------------------------------------------------------------------
                   Expanded(
                     child: _alerts.isEmpty
                         ? const Center(
@@ -246,8 +271,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                               final isTaken = act['status'] == 'TAKEN';
                               final isMissed = act['status'] == 'MISSED';
 
+                              // Determine the icon and its colour based on status.
                               Color iconColor =
-                                  Colors.orange; // Default pending
+                                  Colors.orange; // Default: PENDING
                               IconData iconData = Icons.access_time_filled;
 
                               if (isTaken) {

@@ -1,11 +1,15 @@
-//caregiver_doses_details_page.dart
+// caregiver_doses_details_page.dart
+// Displays a detailed breakdown of dose records (TAKEN, MISSED, PENDING) for a caregiver.
+// Shows a total doses taken summary card and a list of recent activity logs.
+// Supports pull-to-refresh. Data is fetched via CaregiverService.
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 
 class CaregiverDosesDetailsPage extends StatefulWidget {
-  final int caregiverId;
+  final int caregiverId; // ID of the logged-in caregiver
+
   const CaregiverDosesDetailsPage({super.key, required this.caregiverId});
 
   @override
@@ -14,28 +18,34 @@ class CaregiverDosesDetailsPage extends StatefulWidget {
 }
 
 class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
-  
-  List<Map<String, dynamic>> _alerts = [];
-  int _totalDoses = 0;
+  // Data holders
+  List<Map<String, dynamic>> _alerts = []; // List of dose records (logs)
+  int _totalDoses = 0; // Total number of taken doses
   bool _isLoading = true;
   String _error = '';
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _fetchData(); // Load data when the screen is first created.
   }
 
+  // Fetches overview stats and recent logs from the API.
+  // If [showLoading] is true, shows the loading indicator; otherwise refreshes silently.
   Future<void> _fetchData({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
       _error = '';
     });
     try {
+      // Fetch overview (includes total doses taken)
       final overview = await CaregiverService().getCaregiverOverview(
         widget.caregiverId,
       );
-      final allLogs = await CaregiverService().getAllRecentLogs(widget.caregiverId);
+      // Fetch all recent logs (TAKEN, MISSED, PENDING)
+      final allLogs = await CaregiverService().getAllRecentLogs(
+        widget.caregiverId,
+      );
       setState(() {
         _totalDoses = overview['total_doses'] ?? 0;
         _alerts = allLogs; // now contains TAKEN + MISSED + PENDING
@@ -81,6 +91,7 @@ class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
               )
             : Column(
                 children: [
+                  // ---- Total doses summary card ----
                   Container(
                     margin: const EdgeInsets.all(16),
                     padding: const EdgeInsets.all(20),
@@ -110,6 +121,7 @@ class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
                       ),
                     ),
                   ),
+                  // ---- Section title ----
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Align(
@@ -120,6 +132,7 @@ class CaregiverDosesDetailsPageState extends State<CaregiverDosesDetailsPage> {
                       ),
                     ),
                   ),
+                  // ---- List of recent dose records ----
                   Expanded(
                     child: _alerts.isEmpty
                         ? const Center(child: Text('No recent dose records'))

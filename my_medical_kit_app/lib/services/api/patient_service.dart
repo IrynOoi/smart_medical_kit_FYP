@@ -1,4 +1,8 @@
-// lib/services/api/patient_service.dart
+// patient_service.dart – Service class for patient‑specific API calls.
+// Wraps the generic ApiClient to provide type‑safe methods for patient
+// profiles, adherence logs, notifications, profile updates, reminders,
+// and dose retakes.
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +12,8 @@ import '../../models/adherence_log.dart';
 import '../../models/notification.dart';
 
 class PatientService {
+  /// Fetch the full profile of a patient (including caregiver info).
+  /// GET /patient/{patientId}
   Future<Patient?> getPatient(int patientId) async {
     try {
       final response = await ApiClient.get('/patient/$patientId');
@@ -24,6 +30,8 @@ class PatientService {
     }
   }
 
+  /// Reactivate a soft‑deleted patient (set is_active = true).
+  /// PUT /patient/{patientId}/reactivate
   Future<bool> reactivatePatient(int patientId) async {
     try {
       final response = await ApiClient.put('/patient/$patientId/reactivate');
@@ -34,6 +42,8 @@ class PatientService {
     }
   }
 
+  /// Retrieve adherence logs for a patient, with optional limit.
+  /// GET /patient/{patientId}/adherence_logs?limit={limit}
   Future<List<AdherenceLog>> getAdherenceLogs(
     int patientId, {
     int? limit,
@@ -58,6 +68,8 @@ class PatientService {
     }
   }
 
+  /// Get adherence statistics (taken, missed, upcoming, score) for a patient.
+  /// GET /patient/{patientId}/adherence_stats
   Future<Map<String, dynamic>> getAdherenceStats(int patientId) async {
     try {
       final response = await ApiClient.get(
@@ -69,6 +81,7 @@ class PatientService {
           return jsonResponse['data'];
         }
       }
+      // Return default stats on failure
       return {
         'taken_count': 0,
         'missed_count': 0,
@@ -86,6 +99,8 @@ class PatientService {
     }
   }
 
+  /// Get in‑app notifications for a patient (latest 20).
+  /// GET /patient/{patientId}/notifications
   Future<List<NotificationModel>> getNotifications(int patientId) async {
     try {
       final response = await ApiClient.get('/patient/$patientId/notifications');
@@ -103,6 +118,8 @@ class PatientService {
     }
   }
 
+  /// Create a new in‑app notification for a patient.
+  /// POST /notifications with body: patient_id, title, message, type
   Future<bool> createNotification({
     required int patientId,
     required String title,
@@ -127,6 +144,8 @@ class PatientService {
     }
   }
 
+  /// Mark a specific notification as read.
+  /// PUT /notification/{notificationId}/read
   Future<bool> markNotificationRead(int notificationId) async {
     try {
       final response = await ApiClient.put(
@@ -140,19 +159,24 @@ class PatientService {
     }
   }
 
+  /// Update patient profile. Supports photo upload via multipart/form-data.
+  /// PUT /update_patient/{patientId} (multipart)
   Future<Map<String, dynamic>> updatePatient(
     int patientId,
     Map<String, dynamic> formData, {
     String? photoPath,
   }) async {
     try {
+      // Build multipart request
       var request = http.MultipartRequest(
         'PUT',
         Uri.parse('${ApiClient.baseUrl}/update_patient/$patientId'),
       );
+      // Add all form fields
       formData.forEach((key, value) {
         if (value != null) request.fields[key] = value.toString();
       });
+      // Add photo file if provided
       if (photoPath != null && photoPath.isNotEmpty) {
         var file = await http.MultipartFile.fromPath(
           'profile_photo',
@@ -160,6 +184,7 @@ class PatientService {
         );
         request.files.add(file);
       }
+      // Use default headers from ApiClient (incl. ngrok-skip-browser-warning)
       request.headers.addAll(ApiClient.defaultHeaders);
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
@@ -169,6 +194,8 @@ class PatientService {
     }
   }
 
+  /// Register a new patient (uses the /register endpoint).
+  /// POST /register with patient data
   Future<Map<String, dynamic>> addPatient(
     Map<String, dynamic> patientData,
   ) async {
@@ -180,6 +207,8 @@ class PatientService {
     }
   }
 
+  /// Delete a patient. By default does soft delete; if hard=true, permanent.
+  /// DELETE /patient/{patientId}?hard=true (optional)
   Future<bool> deletePatient(int patientId, {bool hard = false}) async {
     try {
       String endpoint = '/patient/$patientId';
@@ -192,6 +221,8 @@ class PatientService {
     }
   }
 
+  /// Mark reminders for a specific medication as read.
+  /// PUT /patient/{patientId}/reminders/read_single with {medication_name}
   Future<bool> markSingleReminderRead(
     int patientId,
     String medicationName,
@@ -204,11 +235,13 @@ class PatientService {
       final jsonResponse = jsonDecode(response.body);
       return jsonResponse['success'] == true;
     } catch (e) {
-      debugPrint('Error marking single reminder read: \$e');
+      debugPrint('Error marking single reminder read: $e');
       return false;
     }
   }
 
+  /// Retake a missed dose (update log to TAKEN and decrement inventory).
+  /// PUT /adherence_log/{adlogId}/retake
   Future<bool> retakeMissedDose(int adlogId) async {
     try {
       final response = await ApiClient.put('/adherence_log/$adlogId/retake');
@@ -220,6 +253,8 @@ class PatientService {
     }
   }
 
+  /// Get dispense information for a retake (validates 30‑minute window).
+  /// GET /retake_trigger/{adlogId}
   Future<Map<String, dynamic>?> triggerRetake(int adlogId) async {
     try {
       final response = await ApiClient.get('/retake_trigger/$adlogId');

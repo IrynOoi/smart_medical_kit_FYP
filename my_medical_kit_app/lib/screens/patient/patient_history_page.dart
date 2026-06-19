@@ -1,4 +1,7 @@
 // lib/screens/patient_history_page.dart
+// Displays the patient's medication adherence history: a list of logs (TAKEN/MISSED/PENDING)
+// with details like scheduled time and dispensed time. A summary card shows the total number
+// of doses taken. Data is fetched via PatientService and stored in a list of AdherenceLog objects.
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -14,19 +17,25 @@ class PatientHistoryPage extends StatefulWidget {
 }
 
 class _PatientHistoryPageState extends State<PatientHistoryPage> {
-  
+  // State flags and data holders
   bool _isLoading = true;
-  List<AdherenceLog> _logs = [];
-  int _patientId = 0;
+  List<AdherenceLog> _logs = []; // List of logs fetched from the API
+  int _patientId = 0; // Patient ID read from SharedPreferences
 
+  // Computed property: number of logs with status TAKEN
   int get _takenCount => _logs.where((log) => log.isTaken).length;
 
   @override
   void initState() {
     super.initState();
-    _loadPatientId();
+    _loadPatientId(); // Start loading patient ID and logs
   }
 
+  // ------------------------------------------------------------
+  // DATA LOADING METHODS
+  // ------------------------------------------------------------
+
+  /// Reads patient_id from SharedPreferences and calls _loadLogs() if valid.
   Future<void> _loadPatientId() async {
     final prefs = await SharedPreferences.getInstance();
     final id = prefs.getInt('patient_id');
@@ -34,14 +43,19 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
       _patientId = id;
       await _loadLogs();
     } else {
-      setState(() => _isLoading = false);
+      setState(() => _isLoading = false); // No valid ID, stop loading state
     }
   }
 
+  /// Fetches adherence logs from the API for the patient.
+  /// Optional [showLoading] controls whether to show the loading spinner.
   Future<void> _loadLogs({bool showLoading = true}) async {
     if (showLoading) setState(() => _isLoading = true);
     try {
-      final logs = await PatientService().getAdherenceLogs(_patientId, limit: 50);
+      final logs = await PatientService().getAdherenceLogs(
+        _patientId,
+        limit: 50,
+      );
       setState(() {
         _logs = logs;
         _isLoading = false;
@@ -56,6 +70,11 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
     }
   }
 
+  // ------------------------------------------------------------
+  // HELPER FORMATTING METHODS
+  // ------------------------------------------------------------
+
+  /// Formats a DateTime to a human-readable string (Today/Yesterday or DD/MM/YYYY HH:MM).
   String _formatDateTime(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
@@ -68,6 +87,8 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
     }
   }
 
+  /// Returns the appropriate display time for a log entry.
+  /// If the dose was taken and has a takenTime, show that; otherwise fallback to scheduledTime.
   String _formatDisplayTime(AdherenceLog log) {
     if (log.isTaken && log.takenTime != null) {
       return _formatDateTime(log.takenTime!);
@@ -78,6 +99,11 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
     return 'No timestamp';
   }
 
+  // ------------------------------------------------------------
+  // UI BUILDERS
+  // ------------------------------------------------------------
+
+  /// Builds the header with a gradient background, title, and subtitle.
   Widget _buildHeader() {
     final topPadding = MediaQuery.of(context).padding.top;
     return Container(
@@ -93,6 +119,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // (Commented out a custom back button; the AppBar is not used)
           // Row(
           //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
           //   children: [
@@ -105,7 +132,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
           //         fontWeight: FontWeight.bold,
           //       ),
           //     ),
-          //     const SizedBox(width: 38), // for visual balance
+          //     const SizedBox(width: 38),
           //   ],
           // ),
           const SizedBox(height: 24),
@@ -148,8 +175,9 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                     onRefresh: () => _loadLogs(showLoading: false),
                     child: ListView.builder(
                       padding: const EdgeInsets.only(top: 8, bottom: 24),
-                      itemCount: _logs.length + 1,
+                      itemCount: _logs.length + 1, // +1 for the summary card
                       itemBuilder: (context, index) {
+                        // If index == 0, build the summary card (total doses taken).
                         if (index == 0) {
                           return Container(
                             margin: const EdgeInsets.fromLTRB(20, 16, 20, 16),
@@ -232,9 +260,11 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                           );
                         }
 
+                        // Otherwise, display a single log entry.
                         final log = _logs[index - 1];
                         final isTaken = log.isTaken;
                         final isMissed = log.isMissed;
+                        // Determine the status colour and text label
                         final statusColor = isTaken
                             ? Colors.green
                             : isMissed
@@ -246,6 +276,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                             ? 'Missed'
                             : 'Pending';
 
+                        // Format scheduled and dispensed times for display
                         String scheduledStr = log.scheduledTime != null
                             ? _formatDateTime(log.scheduledTime!)
                             : 'No schedule';
@@ -279,7 +310,9 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                                   top: 8,
                                 ),
                                 leading: CircleAvatar(
-                                  backgroundColor: statusColor.withValues(alpha: 0.1),
+                                  backgroundColor: statusColor.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   child: Icon(
                                     isTaken
                                         ? Icons.check_circle
@@ -355,11 +388,12 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
     );
   }
 
+  /// Helper widget to display a single detail row (icon + label + value).
   Widget _buildDetailRow(
     IconData icon,
     String label,
     String value, {
-    Color? color,
+    Color? color, // Optional colour for the value text
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

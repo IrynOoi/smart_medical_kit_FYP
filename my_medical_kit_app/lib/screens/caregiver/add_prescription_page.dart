@@ -1,4 +1,8 @@
 // add_prescription_page.dart
+// Allows a caregiver to add a new prescription for a specific patient.
+// Fields: medication (dropdown), dosage, dispense times (list with add/remove),
+// days of week (chips, empty = everyday), start date, optional end date.
+// Checks for duplicate active prescriptions before saving.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +10,7 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 class AddPrescriptionPage extends StatefulWidget {
-  final Map<String, dynamic> patient;
+  final Map<String, dynamic> patient; // The patient this prescription is for
 
   const AddPrescriptionPage({super.key, required this.patient});
 
@@ -17,28 +21,36 @@ class AddPrescriptionPage extends StatefulWidget {
 class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
   final _formKey = GlobalKey<FormState>();
 
-  List<Map<String, dynamic>> _medications = [];
-  String? _selectedMedicationName;
+  // ---- Medication selection ----
+  List<Map<String, dynamic>> _medications =
+      []; // Master list of all medications
+  String? _selectedMedicationName; // Currently selected medication name
   final TextEditingController _dosageController = TextEditingController(
-    text: '1.0',
+    text: '1.0', // Default dosage
   );
 
-  List<TimeOfDay> _selectedTimes = [const TimeOfDay(hour: 8, minute: 0)];
-  List<int> _selectedDays = []; // 1=Mon, ..., 7=Sun. Empty means Everyday
+  // ---- Schedule ----
+  List<TimeOfDay> _selectedTimes = [
+    const TimeOfDay(hour: 8, minute: 0),
+  ]; // Default one time
+  List<int> _selectedDays = []; // 1=Mon, ..., 7=Sun. Empty = everyday.
 
-  DateTime _startDate = DateTime.now();
-  DateTime? _endDate;
+  // ---- Duration ----
+  DateTime _startDate = DateTime.now(); // Default to today
+  DateTime? _endDate; // Optional end date
 
-  bool _isLoadingMedications = true;
-  bool _isSaving = false;
-  String? _errorMessage;
+  // ---- UI state ----
+  bool _isLoadingMedications = true; // Loading the medication dropdown list
+  bool _isSaving = false; // Show loading spinner while saving
+  String? _errorMessage; // Error message from API
 
   @override
   void initState() {
     super.initState();
-    _fetchMedications();
+    _fetchMedications(); // Load medication list when screen opens
   }
 
+  // Fetches the master list of medications for the dropdown.
   Future<void> _fetchMedications() async {
     setState(() {
       _isLoadingMedications = true;
@@ -48,6 +60,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       final meds = await MedicationService().getMedications();
       setState(() {
         _medications = meds.cast<Map<String, dynamic>>();
+        // Auto-select the first medication if available.
         if (_medications.isNotEmpty) {
           _selectedMedicationName = _medications.first['medication_name'];
         }
@@ -61,6 +74,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     }
   }
 
+  // Opens a date picker for the start or end date.
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final initialDate = isStart ? _startDate : (_endDate ?? _startDate);
     final picked = await showDatePicker(
@@ -85,6 +99,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       setState(() {
         if (isStart) {
           _startDate = picked;
+          // Ensure end date is not before start date.
           if (_endDate != null && _endDate!.isBefore(_startDate)) {
             _endDate = _startDate;
           }
@@ -95,7 +110,10 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     }
   }
 
+  // Validates and saves the new prescription.
+  // Checks for duplicate active prescriptions for the same patient.
   Future<void> _savePrescription() async {
+    // Validate all form fields
     if (!_formKey.currentState!.validate()) return;
     if (_selectedMedicationName == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -104,7 +122,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       return;
     }
 
-    // Additional validation: end date cannot be before start date
+    // Validate that end date is not before start date.
     if (_endDate != null && _endDate!.isBefore(_startDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -115,13 +133,14 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       return;
     }
 
+    // ---- Duplicate check: prevent prescribing the same medication twice ----
     try {
       final patientId = widget.patient['patient_id'];
       final existing = await MedicationService().getPatientMedications(
         patientId,
       );
       final hasDuplicate = existing.any((p) {
-        // 只检查未结束的处方
+        // Only check active (non‑ended) prescriptions.
         if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
           return false;
         return p.medicationName == _selectedMedicationName;
@@ -138,7 +157,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
         return;
       }
     } catch (e) {
-      // 如果获取处方列表失败，可以继续保存（但建议提示错误）
+      // If duplicate check fails, show an error and abort.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not verify duplicates: $e')),
       );
@@ -147,6 +166,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
 
     setState(() => _isSaving = true);
 
+    // Build the dispense times list (format: "HH:MM:00")
     final List<String> dispenseTimes = _selectedTimes.map((t) {
       final hour = t.hour.toString().padLeft(2, '0');
       final minute = t.minute.toString().padLeft(2, '0');
@@ -155,6 +175,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
 
     final DateFormat formatter = DateFormat('yyyy-MM-dd');
 
+    // Build the request payload.
     final data = {
       'patient_id': widget.patient['patient_id'],
       'medication_name': _selectedMedicationName,
@@ -165,6 +186,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       'end_date': _endDate != null ? formatter.format(_endDate!) : null,
     };
 
+    // Call the API to add the prescription.
     final response = await MedicationService().addPrescription(data);
     setState(() => _isSaving = false);
 
@@ -176,7 +198,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context, true);
+      Navigator.pop(context, true); // Return true to refresh the parent list.
     } else {
       if (!mounted) return;
       String errorMsg =
@@ -240,13 +262,13 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Patient info card (white)
+                    // ---- Patient info card ----
                     Card(
                       elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      color: Colors.white, // explicitly white
+                      color: Colors.white,
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Row(
@@ -293,7 +315,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Medication section
+                    // ---- Medication Details section ----
                     _buildSectionHeader('Medication Details', Icons.medication),
                     const SizedBox(height: 12),
                     Card(
@@ -306,6 +328,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
+                            // Medication dropdown (from master list)
                             DropdownButtonFormField<String>(
                               decoration: InputDecoration(
                                 labelText: 'Select Medication *',
@@ -343,6 +366,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                               validator: (v) => v == null ? 'Required' : null,
                             ),
                             const SizedBox(height: 16),
+                            // Dosage (tablets)
                             TextFormField(
                               controller: _dosageController,
                               keyboardType:
@@ -378,7 +402,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Schedule section
+                    // ---- Schedule section ----
                     _buildSectionHeader('Schedule', Icons.schedule),
                     const SizedBox(height: 12),
                     Card(
@@ -392,6 +416,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Dispense times: list of TimeOfDay widgets with add/remove
                             const Text(
                               'Dispense Times',
                               style: TextStyle(
@@ -473,6 +498,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                                           ),
                                         ),
                                       ),
+                                      // Remove button (only if more than one time)
                                       if (_selectedTimes.length > 1)
                                         IconButton(
                                           icon: const Icon(
@@ -492,6 +518,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                                 );
                               }).toList(),
                             ),
+                            // Add time button
                             TextButton.icon(
                               onPressed: () async {
                                 final picked = await showTimePicker(
@@ -529,6 +556,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                             const SizedBox(height: 16),
                             const Divider(),
                             const SizedBox(height: 16),
+                            // Days of the week (chips)
                             const Text(
                               'Days of the Week',
                               style: TextStyle(
@@ -564,7 +592,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Duration section
+                    // ---- Duration section (Start and End date) ----
                     _buildSectionHeader('Duration', Icons.date_range),
                     const SizedBox(height: 12),
                     Card(
@@ -671,6 +699,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                                               ),
                                             ),
                                           ),
+                                          // Clear end date button
                                           if (_endDate != null)
                                             GestureDetector(
                                               onTap: () => setState(
@@ -695,7 +724,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Save Button
+                    // ---- Save button ----
                     SizedBox(
                       width: double.infinity,
                       height: 55,
@@ -734,6 +763,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     );
   }
 
+  // Helper: builds a section header with an icon and title.
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
@@ -747,6 +777,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     );
   }
 
+  // Helper: builds a day chip (toggle for days of the week).
   Widget _buildDayChip(String label, int dayIndex) {
     final isSelected = _selectedDays.contains(dayIndex);
     return FilterChip(

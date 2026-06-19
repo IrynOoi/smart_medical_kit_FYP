@@ -1,11 +1,16 @@
-//lib//screens/caregiver/edit_prescription_page.dart
+// lib/screens/caregiver/edit_prescription_page.dart
+// Allows the caregiver to edit an existing prescription for a patient.
+// Fields: medication name (dropdown), dosage, dispense times (list), days of week (chips),
+// start date, end date. Does NOT allow editing inventory, threshold, or device ID (those are handled separately).
+// Checks for duplicate active prescriptions before saving.
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 class EditPrescriptionPage extends StatefulWidget {
-  final Map<String, dynamic> prescription;
+  final Map<String, dynamic> prescription; // Existing prescription data
 
   const EditPrescriptionPage({super.key, required this.prescription});
 
@@ -16,29 +21,33 @@ class EditPrescriptionPage extends StatefulWidget {
 class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
   final _formKey = GlobalKey<FormState>();
 
+  // List of all medications available in the system (master catalog)
   List<Map<String, dynamic>> _medications = [];
-  String? _selectedMedicationName;
+  String? _selectedMedicationName; // Currently selected medication name
   late TextEditingController _dosageController;
 
-  // 🚫 Removed: _inventoryController, _thresholdController, _deviceIdController
+  // 🚫 Removed: inventory, threshold, device ID controllers (they are not editable here)
 
+  // Dispense times as TimeOfDay objects
   List<TimeOfDay> _selectedTimes = [];
+  // Selected days of week (1=Mon, 7=Sun)
   List<int> _selectedDays = [];
 
-  DateTime _startDate = DateTime.now();
-  DateTime? _endDate;
+  DateTime _startDate = DateTime.now(); // Start date (default today)
+  DateTime? _endDate; // Optional end date
 
-  bool _isLoadingMedications = true;
-  bool _isSaving = false;
-  String? _errorMessage;
+  bool _isLoadingMedications = true; // Loading medications from API
+  bool _isSaving = false; // Show loading spinner while saving
+  String? _errorMessage; // Error messages from API
 
   @override
   void initState() {
     super.initState();
-    _initFields();
-    _fetchMedications();
+    _initFields(); // Populate fields from the passed prescription
+    _fetchMedications(); // Load medication list for dropdown
   }
 
+  // Initialise controllers and values from the prescription data.
   void _initFields() {
     final rx = widget.prescription;
     _selectedMedicationName = rx['medication_name'];
@@ -47,14 +56,17 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     );
     // 🚫 No inventory, threshold, device ID controllers
 
+    // Parse start date
     if (rx['start_date'] != null) {
       _startDate =
           DateTime.tryParse(rx['start_date'].toString()) ?? DateTime.now();
     }
+    // Parse end date (may be null)
     if (rx['end_date'] != null) {
       _endDate = DateTime.tryParse(rx['end_date'].toString());
     }
 
+    // Parse dispense times (list of "HH:MM:SS" strings)
     _selectedTimes.clear();
     if (rx['dispense_times'] != null) {
       final List<dynamic> times = rx['dispense_times'];
@@ -67,15 +79,17 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
         }
       }
     }
+    // Default to one time if none set
     if (_selectedTimes.isEmpty) {
       _selectedTimes.add(const TimeOfDay(hour: 8, minute: 0));
     }
 
+    // Parse dispense days (list of day numbers)
     _selectedDays.clear();
     if (rx['dispense_days'] != null) {
       final List<dynamic> days = rx['dispense_days'];
       _selectedDays.addAll(days.map((d) => int.tryParse(d.toString()) ?? 1));
-      _selectedDays.sort();
+      _selectedDays.sort(); // Keep sorted for UI
     }
   }
 
@@ -86,6 +100,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     super.dispose();
   }
 
+  // Fetch the master list of medications from the API.
   Future<void> _fetchMedications() async {
     setState(() {
       _isLoadingMedications = true;
@@ -95,6 +110,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       final meds = await MedicationService().getMedications();
       setState(() {
         _medications = meds.cast<Map<String, dynamic>>();
+        // If the current selected medication is not in the list, clear selection.
         if (_selectedMedicationName != null) {
           final exists = _medications.any(
             (m) => m['medication_name'] == _selectedMedicationName,
@@ -111,6 +127,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     }
   }
 
+  // Open a date picker for start or end date.
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final initialDate = isStart ? _startDate : (_endDate ?? _startDate);
     final picked = await showDatePicker(
@@ -135,6 +152,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       setState(() {
         if (isStart) {
           _startDate = picked;
+          // Ensure end date is not before start date
           if (_endDate != null && _endDate!.isBefore(_startDate)) {
             _endDate = _startDate;
           }
@@ -145,6 +163,8 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     }
   }
 
+  // Save the updated prescription.
+  // Performs duplicate check: no two active prescriptions for the same patient with the same medication.
   Future<void> _savePrescription() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedMedicationName == null) {
@@ -154,8 +174,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       return;
     }
 
+    // ---- Duplicate check: prevent prescribing the same medication twice ----
     try {
-      // 从 widget.prescription 获取 patient_id（需确保字段存在）
+      // Retrieve patient ID from the prescription data
       final patientId =
           widget.prescription['patient_id'] ?? widget.prescription['patientId'];
       if (patientId == null) {
@@ -168,9 +189,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       final currentPrescriptionId = widget.prescription['prescription_id'];
 
       final hasDuplicate = existing.any((p) {
-        // 排除自身
+        // Exclude the current prescription itself
         if (p.prescriptionId == currentPrescriptionId) return false;
-        // 只检查未结束的处方（end_date 为 null 或 >= 今天）
+        // Only check active (non‑ended) prescriptions
         if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
           return false;
         return p.medicationName == _selectedMedicationName;
@@ -196,6 +217,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
 
     setState(() => _isSaving = true);
 
+    // Build payload for update – only fields that can be edited here.
     final List<String> dispenseTimes = _selectedTimes.map((t) {
       final hour = t.hour.toString().padLeft(2, '0');
       final minute = t.minute.toString().padLeft(2, '0');
@@ -214,6 +236,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       // 🚫 Do NOT send inventory, threshold, device_id – backend keeps existing values
     };
 
+    // Call the API to update the prescription.
     final result = await MedicationService().updatePrescription(
       widget.prescription['prescription_id'],
       data,
@@ -229,7 +252,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context, true);
+      Navigator.pop(context, true); // Return true to refresh parent list.
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -272,7 +295,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Medication Dropdown
+                    // Medication dropdown (master list)
                     DropdownButtonFormField<String>(
                       decoration: InputDecoration(
                         labelText: 'Select Medication *',
@@ -296,7 +319,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Dosage
+                    // Dosage (tablets count)
                     TextFormField(
                       controller: _dosageController,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -317,6 +340,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
+                    // Dispense Times section: list of TimeOfDay widgets with add/remove
                     const Text(
                       'Dispense Times',
                       style: TextStyle(
@@ -364,6 +388,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                                   },
                                 ),
                               ),
+                              // Remove button (only if more than one time)
                               if (_selectedTimes.length > 1)
                                 IconButton(
                                   icon: const Icon(
@@ -381,6 +406,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                         );
                       }).toList(),
                     ),
+                    // Add time button
                     TextButton.icon(
                       onPressed: () async {
                         final picked = await showTimePicker(
@@ -403,6 +429,8 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 16),
+
+                    // Days of the week selection (chips)
                     const Text(
                       'Days of the Week',
                       style: TextStyle(
@@ -431,7 +459,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Start & End Dates
+                    // Start and End date pickers
                     Row(
                       children: [
                         Expanded(
@@ -503,6 +531,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                                               ).format(_endDate!)
                                             : 'No end date',
                                       ),
+                                      // Clear end date button
                                       if (_endDate != null) ...[
                                         const Spacer(),
                                         GestureDetector(
@@ -526,7 +555,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Save Button
+                    // Save button
                     SizedBox(
                       width: double.infinity,
                       height: 55,
@@ -559,6 +588,7 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     );
   }
 
+  // Helper to build a day chip (toggle for days of week)
   Widget _buildDayChip(String label, int dayIndex) {
     final isSelected = _selectedDays.contains(dayIndex);
     return FilterChip(

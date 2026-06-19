@@ -1,5 +1,8 @@
 // lib/screens/login_page.dart
 
+// lib/screens/login_page.dart – Login screen with email/password authentication,
+// plus a fully functional password reset (ForgotPasswordPage) UI.
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/widget/bottom_nav_bar.dart';
@@ -9,6 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_medical_kit_app/services/api/auth_service.dart';
 import 'package:my_medical_kit_app/services/reminder_service.dart';
 
+// ----------------------------------------------------------------------
+// Login Page – Main login screen
+// ----------------------------------------------------------------------
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -17,15 +23,26 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // Controllers for email and password input fields
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  // Toggle for password visibility (show/hide)
   bool _isPasswordVisible = false;
 
+  /// Handles the login process:
+  /// 1. Validates email and password (non‑empty, valid email format)
+  /// 2. Shows a loading indicator
+  /// 3. Calls AuthService.login(email, password)
+  /// 4. On success: stores user role & ID in SharedPreferences,
+  ///    triggers caregiver stock alerts (if caregiver), shows success dialog,
+  ///    and navigates to BottomNavBar.
+  /// 5. On failure: shows error snackbar.
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
+    // Basic validation: both fields must be non‑empty.
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -36,7 +53,10 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
+    // Validate email format using a simple regex.
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+    );
     if (!emailRegex.hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -48,6 +68,7 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     try {
+      // Show a non‑dismissible loading indicator.
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -56,30 +77,33 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
 
-      final result = await AuthService().login(
-        email,
-        password,
-      );
+      // Call the authentication service.
+      final result = await AuthService().login(email, password);
 
+      // Dismiss the loading dialog.
       if (!mounted) return;
       Navigator.pop(context);
 
       if (result['success'] == true) {
+        // Store user session data in SharedPreferences.
         final prefs = await SharedPreferences.getInstance();
 
-        // Clear any previous role/IDs to avoid mixing patient vs caregiver state
+        // Clear any previous role/IDs to avoid mixing patient vs caregiver state.
         await prefs.remove('role');
         await prefs.remove('patient_id');
         await prefs.remove('caregiver_id');
         final user = result['user'];
 
+        // Save user role and display name.
         await prefs.setString('role', user['role']);
         await prefs.setString('user_name', user['name']);
 
+        // Save the appropriate ID based on role.
         if (user['role'] == 'patient') {
           await prefs.setInt('patient_id', user['id']);
         } else {
           await prefs.setInt('caregiver_id', user['id']);
+          // For caregivers, immediately check and send stock alerts.
           await ReminderService.checkAndSendCaregiverStockAlerts(
             caregiverId: user['id'],
           );
@@ -87,6 +111,7 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
+        // Show a success dialog.
         await showDialog(
           context: context,
           barrierDismissible: false,
@@ -123,14 +148,17 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
+        // Navigate to the main bottom navigation bar (home screen).
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const BottomNavBar()),
         );
       } else {
+        // Login failed: throw an exception with the server's error message.
         throw Exception(result['message'] ?? 'Invalid credentials');
       }
     } catch (e) {
+      // Handle any error: dismiss loading if still open, show error snackbar.
       if (mounted) {
         if (Navigator.canPop(context)) Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -148,7 +176,8 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar:
+          true, // Allow app bar to overlay the background gradient.
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -167,6 +196,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               children: [
                 const SizedBox(height: 120),
+                // SVG illustration (login.svg) – shows a medical‑related graphic.
                 SvgPicture.asset(
                   'assets/images/login.svg',
                   width: 300,
@@ -189,6 +219,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 60),
+                // White card with the login form.
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -204,6 +235,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   child: Column(
                     children: [
+                      // Email field
                       TextField(
                         controller: _emailController,
                         decoration: InputDecoration(
@@ -222,6 +254,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
+                      // Password field with visibility toggle
                       TextField(
                         controller: _passwordController,
                         obscureText: !_isPasswordVisible,
@@ -254,6 +287,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // Forgot password link -> navigates to ForgotPasswordPage
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
@@ -276,6 +310,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: 32),
+                      // Sign In button – triggers _login()
                       ElevatedButton(
                         onPressed: _login,
                         style: ElevatedButton.styleFrom(
@@ -299,6 +334,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 32),
+                // Register link -> navigates to RegisterPage
                 TextButton(
                   onPressed: () => Navigator.push(
                     context,
@@ -333,7 +369,7 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // ==========================================
-// 🌟 FULLY FUNCTIONAL: Forgot Password Page UI
+// 🌟 Forgot Password Page – Reset password UI
 // ==========================================
 
 class ForgotPasswordPage extends StatefulWidget {
@@ -344,20 +380,28 @@ class ForgotPasswordPage extends StatefulWidget {
 }
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  // Controllers for email, new password, and confirm password fields
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
-  bool _isLoading = false;
-  bool _isPasswordVisible = false;
-  bool _isConfirmVisible = false;
+  bool _isLoading = false; // Shows a spinner when calling the API
+  bool _isPasswordVisible = false; // Toggle for new password visibility
+  bool _isConfirmVisible = false; // Toggle for confirm password visibility
 
+  /// Handles the password reset request:
+  /// 1. Validates all fields (email format, password match, min length)
+  /// 2. Shows loading state
+  /// 3. Calls AuthService.resetPassword(email, newPassword)
+  /// 4. On success: shows a success dialog and pops back to login
+  /// 5. On failure: shows an error snackbar
   void _handleResetPassword() async {
     final email = _emailController.text.trim();
     final newPassword = _newPasswordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
+    // All fields must be filled.
     if (email.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
@@ -365,7 +409,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       return;
     }
 
-    final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
+    // Validate email format.
+    final emailRegex = RegExp(
+      r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+    );
     if (!emailRegex.hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -376,6 +423,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       return;
     }
 
+    // Check that password and confirm password match.
     if (newPassword != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -386,6 +434,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       return;
     }
 
+    // Enforce minimum password length.
     if (newPassword.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -405,6 +454,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       setState(() => _isLoading = false);
 
       if (result['success'] == true) {
+        // Show success dialog.
         await showDialog(
           context: context,
           barrierDismissible: false,
@@ -424,7 +474,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(context); // close dialog
-                  Navigator.pop(context); // back to login
+                  Navigator.pop(context); // back to login page
                 },
                 child: const Text(
                   'Back to Login',
@@ -438,6 +488,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           ),
         );
       } else {
+        // Show server error.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -450,6 +501,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         );
       }
     } catch (e) {
+      // Handle any exception.
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -460,6 +512,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   @override
   void dispose() {
+    // Clean up controllers.
     _emailController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -469,7 +522,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ FIX: Use a solid white background for the Scaffold so it doesn't show black
+      // Use a white background to avoid black flashing when the app bar is shown.
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
@@ -480,7 +533,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      // ✅ FIX: Wrap the body in a Container to apply the translucent purple safely
+      // Wrap body with a translucent purple background (premiumLight with alpha).
       body: Container(
         height: double.infinity,
         color: AppColors.premiumLight.withValues(alpha: 0.15),
@@ -510,7 +563,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 const SizedBox(height: 40),
 
-                // Email
+                // Email input field
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -537,7 +590,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 const SizedBox(height: 20),
 
-                // New Password
+                // New Password input (with visibility toggle)
                 TextFormField(
                   controller: _newPasswordController,
                   obscureText: !_isPasswordVisible,
@@ -575,7 +628,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 const SizedBox(height: 20),
 
-                // Confirm Password
+                // Confirm Password input (with visibility toggle)
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: !_isConfirmVisible,
@@ -613,7 +666,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 const SizedBox(height: 32),
 
-                // Submit Button
+                // Submit button – calls _handleResetPassword()
                 ElevatedButton(
                   onPressed: _isLoading ? null : _handleResetPassword,
                   style: ElevatedButton.styleFrom(

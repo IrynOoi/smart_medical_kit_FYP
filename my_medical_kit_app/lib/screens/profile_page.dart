@@ -1,4 +1,7 @@
 // lib/screens/profile_page.dart
+// Profile screen for both Patient and Caregiver. Displays user information, allows editing
+// (including photo upload), logout, and caregiver account deactivation.
+
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'dart:convert';
@@ -20,6 +23,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  // Image picker for profile photo
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true;
@@ -28,10 +32,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String _userRole = '';
   int _userId = 0;
 
-  // User data
+  // Cached user data (display values)
   Map<String, dynamic> _userData = {};
 
-  // Edit form controllers
+  // Form controllers for editing mode
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -39,9 +43,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final _emailController = TextEditingController();
   String _selectedGender = 'Male';
   DateTime? _selectedDate;
-  final _notesController = TextEditingController();
+  final _notesController = TextEditingController(); // Only used for patients
 
-  // For image picking
+  // Selected image file for upload
   File? _selectedImage;
 
   @override
@@ -52,6 +56,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    // Clean up controllers to prevent memory leaks
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -60,6 +65,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  /// Safely parse a date string (YYYY-MM-DD) to DateTime.
   DateTime? _parseDateSafely(dynamic dateString) {
     if (dateString == null || dateString.toString().isEmpty) return null;
     try {
@@ -74,6 +80,9 @@ class _ProfilePageState extends State<ProfilePage> {
   // LOAD USER DATA (with refresh support)
   // ------------------------------------------------------------
 
+  /// Loads the user profile from the API based on role (patient/caregiver).
+  /// If `isRefresh` is true, it updates the UI without resetting loading state
+  /// (used for pull‑to‑refresh).
   Future<void> _loadUserData({bool isRefresh = false}) async {
     if (!isRefresh) {
       setState(() {
@@ -92,6 +101,7 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint('🔵 Loading profile - Role: $_userRole, ID: $_userId');
 
       if (_userRole == 'patient') {
+        // Fetch patient profile via PatientService
         final patient = await PatientService().getPatient(_userId);
         if (patient != null) {
           _userData = {
@@ -111,6 +121,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _errorMessage = 'Patient not found.';
         }
       } else {
+        // Fetch caregiver profile via direct HTTP call
         final caregiverData = await _getCaregiverProfile(_userId);
         if (caregiverData.isNotEmpty) {
           _userData = {
@@ -133,7 +144,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
 
-      // Initialize controllers with current data
+      // Populate controllers with current data (for editing)
       _nameController.text = _userData['name']?.toString() ?? '';
       _phoneController.text = _userData['phone']?.toString() ?? '';
       _addressController.text = _userData['address']?.toString() ?? '';
@@ -142,7 +153,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _selectedDate = _userData['dob'] as DateTime?;
       _notesController.text = _userData['notes']?.toString() ?? '';
 
-      // 🔁 Force a rebuild after updating data (for pull‑to‑refresh)
+      // Force rebuild after refresh
       if (isRefresh) {
         setState(() {});
       }
@@ -160,17 +171,20 @@ class _ProfilePageState extends State<ProfilePage> {
   // ------------------------------------------------------------
   // PICK IMAGE FROM GALLERY
   // ------------------------------------------------------------
+
+  /// Opens the image picker to select a profile photo from the gallery.
+  /// The selected image will be used in the edit form and uploaded on save.
   Future<void> _pickImage() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 70,
+        imageQuality: 70, // Compress to reduce size
       );
 
       if (pickedFile != null) {
         setState(() {
           _selectedImage = File(pickedFile.path);
-          _isEditing = true;
+          _isEditing = true; // Switch to edit mode automatically
         });
       }
     } catch (e) {
@@ -186,33 +200,39 @@ class _ProfilePageState extends State<ProfilePage> {
   // ------------------------------------------------------------
   // UPDATE PROFILE (including photo)
   // ------------------------------------------------------------
+
+  /// Sends a multipart/form-data PUT request to update profile fields and photo.
+  /// Validates form fields first. On success, updates local data and refreshes.
   Future<void> _updateProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
+      // Build the multipart request (supports file upload)
       var uri = Uri.parse('${ApiClient.baseUrl}/update_$_userRole/$_userId');
       var request = http.MultipartRequest('PUT', uri);
 
+      // Headers (including ngrok skip)
       request.headers['ngrok-skip-browser-warning'] = 'true';
 
-      // Text fields
+      // Text fields (all required)
       request.fields['full_name'] = _nameController.text;
       request.fields['phone_no'] = _phoneController.text;
       request.fields['address'] = _addressController.text;
       request.fields['email'] = _emailController.text;
       request.fields['gender'] = _selectedGender;
 
+      // Format DOB if selected
       if (_selectedDate != null) {
         request.fields['date_of_birth'] =
             "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
       }
 
-      // We explicitly skip sending 'medical_notes' for the patient role
-      // since the field is now read-only and should not be modified here.
+      // Medical notes are read‑only for patients; we do NOT send them back.
+      // The server will ignore any updates to medical notes from this endpoint.
 
-      // Image file
+      // Attach profile photo if selected
       if (_selectedImage != null) {
         request.files.add(
           await http.MultipartFile.fromPath(
@@ -224,11 +244,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
       debugPrint('🔵 Updating profile via Multipart...');
 
+      // Send the request
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
       final result = jsonDecode(response.body);
 
       if (response.statusCode == 200 && result['success']) {
+        // Update local data to reflect changes
         setState(() {
           _userData['name'] = _nameController.text;
           _userData['phone'] = _phoneController.text;
@@ -245,7 +267,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
         if (!mounted) return;
 
-        // Show success popup dialog
+        // Show success dialog
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -260,7 +282,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
 
-        _loadUserData(); // Refresh to get new photo URL
+        _loadUserData(); // Reload to get updated photo URL from server
       } else {
         throw Exception(result['error'] ?? 'Update failed');
       }
@@ -268,7 +290,7 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint('❌ Update error: $e');
       if (!mounted) return;
 
-      // Show error popup dialog
+      // Show error dialog
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -290,6 +312,8 @@ class _ProfilePageState extends State<ProfilePage> {
   // ------------------------------------------------------------
   // HELPER METHODS
   // ------------------------------------------------------------
+
+  /// Opens a date picker for Date of Birth.
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -318,18 +342,20 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Logs out the user: clears shared preferences, cancels all notifications,
+  /// and navigates to the landing page (login/register) with no back stack.
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // 1. Clear the local session data
+    // 1. Clear local session
     await prefs.clear();
 
+    // 2. Cancel all scheduled reminder notifications
     await ReminderService.cancelAllNotifications();
 
     if (!mounted) return;
 
-    // 2. Navigate to LandingPage and remove all previous screens from the stack
-    // This ensures the user cannot press "back" to return to the profile
+    // 3. Navigate to LandingPage and remove all previous routes
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const LandingPage()),
@@ -337,15 +363,18 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Fallback: set _userData to an empty map when loading fails.
   void _useEmptyDataFallback() {
     _userData = {};
   }
 
+  /// Formats a DateTime to DD/MM/YYYY.
   String _formatDate(DateTime? date) {
     if (date == null) return 'Not set';
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
+  /// Direct HTTP call to fetch caregiver profile (used when role is caregiver).
   Future<Map<String, dynamic>> _getCaregiverProfile(int caregiverId) async {
     try {
       final response = await http.get(
@@ -365,10 +394,83 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ------------------------------------------------------------
-  // BUILD METHOD
+  // DEACTIVATE CAREGIVER ACCOUNT (only for caregivers)
   // ------------------------------------------------------------
+
+  /// Shows a confirmation dialog before deactivating the caregiver account.
+  Future<void> _confirmDeactivateAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deactivate Account'),
+        content: const Text(
+          'Are you sure you want to deactivate your caregiver account?\n\n'
+          'You will be logged out and will not be able to log in again '
+          'until an administrator reactivates your account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _deactivateAccount();
+    }
+  }
+
+  /// Calls the API to soft‑delete the caregiver account.
+  Future<void> _deactivateAccount() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await http.put(
+        Uri.parse('${ApiClient.baseUrl}/caregiver/$_userId/deactivate'),
+        headers: ApiClient.defaultHeaders,
+      );
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success']) {
+        // Success: clear session and redirect to landing
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LandingPage()),
+            (route) => false,
+          );
+        }
+      } else {
+        throw Exception(result['error'] ?? 'Deactivation failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to deactivate account: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // UI BUILDERS
+  // ------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
+    // Show loading spinner while loading
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
@@ -378,6 +480,7 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
 
+    // Extract display values from _userData
     final fullName = _userData['name']?.toString() ?? 'Unknown User';
     final email = _userData['email']?.toString() ?? 'Not provided';
     final phone = _userData['phone']?.toString() ?? 'Not provided';
@@ -390,7 +493,7 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
       body: Column(
         children: [
-          // Fixed Header with Gradient
+          // Fixed Header with gradient background
           Container(
             width: double.infinity,
             decoration: const BoxDecoration(
@@ -404,7 +507,7 @@ class _ProfilePageState extends State<ProfilePage> {
               bottom: false,
               child: Column(
                 children: [
-                  // Custom AppBar
+                  // Custom AppBar (no back button)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Center(
@@ -412,13 +515,14 @@ class _ProfilePageState extends State<ProfilePage> {
                         'My Profile',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 18, // enlarged from 18
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.2,
                         ),
                       ),
                     ),
                   ),
+                  // Error message banner (if any)
                   if (_errorMessage.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.symmetric(
@@ -451,6 +555,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   const SizedBox(height: 10),
+                  // Avatar section (photo, name, role badge, active status)
                   _buildAvatarSection(
                     fullName,
                     _userRole,
@@ -461,7 +566,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ),
-          // Scrollable Body
+          // Scrollable body with pull‑to‑refresh
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => _loadUserData(isRefresh: true),
@@ -499,8 +604,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ------------------------------------------------------------
-  // UI BUILDERS
+  // VIEW MODE (non‑editing)
   // ------------------------------------------------------------
+
   Widget _buildViewMode(
     String fullName,
     String email,
@@ -513,6 +619,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Column(
       children: [
         const SizedBox(height: 24),
+        // Contact details card
         _buildCardGroup(
           title: 'Contact Details',
           icon: Icons.contact_mail_rounded,
@@ -523,6 +630,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
         const SizedBox(height: 16),
+        // Personal info card
         _buildCardGroup(
           title: 'Personal Info',
           icon: Icons.person_rounded,
@@ -534,6 +642,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildInfoRow(Icons.location_on_rounded, 'Address', address),
           ],
         ),
+        // Medical notes card (only for patients)
         if (_userRole == 'patient' && notes != null && notes.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildCardGroup(
@@ -558,11 +667,16 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
         const SizedBox(height: 32),
+        // Action buttons (Edit Profile, Deactivate, Logout)
         _buildActionButtons(),
         const SizedBox(height: 50),
       ],
     );
   }
+
+  // ------------------------------------------------------------
+  // EDIT MODE
+  // ------------------------------------------------------------
 
   Widget _buildEditForm() {
     return Form(
@@ -570,6 +684,7 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Column(
         children: [
           const SizedBox(height: 24),
+          // Contact details card (editable)
           _buildCardGroup(
             title: 'Contact Details',
             icon: Icons.contact_mail_rounded,
@@ -596,10 +711,12 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
           const SizedBox(height: 16),
+          // Personal info card (gender dropdown, DOB picker, address)
           _buildCardGroup(
             title: 'Personal Info',
             icon: Icons.person_rounded,
             children: [
+              // Gender dropdown
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
@@ -649,6 +766,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               _buildDivider(),
+              // Date of birth (with date picker)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
@@ -698,6 +816,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               _buildDivider(),
+              // Address
               _buildEditField(
                 Icons.location_on_rounded,
                 'Address',
@@ -705,6 +824,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ],
           ),
+          // Medical notes (read‑only for patients in edit mode)
           if (_userRole == 'patient') ...[
             const SizedBox(height: 16),
             _buildCardGroup(
@@ -719,16 +839,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: TextFormField(
                     controller: _notesController,
                     maxLines: 3,
-                    readOnly:
-                        true, // Prevents the patient from editing the notes
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                    ), // Visual cue that it's disabled
+                    readOnly: true, // Prevents patient from editing notes
+                    style: TextStyle(color: Colors.grey.shade600),
                     decoration: InputDecoration(
                       labelText: 'Medical Notes (View Only)',
                       filled: true,
-                      fillColor:
-                          Colors.grey.shade100, // Visual cue that it's disabled
+                      fillColor: Colors.grey.shade100,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -743,6 +859,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ],
           const SizedBox(height: 32),
+          // Cancel / Save buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -797,16 +914,20 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // ------------------------------------------------------------
+  // COMMON UI COMPONENTS
+  // ------------------------------------------------------------
+
+  /// Builds the avatar section with photo, name, role badge, and active status.
   Widget _buildAvatarSection(String name, String role, bool isActive) {
     final existingPhotoUrl = _userData['profile_photo']?.toString();
 
-    // ✅ Build full URL if relative
+    // Build full URL if relative path
     String? fullPhotoUrl;
     if (existingPhotoUrl != null && existingPhotoUrl.isNotEmpty) {
       if (existingPhotoUrl.startsWith('http')) {
         fullPhotoUrl = existingPhotoUrl;
       } else {
-        // Prepend base URL from ApiService
         fullPhotoUrl =
             '${ApiClient.baseUrl}${existingPhotoUrl.startsWith('/') ? '' : '/'}$existingPhotoUrl';
       }
@@ -834,6 +955,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: CircleAvatar(
                   radius: 50,
                   backgroundColor: AppColors.primaryPurple,
+                  // Show selected image, existing photo, or placeholder icon
                   backgroundImage: _selectedImage != null
                       ? FileImage(_selectedImage!) as ImageProvider
                       : (fullPhotoUrl != null
@@ -848,6 +970,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       : null,
                 ),
               ),
+              // Camera icon to pick new photo
               Positioned(
                 bottom: 0,
                 right: 0,
@@ -928,6 +1051,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Helper to build a card with a title and children.
   Widget _buildCardGroup({
     required String title,
     required IconData icon,
@@ -973,6 +1097,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Info row for view mode: icon, label, value.
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -1016,6 +1141,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Edit field for form mode: icon, label, controller.
   Widget _buildEditField(
     IconData icon,
     String label,
@@ -1058,71 +1184,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Future<void> _confirmDeactivateAccount() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Deactivate Account'),
-        content: const Text(
-          'Are you sure you want to deactivate your caregiver account?\n\n'
-          'You will be logged out and will not be able to log in again '
-          'until an administrator reactivates your account.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Deactivate'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await _deactivateAccount();
-    }
-  }
-
-  Future<void> _deactivateAccount() async {
-    setState(() => _isLoading = true);
-    try {
-      final response = await http.put(
-        Uri.parse('${ApiClient.baseUrl}/caregiver/$_userId/deactivate'),
-        headers: ApiClient.defaultHeaders,
-      );
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success']) {
-        // 停用成功，清除本地会话并跳转到登录页
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.clear();
-        if (mounted) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LandingPage()),
-            (route) => false,
-          );
-        }
-      } else {
-        throw Exception(result['error'] ?? 'Deactivation failed');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to deactivate account: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
+  /// Simple divider with indentation.
   Widget _buildDivider() => Divider(
     height: 1,
     indent: 66,
@@ -1130,11 +1192,13 @@ class _ProfilePageState extends State<ProfilePage> {
     color: Colors.grey.shade100,
   );
 
+  /// Action buttons: Edit Profile, Deactivate (caregiver only), Logout.
   Widget _buildActionButtons() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
+          // Edit Profile button (switches to edit mode)
           ElevatedButton(
             onPressed: () => setState(() => _isEditing = true),
             style: ElevatedButton.styleFrom(
@@ -1155,6 +1219,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           const SizedBox(height: 16),
+          // Deactivate Account (only for caregivers)
           if (_userRole == 'caregiver') ...[
             ElevatedButton(
               onPressed: _confirmDeactivateAccount,
@@ -1186,7 +1251,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 16),
           ],
-
+          // Logout button
           ElevatedButton(
             onPressed: _logout,
             style: ElevatedButton.styleFrom(

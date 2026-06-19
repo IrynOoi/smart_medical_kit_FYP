@@ -1,4 +1,9 @@
-//caregiver_prescription_setup_page.dart
+// caregiver_prescription_setup_page.dart
+// Displays a list of patients assigned to the caregiver. Each patient card shows the patient's name
+// and the number of active prescriptions. Tapping on a card navigates to PatientPrescriptionsPage
+// to view/manage prescriptions. The "Add" button opens AddPrescriptionPage to create a new prescription
+// for that patient.
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
@@ -7,7 +12,8 @@ import 'package:my_medical_kit_app/services/api/api_client.dart';
 import 'add_prescription_page.dart';
 
 class CaregiverPrescriptionSetupPage extends StatefulWidget {
-  final int caregiverId;
+  final int caregiverId; // ID of the logged-in caregiver
+
   const CaregiverPrescriptionSetupPage({super.key, required this.caregiverId});
 
   @override
@@ -17,16 +23,17 @@ class CaregiverPrescriptionSetupPage extends StatefulWidget {
 
 class _CaregiverPrescriptionSetupPageState
     extends State<CaregiverPrescriptionSetupPage> {
-  List<Map<String, dynamic>> _patients = [];
+  List<Map<String, dynamic>> _patients = []; // List of patient maps
   bool _isLoading = true;
   String _error = '';
 
   @override
   void initState() {
     super.initState();
-    _fetchPatients();
+    _fetchPatients(); // Load patient list on screen init
   }
 
+  // Fetches the list of patients assigned to this caregiver from the API.
   Future<void> _fetchPatients() async {
     setState(() {
       _isLoading = true;
@@ -48,11 +55,12 @@ class _CaregiverPrescriptionSetupPageState
     }
   }
 
+  // Opens the AddPrescriptionPage for the selected patient.
   void _openPrescriptionForm(Map<String, dynamic> patient) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => AddPrescriptionPage(patient: patient)),
-    ).then((_) => _fetchPatients());
+    ).then((_) => _fetchPatients()); // Refresh list after returning
   }
 
   @override
@@ -99,24 +107,27 @@ class _CaregiverPrescriptionSetupPageState
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
                     onTap: () {
+                      // Navigate to the patient's prescriptions list when tapped.
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => PatientPrescriptionsPage(patient: p),
                         ),
-                      ).then((_) => _fetchPatients());
+                      ).then(
+                        (_) => _fetchPatients(),
+                      ); // Refresh after returning
                     },
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
-                          // Avatar
+                          // Profile avatar (photo or initials)
                           CircleAvatar(
                             radius: 26,
                             backgroundColor: AppColors.primaryPurple.withValues(
                               alpha: 0.1,
                             ),
-                            // 1. Add backgroundImage to render the image
+                            // 1. Add backgroundImage to render the image if available
                             backgroundImage:
                                 (p['profile_photo'] != null &&
                                     p['profile_photo'].toString().isNotEmpty)
@@ -145,8 +156,8 @@ class _CaregiverPrescriptionSetupPageState
                                   )
                                 : null,
                           ),
-                          const SizedBox(width: 12), // Reduced spacing
-                          // Text Column - Now Expanded to handle overflow
+                          const SizedBox(width: 12),
+                          // Patient name and prescription count
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,8 +165,7 @@ class _CaregiverPrescriptionSetupPageState
                                 Text(
                                   p['full_name'] ?? 'Unknown Patient',
                                   style: const TextStyle(
-                                    fontSize:
-                                        15, // Slightly reduced to fit more
+                                    fontSize: 15,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textDark,
                                   ),
@@ -163,7 +173,7 @@ class _CaregiverPrescriptionSetupPageState
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${p['prescription_count'] ?? 0} active prescription', // Simplified label
+                                  '${p['prescription_count'] ?? 0} active prescription',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey.shade600,
@@ -173,9 +183,8 @@ class _CaregiverPrescriptionSetupPageState
                               ],
                             ),
                           ),
-
-                          // Action Button - Removed icon to maximize space
                           const SizedBox(width: 8),
+                          // "Add" button to create a new prescription for this patient
                           ElevatedButton(
                             onPressed: () => _openPrescriptionForm(p),
                             style: ElevatedButton.styleFrom(

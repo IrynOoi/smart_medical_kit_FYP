@@ -1,4 +1,8 @@
 // lib/screens/caregiver/caregiver_notifications_page.dart
+// Displays a list of unread notifications for the caregiver, including medication reminders,
+// low-stock alerts, and out-of-stock alerts. Each notification card shows the medication,
+// message, patient name, stock status, and allows marking as read. Also supports "Read All"
+// and pull-to-refresh.
 
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
@@ -7,7 +11,8 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CaregiverNotificationsPage extends StatefulWidget {
-  final int? caregiverId;
+  final int?
+  caregiverId; // Optional caregiver ID (if not provided, fetched from session)
 
   const CaregiverNotificationsPage({super.key, this.caregiverId});
 
@@ -20,17 +25,19 @@ class _CaregiverNotificationsPageState
     extends State<CaregiverNotificationsPage> {
   final CaregiverService _caregiverService = CaregiverService();
 
-  List<Map<String, dynamic>> _notifications = [];
+  List<Map<String, dynamic>> _notifications =
+      []; // List of unread notifications
   bool _isLoading = true;
   String? _errorMessage;
-  int _caregiverId = 0;
+  int _caregiverId = 0; // Resolved caregiver ID from session or widget
 
   @override
   void initState() {
     super.initState();
-    _resolveCaregiverAndLoad();
+    _resolveCaregiverAndLoad(); // Load caregiver ID and then notifications
   }
 
+  // Resolves caregiver ID from widget or SharedPreferences, then loads notifications.
   Future<void> _resolveCaregiverAndLoad() async {
     final prefs = await SharedPreferences.getInstance();
     final savedId = prefs.getInt('caregiver_id') ?? 0;
@@ -48,6 +55,8 @@ class _CaregiverNotificationsPageState
     await _loadNotifications();
   }
 
+  // Fetches unread notifications from the API and updates the UI.
+  // Optionally shows a loading indicator.
   Future<void> _loadNotifications({bool showLoading = true}) async {
     if (!mounted) return;
     setState(() {
@@ -62,11 +71,12 @@ class _CaregiverNotificationsPageState
 
       if (!mounted) return;
       setState(() {
-        // 🔥 FILTER OUT READ NOTIFICATIONS
+        // 🔥 FILTER OUT READ NOTIFICATIONS – only unread are shown.
         _notifications = data.where((n) => !_isRead(n['is_read'])).toList();
         _isLoading = false;
       });
 
+      // Also check for caregiver stock alerts (syncs with reminder service).
       await ReminderService.checkAndSendCaregiverStockAlerts(
         caregiverId: _caregiverId,
         notifications: _notifications,
@@ -80,6 +90,7 @@ class _CaregiverNotificationsPageState
     }
   }
 
+  // Marks a single notification as read and removes it from the list (after successful API call).
   Future<void> _markAsRead(Map<String, dynamic> notif, int index) async {
     final notifId = _asInt(notif['notification_id']);
     if (notifId == null) {
@@ -119,6 +130,7 @@ class _CaregiverNotificationsPageState
     }
   }
 
+  // Marks all current unread notifications as read (confirmation dialog first).
   Future<void> _markAllAsRead() async {
     if (_notifications.isEmpty) return;
 
@@ -160,6 +172,9 @@ class _CaregiverNotificationsPageState
     await _loadNotifications();
   }
 
+  // ──────────────────────────────────────────
+  // HEADER WIDGET (gradient background with title and "Read All")
+  // ──────────────────────────────────────────
   Widget _buildHeader() {
     final topPadding = MediaQuery.of(context).padding.top;
     final hasUnread = _notifications.any((n) => !_isRead(n['is_read']));
@@ -180,6 +195,7 @@ class _CaregiverNotificationsPageState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Back button
               GestureDetector(
                 onTap: () => Navigator.maybePop(context),
                 child: Container(
@@ -203,6 +219,7 @@ class _CaregiverNotificationsPageState
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              // "Read All" button only if there are unread notifications
               hasUnread
                   ? GestureDetector(
                       onTap: _markAllAsRead,
@@ -221,7 +238,7 @@ class _CaregiverNotificationsPageState
                         ),
                       ),
                     )
-                  : const SizedBox(width: 72),
+                  : const SizedBox(width: 72), // Spacer for alignment
             ],
           ),
           const SizedBox(height: 24),
@@ -248,6 +265,9 @@ class _CaregiverNotificationsPageState
     );
   }
 
+  // ──────────────────────────────────────────
+  // BODY – shows loading, error, empty state, or list of notifications.
+  // ──────────────────────────────────────────
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -299,6 +319,9 @@ class _CaregiverNotificationsPageState
     );
   }
 
+  // ──────────────────────────────────────────
+  // INDIVIDUAL NOTIFICATION CARD
+  // ──────────────────────────────────────────
   Widget _buildNotificationCard(Map<String, dynamic> notif, int index) {
     // We only show unread notifications, but keep the check anyway
     final isRead = _isRead(notif['is_read']);
@@ -311,6 +334,7 @@ class _CaregiverNotificationsPageState
         notifType == 'LOW_STOCK' || notifType == 'OUT_OF_STOCK';
     final bool isOutOfStock = notifType == 'OUT_OF_STOCK';
 
+    // Determine icon and colours based on notification type.
     late IconData iconData;
     late Color iconColor;
     late Color backgroundColor;
@@ -353,6 +377,7 @@ class _CaregiverNotificationsPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Top row: icon, medication name, creation time, unread dot
             Row(
               children: [
                 Container(
@@ -400,6 +425,7 @@ class _CaregiverNotificationsPageState
               ],
             ),
             const SizedBox(height: 16),
+            // Notification message box
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -430,6 +456,7 @@ class _CaregiverNotificationsPageState
               ),
             ),
             const SizedBox(height: 12),
+            // Patient name and notification type
             Row(
               children: [
                 Expanded(
@@ -479,6 +506,7 @@ class _CaregiverNotificationsPageState
                 ),
               ],
             ),
+            // For stock alerts, show stock chips and a warning/advice box.
             if (isStockAlert) ...[
               const SizedBox(height: 16),
               Wrap(
@@ -538,6 +566,7 @@ class _CaregiverNotificationsPageState
               ),
             ],
             const SizedBox(height: 16),
+            // "Mark as Read" button
             Align(
               alignment: Alignment.centerRight,
               child: ElevatedButton(
@@ -565,6 +594,7 @@ class _CaregiverNotificationsPageState
     );
   }
 
+  // Helper to build a small stock info chip.
   Widget _stockChip({
     required IconData icon,
     required String label,
@@ -595,6 +625,11 @@ class _CaregiverNotificationsPageState
     );
   }
 
+  // ──────────────────────────────────────────
+  // UTILITY METHODS
+  // ──────────────────────────────────────────
+
+  // Formats a DateTime string into a human-readable "DD/MM/YYYY at HH:MM AM/PM" format.
   String _formatNotificationTime(dynamic rawValue) {
     if (rawValue == null) return 'Just now';
     try {
@@ -615,6 +650,7 @@ class _CaregiverNotificationsPageState
     }
   }
 
+  // Converts a notification type code into a readable label.
   String _readableType(String type) {
     switch (type) {
       case 'OUT_OF_STOCK':
@@ -630,10 +666,12 @@ class _CaregiverNotificationsPageState
     }
   }
 
+  // Checks if a notification is marked as read (handles bool/int/string variants).
   bool _isRead(dynamic value) {
     return value == true || value == 1 || value == '1' || value == 'true';
   }
 
+  // Safely converts a dynamic value to int, returning null if not possible.
   int? _asInt(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;

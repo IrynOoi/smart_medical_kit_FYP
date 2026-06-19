@@ -1,4 +1,9 @@
 //caregiver_performance_details_page.dart
+// caregiver_performance_details_page.dart
+// Displays detailed performance metrics for a caregiver over a selected period.
+// Shows a total doses count and a curved chart visualizing the number of taken doses
+// per time unit (day, week, or month), along with some insights like the highest activity day.
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -6,10 +11,13 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import '../../widget/caregiver_wdgt/curved_chart_painter.dart';
 
 class CaregiverPerformanceDetailsPage extends StatelessWidget {
-  final int caregiverId;
-  final List<double> chartData;
-  final List<String> chartLabels;
-  final String period;
+  final int
+  caregiverId; // ID of the caregiver (currently unused but kept for future use)
+  final List<double>
+  chartData; // List of dose counts for each time unit (e.g., 7 values for a week)
+  final List<String>
+  chartLabels; // Corresponding labels for the x‑axis (e.g., ['Mon', 'Tue', ...])
+  final String period; // The selected time period ('Day', 'Week', or 'Month')
 
   const CaregiverPerformanceDetailsPage({
     super.key,
@@ -21,6 +29,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Compute total doses by summing all values in chartData.
     final int totalDoses = chartData.fold(0, (sum, item) => sum + item.toInt());
 
     return Scaffold(
@@ -36,6 +45,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Main card: shows total doses and the chart.
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -51,6 +61,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  // Total doses header
                   const Text(
                     'Total Doses Taken',
                     style: TextStyle(
@@ -60,6 +71,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Total doses value
                   Text(
                     '$totalDoses',
                     style: const TextStyle(
@@ -69,6 +81,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  // The chart widget (custom painter)
                   SizedBox(
                     height: 200,
                     width: double.infinity,
@@ -77,7 +90,9 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
                         data: chartData,
                         labels: chartLabels,
                         lineColor: AppColors.primaryPurple,
-                        selectedIndex: chartData.length - 1,
+                        selectedIndex:
+                            chartData.length -
+                            1, // Highlights the last data point
                       ),
                     ),
                   ),
@@ -85,6 +100,8 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
+
+            // "Data Insights" section title
             const Text(
               'Data Insights',
               style: TextStyle(
@@ -94,7 +111,8 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const SizedBox(height: 16),
+
+            // If there is at least one dose, show the "Highest Activity" insight.
             if (totalDoses > 0)
               Card(
                 elevation: 2,
@@ -113,6 +131,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
                 ),
               )
             else
+              // If no data, show a "No Data Available" card.
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -128,6 +147,8 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
+
+            // Information card explaining what the metric represents.
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(

@@ -1,4 +1,8 @@
-//medication list page
+// caregiver_medications_list_page.dart
+// Displays the master list of medications (all medications in the system). Allows the caregiver
+// to add new medications, edit existing ones, or delete medications (if not in use). Each medication
+// entry shows inventory, device serial, and motor slot. Uses MedicationService for CRUD operations.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -14,6 +18,7 @@ class CaregiverMedicationsListPage extends StatefulWidget {
 
 class CaregiverMedicationsListPageState
     extends State<CaregiverMedicationsListPage> {
+  // List of medication maps fetched from the API
   List<Map<String, dynamic>> _medications = [];
   bool _isLoading = true;
   String _error = '';
@@ -21,9 +26,10 @@ class CaregiverMedicationsListPageState
   @override
   void initState() {
     super.initState();
-    _fetchMedications();
+    _fetchMedications(); // Load medications when screen opens
   }
 
+  // Fetches all medications from the master catalog.
   Future<void> _fetchMedications({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -43,6 +49,7 @@ class CaregiverMedicationsListPageState
     }
   }
 
+  // Helper to build a consistent InputDecoration for form fields.
   InputDecoration _inputDecoration(
     String label,
     IconData icon, {
@@ -76,15 +83,16 @@ class CaregiverMedicationsListPageState
   }
 
   // ------------------------------------------------------------------
-  // Add medication (ALL FIELDS REQUIRED)
+  // Show dialog to add a new medication. All fields are required.
   // ------------------------------------------------------------------
   Future<void> _showAddMedicationDialog() async {
     final formKey = GlobalKey<FormState>();
+    // Controllers for each field
     final nameController = TextEditingController();
-
     final inventoryController = TextEditingController(text: '0');
     final thresholdController = TextEditingController(text: '10');
-    final deviceSerialController = TextEditingController(); // ← DECLARE HERE
+    final deviceSerialController =
+        TextEditingController(); // Device serial (e.g., DISP-2)
     final motorSlotController = TextEditingController();
 
     final confirmed = await showDialog<bool>(
@@ -104,6 +112,7 @@ class CaregiverMedicationsListPageState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Medication Name
                 TextFormField(
                   controller: nameController,
                   decoration: _inputDecoration(
@@ -115,6 +124,7 @@ class CaregiverMedicationsListPageState
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // Initial Inventory
                 TextFormField(
                   controller: inventoryController,
                   decoration: _inputDecoration(
@@ -128,6 +138,7 @@ class CaregiverMedicationsListPageState
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // Refill Threshold
                 TextFormField(
                   controller: thresholdController,
                   decoration: _inputDecoration(
@@ -141,9 +152,9 @@ class CaregiverMedicationsListPageState
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // Device Serial (required to assign to a device)
                 TextFormField(
-                  controller:
-                      deviceSerialController, // ← Use the declared controller
+                  controller: deviceSerialController,
                   decoration: _inputDecoration(
                     'Device Serial (e.g., DISP-2) *',
                     Icons.memory,
@@ -154,6 +165,7 @@ class CaregiverMedicationsListPageState
                       : null,
                 ),
                 const SizedBox(height: 16),
+                // Motor Slot (1-3)
                 TextFormField(
                   controller: motorSlotController,
                   decoration: _inputDecoration(
@@ -209,7 +221,7 @@ class CaregiverMedicationsListPageState
     if (confirmed == true) {
       setState(() => _isLoading = true);
 
-      // 修改 Flutter 发送的数据：
+      // Build payload: includes device_serial (not device_id) – the backend resolves it.
       final payload = {
         'medication_name': nameController.text.trim(),
         'current_inventory': int.parse(inventoryController.text.trim()),
@@ -226,7 +238,7 @@ class CaregiverMedicationsListPageState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Medication added successfully')),
         );
-        _fetchMedications();
+        _fetchMedications(); // Refresh the list
       } else {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -240,10 +252,11 @@ class CaregiverMedicationsListPageState
   }
 
   // ------------------------------------------------------------------
-  // Edit medication (with all fields)
+  // Show dialog to edit an existing medication (all fields editable).
   // ------------------------------------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> medication) async {
     final formKey = GlobalKey<FormState>();
+    // Pre-populate controllers with existing data
     final nameController = TextEditingController(
       text: medication['medication_name'],
     );
@@ -380,7 +393,7 @@ class CaregiverMedicationsListPageState
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text('Medication updated')));
-          _fetchMedications();
+          _fetchMedications(); // Refresh list
         } else {
           throw Exception(result['message'] ?? 'Update failed');
         }
@@ -394,7 +407,7 @@ class CaregiverMedicationsListPageState
   }
 
   // ------------------------------------------------------------------
-  // Delete medication
+  // Delete medication (with confirmation). Only allowed if not in use.
   // ------------------------------------------------------------------
   Future<void> _confirmDelete(Map<String, dynamic> medication) async {
     final confirm = await showDialog<bool>(
@@ -426,7 +439,7 @@ class CaregiverMedicationsListPageState
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Medication deleted')));
-        _fetchMedications();
+        _fetchMedications(); // Refresh list
       } else {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -454,13 +467,14 @@ class CaregiverMedicationsListPageState
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // Add Button moved to AppBar
+          // Add button in AppBar (opens add medication dialog)
           IconButton(
             icon: const Icon(Icons.add, size: 28),
             onPressed: _showAddMedicationDialog,
           ),
         ],
       ),
+      // (Commented out FAB – now using AppBar action)
       // floatingActionButton: FloatingActionButton(
       //   onPressed: _showAddMedicationDialog,
       //   backgroundColor: AppColors.primaryPurple,
@@ -530,10 +544,12 @@ class CaregiverMedicationsListPageState
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Edit button
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
                             onPressed: () => _showEditDialog(m),
                           ),
+                          // Delete button
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _confirmDelete(m),

@@ -1,4 +1,7 @@
-//medication_history_page.dart
+// medication_history_page.dart – Screen for caregivers to view medication adherence logs
+// and get AI predictions for a sample patient. (This appears to be a caregiver view,
+// though it uses hardcoded patient data for the AI prediction.)
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -13,8 +16,12 @@ class MedicationHistoryScreen extends StatefulWidget {
 }
 
 class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
+  // ⚠️ Hardcoded server IP – change to your actual backend IP or domain.
+  // In production, this should be read from a config file or environment variable.
   final String serverIp = "172.20.10.9";
 
+  /// Fetches all medication logs from the backend's /get_logs endpoint.
+  /// Returns a list of log entries (raw JSON) or throws an exception on failure.
   Future<List<dynamic>> fetchLogs() async {
     final response = await http.get(
       Uri.parse('http://$serverIp:5000/get_logs'),
@@ -33,16 +40,21 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     }
   }
 
+  /// Calls the AI prediction endpoint (/predict) with hardcoded patient data.
+  /// Shows a loading dialog, processes the result, and displays a pop‑up with
+  /// the prediction (probability, warning level, and recommendation).
   Future<void> _askAIDoctor() async {
     final String apiUrl = "http://$serverIp:5000/predict";
+    // ⚠️ Hardcoded patient data – this should be dynamic in a real app.
     final Map<String, dynamic> patientData = {
       "age": 78,
       "day_of_week": "Friday",
       "time_of_day": "Evening",
-      "history": [1, 0, 1],
+      "history": [1, 0, 1], // 1 = taken, 0 = missed (last 3 doses)
     };
 
     try {
+      // Show a loading indicator while the request is in progress.
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -55,12 +67,14 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         body: jsonEncode(patientData),
       );
 
+      // Dismiss the loading dialog.
       if (!context.mounted) return;
       Navigator.pop(context);
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
+        // Show the prediction result in a custom dialog.
         _showResultDialog(
           probability: result['forget_probability'],
           level: result['warning_level'],
@@ -70,6 +84,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         throw Exception("Server error code: ${response.statusCode}");
       }
     } catch (e) {
+      // Handle errors: dismiss loading if still showing, then show a snackbar.
       if (mounted) {
         if (Navigator.canPop(context)) Navigator.pop(context);
         ScaffoldMessenger.of(
@@ -79,6 +94,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     }
   }
 
+  /// Displays an AlertDialog with the AI prediction result.
   void _showResultDialog({
     required double probability,
     required String level,
@@ -131,11 +147,14 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
       body: FutureBuilder<List<dynamic>>(
         future: fetchLogs(),
         builder: (context, snapshot) {
+          // Show loading indicator while fetching.
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
+            // Display error message if the request failed.
             return Center(child: Text('Connection failed: ${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            // Show empty state if no logs are available.
             return const Center(
               child: Text(
                 'No medication records available!',
@@ -145,6 +164,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
           }
 
           final logList = snapshot.data!;
+          // Build a list of cards, each showing a log entry.
           return ListView.builder(
             itemCount: logList.length,
             itemBuilder: (context, index) {
@@ -160,6 +180,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(16),
                   leading: Icon(
+                    // Show check mark for taken (status == 1), cancel for missed.
                     log['status'] == 1 ? Icons.check_circle : Icons.cancel,
                     color: log['status'] == 1
                         ? AppColors.primaryPurple
@@ -189,6 +210,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
           );
         },
       ),
+      // Floating action button to trigger the AI doctor prediction.
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _askAIDoctor,
         backgroundColor: Colors.orange,

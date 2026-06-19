@@ -1,4 +1,8 @@
-//caregiver_patients_list_page.dart
+// caregiver_patients_list_page.dart
+// Displays the list of patients linked to a caregiver, with options to filter,
+// view details, deactivate/reactivate, permanently delete, and link new patients.
+// Also provides an "Add Patient" button to create a new patient account.
+
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'package:flutter/material.dart';
@@ -9,8 +13,10 @@ import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'patient_detail_page.dart';
 import 'add_patient_page.dart';
 
+// Stateful widget for the caregiver's patient list.
 class CaregiverPatientsListPage extends StatefulWidget {
-  final int caregiverId;
+  final int caregiverId; // ID of the logged-in caregiver
+
   const CaregiverPatientsListPage({super.key, required this.caregiverId});
 
   @override
@@ -19,22 +25,29 @@ class CaregiverPatientsListPage extends StatefulWidget {
 }
 
 class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
-  List<Map<String, dynamic>> _patients = [];
-  List<Map<String, dynamic>> _availablePatients = [];
-  int? _selectedPatientId;
-  bool _isLoading = true;
-  bool _isLinking = false;
-  String _statusFilter = 'all'; // 'active', 'inactive', 'all'
+  // Lists of patients
+  List<Map<String, dynamic>> _patients =
+      []; // Patients already linked to this caregiver
+  List<Map<String, dynamic>> _availablePatients =
+      []; // Unlinked patients available to link
+
+  int? _selectedPatientId; // Currently selected patient ID in the dropdown
+  bool _isLoading = true; // Main loading flag
+  bool _isLinking = false; // Flag for the linking operation
+  String _statusFilter =
+      'all'; // Filter for linked patients: 'active', 'inactive', 'all'
   String _error = '';
-  String _availableFilter = 'all'; // 'all', 'active', 'inactive'
-  bool _isLoadingAvailable = false;
+  String _availableFilter =
+      'all'; // Filter for available patients: 'all', 'active', 'inactive'
+  bool _isLoadingAvailable = false; // Loading flag for available patients list
 
   @override
   void initState() {
     super.initState();
-    _fetchPatients();
+    _fetchPatients(); // Load data when the screen is created
   }
 
+  // Shows a confirmation dialog for deactivating a patient (soft delete).
   Future<void> _confirmDelete(int patientId, String patientName) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -58,7 +71,6 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     );
 
     if (confirm == true) {
-      // Show loading indicator (optional)
       setState(() => _isLoading = true);
       final success = await PatientService().deletePatient(patientId);
       setState(() => _isLoading = false);
@@ -82,6 +94,8 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Fetches the list of patients available to be linked to this caregiver,
+  // respecting the current _availableFilter.
   Future<void> _fetchAvailablePatients() async {
     setState(() => _isLoadingAvailable = true);
     final available = await CaregiverService().getAvailablePatients(
@@ -91,10 +105,11 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     setState(() {
       _availablePatients = available;
       _isLoadingAvailable = false;
-      _selectedPatientId = null; // 清空选中
+      _selectedPatientId = null; // Clear any selected ID after refresh
     });
   }
 
+  // Builds the patient avatar CircleAvatar (with photo or initials).
   Widget _buildPatientAvatar(Map<String, dynamic> patient) {
     final photoUrl = patient['profile_photo'];
     if (photoUrl != null && photoUrl.toString().isNotEmpty) {
@@ -108,6 +123,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
             debugPrint('Failed to load image: $imageUrl'),
       );
     }
+    // Fallback: display initials.
     return CircleAvatar(
       radius: 24,
       backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.1),
@@ -122,6 +138,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     );
   }
 
+  // Shows confirmation dialog and calls reactivation API.
   Future<void> _confirmReactivate(int patientId, String patientName) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -149,7 +166,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
       setState(() => _isLoading = false);
 
       if (success) {
-        await _fetchPatients(); // refresh list
+        await _fetchPatients(); // Refresh the list
         if (mounted) {
           ScaffoldMessenger.of(
             context,
@@ -168,6 +185,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Fetches the list of linked patients for this caregiver with the current filter.
   Future<void> _fetchPatients({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -176,7 +194,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     try {
       final patients = await CaregiverService().getCaregiverPatients(
         widget.caregiverId,
-        show: _statusFilter, // <-- use the filter
+        show: _statusFilter,
       );
       final available = await CaregiverService().getAvailablePatients(
         widget.caregiverId,
@@ -195,6 +213,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Links the selected patient to this caregiver.
   Future<void> _linkPatient() async {
     if (_selectedPatientId == null) return;
     setState(() => _isLinking = true);
@@ -212,7 +231,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
             ),
           );
         }
-        // 刷新两个列表：已关联患者列表 和 可用患者列表
+        // Refresh both lists after linking.
         await _fetchPatients();
         await _fetchAvailablePatients();
       } else {
@@ -229,6 +248,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Helper to compute age from date of birth.
   String _getAge(String? dob) {
     if (dob == null || dob.isEmpty) return 'N/A';
     try {
@@ -245,6 +265,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Shows confirmation for deactivating (soft-deleting) a patient.
   Future<void> _confirmDeactivate(int patientId, String patientName) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -294,6 +315,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Shows confirmation for permanent (hard) deletion of a patient.
   Future<void> _confirmHardDelete(int patientId, String patientName) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -347,6 +369,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     }
   }
 
+  // Builds the dropdown for linking a new patient (with status filter and link button).
   Widget _buildLinkPatientDropdown() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -369,7 +392,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
               ),
             ),
             const SizedBox(height: 12),
-            // 添加状态筛选控件
+            // Status filter for available patients (All, Active, Inactive)
             Row(
               children: [
                 const Text('Show: ', style: TextStyle(fontSize: 14)),
@@ -386,7 +409,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                       setState(() {
                         _availableFilter = newSelection.first;
                       });
-                      _fetchAvailablePatients(); // 根据新筛选条件刷新列表
+                      _fetchAvailablePatients(); // Refresh with new filter
                     },
                     style: ButtonStyle(
                       backgroundColor: WidgetStateProperty.resolveWith((
@@ -411,7 +434,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
               ],
             ),
             const SizedBox(height: 12),
-            // 患者下拉框（根据 _availableFilter 已过滤）
+            // Patient dropdown (list already filtered)
             if (_isLoadingAvailable)
               const Center(child: CircularProgressIndicator())
             else if (_availablePatients.isEmpty)
@@ -472,6 +495,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Link button
                   ElevatedButton(
                     onPressed: _isLinking || _selectedPatientId == null
                         ? null
@@ -506,6 +530,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     );
   }
 
+  // Builds the header for the linked patients list (title + filter popup).
   Widget _buildPatientsListHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
@@ -520,6 +545,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
               color: AppColors.primaryPurple,
             ),
           ),
+          // Filter popup menu for the linked patients list.
           PopupMenuButton<String>(
             icon: Icon(
               Icons.filter_list,
@@ -543,28 +569,8 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
     );
   }
 
-  // Widget _buildFilterChip(String label, String value) {
-  //   final isSelected = _statusFilter == value;
-  //   return ChoiceChip(
-  //     label: Text(label),
-  //     selected: isSelected,
-  //     onSelected: (selected) {
-  //       if (selected) {
-  //         setState(() => _statusFilter = value);
-  //         _fetchPatients();
-  //       }
-  //     },
-  //     selectedColor: AppColors.primaryPurple.withOpacity(0.2),
-  //     labelStyle: TextStyle(
-  //       color: isSelected ? AppColors.primaryPurple : Colors.grey,
-  //       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-  //     ),
-  //     backgroundColor: Colors.white,
-  //     side: BorderSide(
-  //       color: isSelected ? AppColors.primaryPurple : Colors.grey.shade300,
-  //     ),
-  //   );
-  // }
+  // (Commented out) Alternative filter chip implementation – not used.
+  // Widget _buildFilterChip(String label, String value) { ... }
 
   @override
   Widget build(BuildContext context) {
@@ -584,6 +590,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // Add Patient button – navigates to AddPatientPage.
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () async {
@@ -637,7 +644,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                               itemCount: _patients.length,
                               itemBuilder: (_, i) {
                                 final p = _patients[i];
-                                // Default to 1 (active) if is_active is missing
+                                // Determine active status (defaults to active if missing)
                                 final bool isActive =
                                     (p['is_active'] ?? 1) == 1;
 
@@ -665,6 +672,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
+                                        // Active/Inactive badge
                                         if (isActive)
                                           Container(
                                             padding: const EdgeInsets.symmetric(
@@ -714,6 +722,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                                     subtitle: Text(
                                       'Age: ${_getAge(p['date_of_birth'])}',
                                     ),
+                                    // Three-dot popup menu: Deactivate/Reactivate/Delete Permanently
                                     trailing: PopupMenuButton<String>(
                                       icon: const Icon(
                                         Icons.more_vert,
@@ -794,6 +803,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                                       },
                                     ),
                                     onTap: () async {
+                                      // Navigate to patient detail page.
                                       await Navigator.push(
                                         context,
                                         MaterialPageRoute(
@@ -804,7 +814,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                                           ),
                                         ),
                                       );
-                                      _fetchPatients();
+                                      _fetchPatients(); // Refresh after returning.
                                     },
                                   ),
                                 );

@@ -1,4 +1,7 @@
-// lib/services/reminder_service.dart
+// reminder_service.dart – Handles all medication reminders and stock alerts.
+// This service uses flutter_local_notifications and Workmanager to schedule
+// and deliver exact‑time alarms, including "frenzy" pre‑alerts (3, 2, 1 minutes before).
+// It also manages caregiver stock notifications and in‑app notification creation.
 
 import 'dart:async';
 
@@ -15,39 +18,68 @@ import 'package:my_medical_kit_app/services/api/medication_service.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'app_navigator.dart';
 
+// ----------------------------------------------------------------------
+// Background entry points (required for Workmanager and notification taps)
+// ----------------------------------------------------------------------
+
+/// The entry point for Workmanager background tasks.
+/// This function is invoked when a scheduled background task runs.
 @pragma('vm:entry-point')
 void reminderCallbackDispatcher() {
   ReminderService.callbackDispatcher();
 }
 
+/// The entry point for background notification taps (when the app is closed).
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse notificationResponse) {}
 
+// ----------------------------------------------------------------------
+// ReminderService – main class that encapsulates all reminder logic
+// ----------------------------------------------------------------------
 class ReminderService {
+  // Workmanager task name
   static const String reminderTask = 'medicationReminderTask';
+
+  // Notification payloads to identify which screen to open on tap
   static const String _payloadSmartReminder = 'smart_reminder';
   static const String _payloadCaregiverStock = 'caregiver_stock_alert';
+
+  // Notification channel details for medication reminders
   static const String _channelId = 'medication_channel';
   static const String _channelName = 'Medication Reminders';
   static const String _channelDescription = 'Reminders to take your medicine';
+
+  // Separate channel for caregiver stock alerts
   static const String _stockChannelId = 'caregiver_stock_channel';
   static const String _stockChannelName = 'Caregiver Stock Alerts';
   static const String _stockChannelDescription =
       'Low stock and out of stock medicine alerts for caregivers';
+
+  // SharedPreferences key to track if we've asked for exact alarm permission
   static const String _askedExactAlarmPermissionKey =
       'asked_exact_alarm_permission';
 
+  // Instance of the notification plugin
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  // Flags to ensure one‑time initialization
   static bool _notificationsInitialized = false;
   static bool _timeZoneInitialized = false;
 
+  // ------------------------------------------------------------------
+  // Public API methods
+  // ------------------------------------------------------------------
+
+  /// Cancel all pending notifications (used when user logs out or switches roles)
   static Future<void> cancelAllNotifications() async {
     await _initializeNotifications();
     await _notifications.cancelAll();
   }
 
+  /// Initialize the reminder service – sets up timezone, notification plugin,
+  /// and schedules reminders based on the logged‑in role.
+  /// Also cancels any existing reminders for caregivers (they don't need patient reminders).
   static Future<void> init() async {
     await _initializeTimeZone();
     await _initializeNotifications();
@@ -57,11 +89,10 @@ class ReminderService {
     final patientId = prefs.getInt('patient_id');
     final caregiverId = prefs.getInt('caregiver_id');
 
-    // Cancel all pending notifications for caregivers
+    // Caregivers should NOT receive patient medication reminders.
+    // Cancel all pending notifications and clear the scheduled IDs list.
     if (role == 'caregiver') {
-      // Cancel all notifications scheduled by this app
       await _notifications.cancelAll();
-      // Clear stored scheduled IDs
       if (caregiverId != null) {
         final scheduledIdsKey = _scheduledIdsKey(caregiverId);
         await prefs.remove(scheduledIdsKey);
@@ -70,14 +101,15 @@ class ReminderService {
       return;
     }
 
-    // For patients (or undefined role, fallback to patient logic)
+    // For patients (or if role is not set, default to patient)
     if ((role == null || role == 'patient') &&
         patientId != null &&
         patientId > 0) {
+      // Schedule reminders asynchronously (do not await to avoid blocking init)
       unawaited(scheduleUpcomingMedicationReminders(patientId));
     }
 
-    // Caregiver stock alerts – remain untouched
+    // Caregiver stock alerts – run for caregivers (or if role is null, we also run)
     if ((role == null || role == 'caregiver') &&
         caregiverId != null &&
         caregiverId > 0) {
@@ -85,6 +117,12 @@ class ReminderService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Initialization helpers
+  // ------------------------------------------------------------------
+
+  /// Set up timezone database and set local timezone to Asia/Kuala_Lumpur.
+  /// (Change to your local timezone if needed)
   static Future<void> _initializeTimeZone() async {
     if (_timeZoneInitialized) return;
     tz_data.initializeTimeZones();
@@ -92,6 +130,7 @@ class ReminderService {
     _timeZoneInitialized = true;
   }
 
+  /// Configure the Flutter Local Notifications plugin with Android and iOS settings.
   static Future<void> _initializeNotifications() async {
     if (_notificationsInitialized) return;
 
@@ -108,12 +147,14 @@ class ReminderService {
       iOS: ios,
     );
 
+    // Initialize with callbacks for foreground and background tap handling
     await _notifications.initialize(
       settings,
       onDidReceiveNotificationResponse: _handleNotificationResponse,
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
+    // Check if the app was launched from a notification tap and handle it
     final launchDetails = await _notifications
         .getNotificationAppLaunchDetails();
     final response = launchDetails?.notificationResponse;
@@ -125,6 +166,11 @@ class ReminderService {
     _notificationsInitialized = true;
   }
 
+  // ------------------------------------------------------------------
+  // Permission request
+  // ------------------------------------------------------------------
+
+  /// Request notification permissions, and optionally exact alarm permission (Android).
   static Future<bool> requestNotificationPermissions({
     bool requestExactAlarms = false,
   }) async {
@@ -151,6 +197,11 @@ class ReminderService {
     return granted;
   }
 
+  // ------------------------------------------------------------------
+  // Notification tap handling (in‑app navigation)
+  // ------------------------------------------------------------------
+
+  /// Route the user to the correct screen based on the notification payload.
   static void _handleNotificationResponse(NotificationResponse response) {
     if (response.payload == _payloadSmartReminder) {
       unawaited(_openSmartReminderWhenReady());
@@ -162,6 +213,7 @@ class ReminderService {
     }
   }
 
+  /// Retry opening the Smart Reminder page (patient) until the app is ready.
   static Future<void> _openSmartReminderWhenReady() async {
     for (int i = 0; i < 12; i++) {
       if (openSmartReminderPage()) return;
@@ -169,6 +221,7 @@ class ReminderService {
     }
   }
 
+  /// Retry opening the Caregiver Notifications page.
   static Future<void> _openCaregiverNotificationsWhenReady() async {
     for (int i = 0; i < 12; i++) {
       if (openCaregiverNotificationsPage()) return;
@@ -176,6 +229,12 @@ class ReminderService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Workmanager background task entry point
+  // ------------------------------------------------------------------
+
+  /// Called by the Workmanager when a scheduled background task runs.
+  /// It initialises Flutter bindings and calls checkAndSendReminders().
   @pragma('vm:entry-point')
   static void callbackDispatcher() {
     Workmanager().executeTask((taskName, inputData) async {
@@ -190,6 +249,14 @@ class ReminderService {
     });
   }
 
+  // ------------------------------------------------------------------
+  // Core reminder logic – checks due doses and sends notifications
+  // ------------------------------------------------------------------
+
+  /// Called by the background task or manually. It checks for due doses
+  /// within a 20‑minute window (5 minutes before, 15 minutes after).
+  /// It sends system notifications for doses that are about to be due
+  /// and creates in‑app notifications for each dose (deduplicated with SharedPreferences).
   static Future<void> checkAndSendReminders({
     List<Prescription>? medications,
   }) async {
@@ -199,18 +266,21 @@ class ReminderService {
     final patientId = prefs.getInt('patient_id');
     if (patientId == null || patientId <= 0) return;
 
+    // Fetch medications if not provided
     final prescriptions =
         medications ??
         await MedicationService().getPatientMedications(patientId);
     final now = DateTime.now();
 
-    // 只检查未来 15 分钟内或者刚刚错过的药物
+    // Window: 5 minutes before to 15 minutes after now
     final windowStart = now.subtract(const Duration(minutes: 5));
     final windowEnd = now.add(const Duration(minutes: 15));
 
     for (final p in prescriptions) {
+      // Get all scheduled dose times that fall within the window
       final dueTimes = _doseTimesBetween(p, windowStart, windowEnd);
       for (final scheduledAt in dueTimes) {
+        // Keys to track whether we've already recorded or shown a notification
         final recordedKey = _recordedCacheKey(p.prescriptionId, scheduledAt);
         final systemShownKey = _systemShownCacheKey(
           p.prescriptionId,
@@ -220,7 +290,8 @@ class ReminderService {
         final alreadyRecorded = prefs.getBool(recordedKey) ?? false;
         final alreadyShown = prefs.getBool(systemShownKey) ?? false;
 
-        // 如果 WorkManager 抓到了，并且系统还没弹正点通知，补弹一次
+        // If the scheduled time is within the past minute and we haven't shown a
+        // system notification yet, send one now (this is a "catch‑up" notification).
         if (!alreadyShown &&
             scheduledAt.isBefore(now.add(const Duration(minutes: 1)))) {
           await _showNotification(
@@ -231,6 +302,8 @@ class ReminderService {
           await prefs.setBool(systemShownKey, true);
         }
 
+        // Create an in‑app notification (stored in the database) for this dose,
+        // but only once per scheduled time.
         if (!alreadyRecorded) {
           await _createInAppNotificationOnce(
             prefs: prefs,
@@ -243,6 +316,12 @@ class ReminderService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Caregiver stock alert checks
+  // ------------------------------------------------------------------
+
+  /// Fetch stock alerts for a caregiver and send a push notification
+  /// for each unread, non‑OK alert that hasn't been shown before.
   static Future<void> checkAndSendCaregiverStockAlerts({
     int? caregiverId,
     List<Map<String, dynamic>>? notifications,
@@ -275,6 +354,13 @@ class ReminderService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Scheduling upcoming reminders (for patient)
+  // ------------------------------------------------------------------
+
+  /// Schedule exact‑time notifications for all upcoming doses over the next N days.
+  /// Also schedules "frenzy" pre‑alerts 3, 2, and 1 minute before each dose.
+  /// Returns the number of scheduled notifications.
   static Future<int> scheduleUpcomingMedicationReminders(
     int patientId, {
     List<Prescription>? medications,
@@ -290,6 +376,8 @@ class ReminderService {
 
     final prefs = await SharedPreferences.getInstance();
     final scheduledIdsKey = _scheduledIdsKey(patientId);
+
+    // Cancel all previously scheduled notifications for this patient.
     final previousIds = prefs.getStringList(scheduledIdsKey) ?? <String>[];
     for (final idText in previousIds) {
       final id = int.tryParse(idText);
@@ -305,10 +393,11 @@ class ReminderService {
     final scheduledIds = <String>[];
 
     for (final med in meds) {
+      // Get all upcoming dose times within the next `daysAhead` days
       final times = _upcomingDoseTimesFor(med, now, daysAhead: daysAhead);
 
       for (final scheduledAt in times) {
-        // 1. 安排准确时间的通知（正点）
+        // 1. Schedule the exact‑time notification (at the scheduled minute)
         final exactId = _notificationIdFor(med.prescriptionId, scheduledAt);
         final exactScheduled = tz.TZDateTime.from(scheduledAt, tz.local);
         final exactScheduledOk = await _scheduleZonedNotification(
@@ -319,12 +408,15 @@ class ReminderService {
         );
         if (exactScheduledOk) {
           scheduledIds.add(exactId.toString());
+          // Mark that we've locally scheduled this dose (to avoid re‑scheduling on reboot)
           await prefs.setBool(
             _localScheduledCacheKey(med.prescriptionId, scheduledAt),
             true,
           );
         }
 
+        // If the dose is already due (within 5 min before to 15 min after),
+        // create the in‑app notification now.
         if (_isScheduledTimeActive(scheduledAt, now)) {
           await _createInAppNotificationOnce(
             prefs: prefs,
@@ -334,7 +426,7 @@ class ReminderService {
           );
         }
 
-        // 🚀 2. 夺命连环 Call（提前 3、2、1 分钟狂 Push）
+        // 2. Schedule "frenzy" pre‑alerts: 3, 2, and 1 minute before the dose.
         for (int minutesBefore in [3, 2, 1]) {
           final advanceTime = scheduledAt.subtract(
             Duration(minutes: minutesBefore),
@@ -344,7 +436,7 @@ class ReminderService {
             final advId = _notificationIdFor(med.prescriptionId, advanceTime);
             final advScheduled = tz.TZDateTime.from(advanceTime, tz.local);
 
-            // 不同的警告标题
+            // Different title for each urgency level
             String pushTitle = minutesBefore == 1
                 ? '🚨 Get Ready! 1 min left for ${med.medicationName}!'
                 : '⚠️ Upcoming Dose in $minutesBefore mins!';
@@ -363,10 +455,17 @@ class ReminderService {
       }
     }
 
+    // Save the list of scheduled notification IDs so we can cancel them later.
     await prefs.setStringList(scheduledIdsKey, scheduledIds);
     return scheduledIds.length;
   }
 
+  // ------------------------------------------------------------------
+  // Low‑level scheduling helper
+  // ------------------------------------------------------------------
+
+  /// Schedule a notification using `zonedSchedule` with exact time.
+  /// Falls back to a non‑exact mode if exact scheduling fails.
   static Future<bool> _scheduleZonedNotification({
     required int id,
     required String title,
@@ -392,6 +491,11 @@ class ReminderService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Show system notifications (pop‑up)
+  // ------------------------------------------------------------------
+
+  /// Show a medication reminder notification (pop‑up).
   static Future<void> _showNotification(
     String medName,
     double dosage, {
@@ -408,6 +512,7 @@ class ReminderService {
     );
   }
 
+  /// Show a caregiver stock alert notification.
   static Future<void> _showCaregiverStockNotification(
     Map<String, dynamic> alert,
   ) async {
@@ -435,6 +540,11 @@ class ReminderService {
     );
   }
 
+  // ------------------------------------------------------------------
+  // Test / debug method
+  // ------------------------------------------------------------------
+
+  /// For testing – trigger a dual notification (system pop‑up + in‑app).
   static Future<void> triggerTestDualNotification(BuildContext context) async {
     await _initializeNotifications();
 
@@ -464,6 +574,11 @@ class ReminderService {
     );
   }
 
+  // ------------------------------------------------------------------
+  // Time‑range calculation helpers
+  // ------------------------------------------------------------------
+
+  /// Get all scheduled dose times for a prescription that fall between `start` and `end`.
   static List<DateTime> _doseTimesBetween(
     Prescription prescription,
     DateTime start,
@@ -476,6 +591,7 @@ class ReminderService {
     ).where((time) => !time.isAfter(end)).toList();
   }
 
+  /// Check if a medication has a dose scheduled within a 20‑minute window around `now`.
   static bool isMedicationActiveNow(
     Prescription prescription, {
     DateTime? now,
@@ -487,6 +603,7 @@ class ReminderService {
     return _doseTimesBetween(prescription, windowStart, windowEnd).isNotEmpty;
   }
 
+  /// Determine if a scheduled time is within 5 min before and 15 min after `now`.
   static bool _isScheduledTimeActive(DateTime scheduledAt, DateTime now) {
     final windowStart = now.subtract(const Duration(minutes: 5));
     final windowEnd = now.add(const Duration(minutes: 15));
@@ -494,6 +611,8 @@ class ReminderService {
         !scheduledAt.isAfter(windowEnd);
   }
 
+  /// Generate all upcoming dose times for a prescription starting from `from`
+  /// and looking ahead `daysAhead` days. Respects start/end dates.
   static List<DateTime> _upcomingDoseTimesFor(
     Prescription prescription,
     DateTime from, {
@@ -527,7 +646,7 @@ class ReminderService {
         if (parts.length >= 2) {
           int hour = int.tryParse(parts[0]) ?? 8;
           int minute = int.tryParse(parts[1]) ?? 0;
-          
+
           final candidate = DateTime(
             day.year,
             day.month,
@@ -535,9 +654,12 @@ class ReminderService {
             hour,
             minute,
           );
-          
+
+          // Skip if the candidate is before the start time we're looking from
           if (!candidate.isAfter(from)) continue;
+          // Skip if before prescription start date
           if (candidate.isBefore(prescriptionStart)) continue;
+          // Skip if after prescription end date
           if (prescriptionEnd != null && candidate.isAfter(prescriptionEnd)) {
             continue;
           }
@@ -549,11 +671,17 @@ class ReminderService {
     return result;
   }
 
+  // ------------------------------------------------------------------
+  // Notification ID generators (to avoid collisions)
+  // ------------------------------------------------------------------
+
+  /// Generate a unique notification ID for a specific dose time.
   static int _notificationIdFor(int prescriptionId, DateTime scheduledAt) {
     final minuteBucket = scheduledAt.millisecondsSinceEpoch ~/ 60000;
     return ((prescriptionId * 1000003) + minuteBucket) & 0x7fffffff;
   }
 
+  /// Generate a unique ID for a caregiver stock notification.
   static int _caregiverStockNotificationId(Map<String, dynamic> alert) {
     final notificationId = _asInt(alert['notification_id']);
     if (notificationId != null) {
@@ -566,6 +694,10 @@ class ReminderService {
     return ((medicationId * 1000003) + (patientId * 1009) + deviceId) &
         0x7fffffff;
   }
+
+  // ------------------------------------------------------------------
+  // Cache key helpers for SharedPreferences
+  // ------------------------------------------------------------------
 
   static String _scheduledIdsKey(int patientId) =>
       'scheduled_reminder_ids_$patientId';
@@ -597,10 +729,15 @@ class ReminderService {
     return 'caregiver_stock_shown_${type}_${medicationId}_${patientId}_${deviceId}_$currentInventory';
   }
 
+  /// Convert a DateTime to a string key like "20260219_1430".
   static String _scheduleKey(DateTime scheduledAt) {
     String two(int value) => value.toString().padLeft(2, '0');
     return '${scheduledAt.year}${two(scheduledAt.month)}${two(scheduledAt.day)}_${two(scheduledAt.hour)}${two(scheduledAt.minute)}';
   }
+
+  // ------------------------------------------------------------------
+  // Utility helpers
+  // ------------------------------------------------------------------
 
   static bool _isStockAlertType(String type) {
     return type == 'LOW_STOCK' || type == 'OUT_OF_STOCK';
@@ -617,6 +754,13 @@ class ReminderService {
     return int.tryParse(value.toString());
   }
 
+  // ------------------------------------------------------------------
+  // Create in‑app notification (stored in DB) – currently disabled/commented
+  // ------------------------------------------------------------------
+
+  /// Create an in‑app notification for a specific dose, but only once.
+  /// The actual DB insertion is commented out (as shown below) to avoid
+  /// duplicate records; the cache key is still set to prevent re‑attempts.
   static Future<void> _createInAppNotificationOnce({
     required SharedPreferences prefs,
     required int patientId,
@@ -629,22 +773,32 @@ class ReminderService {
     );
     if (prefs.getBool(recordedKey) ?? false) return;
 
+    // (Optional) Uncomment below to actually save to DB:
     // final saved = await PatientService().createNotification(
     //   patientId: patientId,
     //   title: 'Medication Reminder',
     //   message: _inAppReminderMessage(prescription, scheduledAt),
     //   type: 'REMINDER',
     // );
-
     // if (saved) {
     //   await prefs.setBool(recordedKey, true);
     // }
+
+    // For now, just mark as recorded without saving to DB.
     await prefs.setBool(recordedKey, true);
   }
+
+  // ------------------------------------------------------------------
+  // Message generators
+  // ------------------------------------------------------------------
 
   static String _systemReminderMessage(String medName, double dosage) {
     return 'Take ${dosage.toStringAsFixed(0)} tablet(s) of $medName.\nPress the button on your medical kit.';
   }
+
+  // ------------------------------------------------------------------
+  // Notification channel configurations
+  // ------------------------------------------------------------------
 
   static const NotificationDetails _notificationDetails = NotificationDetails(
     android: AndroidNotificationDetails(

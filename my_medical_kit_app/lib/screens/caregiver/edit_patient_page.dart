@@ -1,4 +1,8 @@
 //edit_patient_page.dart
+// edit_patient_page.dart
+// Allows a caregiver to edit a patient's profile information (name, email, phone, address,
+// gender, date of birth, medical notes). Also supports uploading a profile photo.
+// The updated data is sent back to the previous screen (PatientDetailPage) via Navigator.pop.
 
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
@@ -8,7 +12,9 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 
 class EditPatientPage extends StatefulWidget {
-  final Map<String, dynamic> patient;
+  final Map<String, dynamic>
+  patient; // The patient data passed from the detail page
+
   const EditPatientPage({super.key, required this.patient});
 
   @override
@@ -16,8 +22,9 @@ class EditPatientPage extends StatefulWidget {
 }
 
 class _EditPatientPageState extends State<EditPatientPage> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>(); // Form validation key
 
+  // Controllers for all editable fields
   late TextEditingController _fullNameController;
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
@@ -25,16 +32,17 @@ class _EditPatientPageState extends State<EditPatientPage> {
   late TextEditingController _medicalNotesController;
   late TextEditingController _dobController;
 
-  String? _selectedGender;
-  DateTime? _selectedDob;
-  String? _photoPath;
-  bool _isSaving = false;
+  String? _selectedGender; // Currently selected gender
+  DateTime? _selectedDob; // Selected date of birth
+  String? _photoPath; // Path of the newly picked photo (if any)
+  bool _isSaving = false; // Prevent double submission
 
-  final List<String> _genders = ['Male', 'Female'];
+  final List<String> _genders = ['Male', 'Female']; // Gender options
 
   @override
   void initState() {
     super.initState();
+    // Initialise controllers with existing patient data
     final p = widget.patient;
     _fullNameController = TextEditingController(text: p['full_name'] ?? '');
     _emailController = TextEditingController(text: p['email'] ?? '');
@@ -44,6 +52,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
     _medicalNotesController = TextEditingController(
       text: p['medical_notes'] ?? '',
     );
+    // Parse and format date of birth if present
     if (p['date_of_birth'] != null && p['date_of_birth'].isNotEmpty) {
       try {
         _selectedDob = DateTime.parse(p['date_of_birth']);
@@ -58,9 +67,11 @@ class _EditPatientPageState extends State<EditPatientPage> {
     }
   }
 
+  // Formats a DateTime to YYYY-MM-DD (server expects this format)
   String _formatDate(DateTime date) =>
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+  // Opens a date picker for the date of birth.
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -78,17 +89,19 @@ class _EditPatientPageState extends State<EditPatientPage> {
     }
   }
 
+  // Opens the image picker to select a profile photo from the gallery.
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) setState(() => _photoPath = pickedFile.path);
   }
 
-  // Inside _EditPatientPageState
+  // Saves the updated patient data to the server via PatientService.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
+    // Build the form data map
     final formData = {
       'full_name': _fullNameController.text.trim(),
       'email': _emailController.text.trim(),
@@ -99,6 +112,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
       'medical_notes': _medicalNotesController.text.trim(),
     };
 
+    // Call the API to update the patient with the photo if picked.
     final result = await PatientService().updatePatient(
       widget.patient['patient_id'],
       formData,
@@ -111,7 +125,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
           const SnackBar(content: Text('Patient updated successfully')),
         );
 
-        // Create the updated map to send back to the details page
+        // Create an updated map to send back to the detail page.
         Map<String, dynamic> updatedData = Map<String, dynamic>.from(
           widget.patient,
         );
@@ -123,11 +137,12 @@ class _EditPatientPageState extends State<EditPatientPage> {
         updatedData['date_of_birth'] = formData['date_of_birth'];
         updatedData['medical_notes'] = formData['medical_notes'];
 
+        // If a new photo URL was returned, update it.
         if (result['photo_url'] != null) {
           updatedData['profile_photo'] = result['photo_url'];
         }
 
-        // Pop and return the fresh data
+        // Pop and return the fresh data so the detail page can update.
         Navigator.pop(context, updatedData);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +156,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // 👈 add this
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           'Edit Patient',
@@ -158,7 +173,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Profile photo section
+              // Profile photo section with camera icon (tap to pick image)
               Center(
                 child: Container(
                   padding: const EdgeInsets.all(4),
@@ -173,69 +188,106 @@ class _EditPatientPageState extends State<EditPatientPage> {
                       ),
                     ],
                   ),
-                  child: CircleAvatar(
-                    radius: 55,
-                    backgroundColor: AppColors.primaryPurple.withValues(
-                      alpha: 0.05,
-                    ),
-                    backgroundImage:
-                        widget.patient['profile_photo'] != null &&
-                            widget.patient['profile_photo'].isNotEmpty
-                        ? NetworkImage(
-                            _buildImageUrl(widget.patient['profile_photo']),
-                          )
-                        : null,
-                    child:
-                        (widget.patient['profile_photo'] == null ||
-                            widget.patient['profile_photo'].isEmpty)
-                        ? Text(
-                            widget.patient['full_name']
-                                    ?.substring(0, 1)
-                                    .toUpperCase() ??
-                                '?',
-                            style: const TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryPurple,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 55,
+                        backgroundColor: AppColors.primaryPurple.withValues(
+                          alpha: 0.05,
+                        ),
+                        backgroundImage:
+                            widget.patient['profile_photo'] != null &&
+                                widget.patient['profile_photo'].isNotEmpty
+                            ? NetworkImage(
+                                _buildImageUrl(widget.patient['profile_photo']),
+                              )
+                            : null,
+                        child:
+                            (widget.patient['profile_photo'] == null ||
+                                widget.patient['profile_photo'].isEmpty)
+                            ? Text(
+                                widget.patient['full_name']
+                                        ?.substring(0, 1)
+                                        .toUpperCase() ??
+                                    '?',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryPurple,
+                                ),
+                              )
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: _pickImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 8,
+                                ),
+                              ],
                             ),
-                          )
-                        : null,
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              color: AppColors.primaryPurple,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Form fields in cards
+              // --- Input fields wrapped in styled cards ---
+
+              // Full Name
               _buildInputCard(
                 'Full Name',
                 _fullNameController,
                 Icons.person,
                 validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
+              // Email
               _buildInputCard(
                 'Email',
                 _emailController,
                 Icons.email,
                 keyboardType: TextInputType.emailAddress,
               ),
+              // Phone
               _buildInputCard(
                 'Phone',
                 _phoneController,
                 Icons.phone,
                 keyboardType: TextInputType.phone,
               ),
+              // Address
               _buildInputCard('Address', _addressController, Icons.location_on),
+              // Gender dropdown
               _buildDropdownCard(
                 'Gender',
                 _selectedGender,
                 _genders,
                 (val) => setState(() => _selectedGender = val),
               ),
+              // Date of Birth (with date picker)
               _buildDateCard(
                 'Date of Birth',
                 _dobController,
                 () => _pickDate(),
               ),
+              // Medical Notes (multi-line)
               _buildInputCard(
                 'Medical Notes',
                 _medicalNotesController,
@@ -245,10 +297,10 @@ class _EditPatientPageState extends State<EditPatientPage> {
 
               const SizedBox(height: 32),
 
-              // 👇 THE NEW SOLID DARK PURPLE BUTTON 👇
+              // Save button (solid dark purple)
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.primaryPurple, // Solid Dark Purple
+                  color: AppColors.primaryPurple,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
@@ -303,6 +355,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
     );
   }
 
+  // Helper to build a text input field card.
   Widget _buildInputCard(
     String label,
     TextEditingController controller,
@@ -360,6 +413,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
     );
   }
 
+  // Helper to build a dropdown field card.
   Widget _buildDropdownCard(
     String label,
     String? value,
@@ -423,6 +477,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
     );
   }
 
+  // Helper to build a date picker field card.
   Widget _buildDateCard(
     String label,
     TextEditingController controller,
@@ -479,6 +534,7 @@ class _EditPatientPageState extends State<EditPatientPage> {
     );
   }
 
+  // Builds a full URL for a profile photo (prepends base URL if relative).
   String _buildImageUrl(String url) => url.startsWith('http')
       ? url
       : '${ApiClient.baseUrl}${url.startsWith('/') ? '' : '/'}$url';

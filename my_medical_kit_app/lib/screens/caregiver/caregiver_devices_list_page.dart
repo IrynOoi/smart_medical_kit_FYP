@@ -1,11 +1,20 @@
-//caregiver_devices_list_page.dart
+// caregiver_devices_list_page.dart
+// Displays a list of all hardware devices (IoT pill dispensers) registered in the system.
+// Allows caregivers to:
+//   - Register a new device (with auto-formatting of serial numbers).
+//   - Edit a device's serial number.
+//   - Delete a device (unlinks it from any medications/patients).
+// Shows battery level, online/offline status (based on last known IP), and low-battery warnings.
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 class CaregiverDevicesListPage extends StatefulWidget {
-  final int caregiverId;
+  final int
+  caregiverId; // Currently logged-in caregiver's ID (not used in this page, but kept for future use)
+
   const CaregiverDevicesListPage({super.key, required this.caregiverId});
 
   @override
@@ -14,17 +23,18 @@ class CaregiverDevicesListPage extends StatefulWidget {
 }
 
 class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
-  List<Map<String, dynamic>> _devices = [];
+  List<Map<String, dynamic>> _devices = []; // List of device maps from API
   bool _isLoading = true;
   String _error = '';
 
   @override
   void initState() {
     super.initState();
-    _fetchDevices();
+    _fetchDevices(); // Load devices when the screen is first created.
   }
 
-  // Fetch purely hardware devices from the backend
+  // Fetches all devices from the backend via the /devices endpoint.
+  // If [showLoading] is true, shows the loading indicator; otherwise refreshes silently.
   Future<void> _fetchDevices({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -57,7 +67,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   Future<void> _showAddDeviceDialog() async {
     final serialController = TextEditingController();
 
-    // Auto-prepend 'DISP-' for pure numbers
+    // Auto-prepend 'DISP-' for pure numbers (e.g., user types "3", it becomes "DISP-3")
     serialController.addListener(() {
       final text = serialController.text;
       if (text.isNotEmpty && RegExp(r'^\d+$').hasMatch(text)) {
@@ -133,6 +143,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
+        // Send a POST request to register the device with an initial battery level of 100.
         final response = await ApiClient.post(
           '/iot_device',
           body: {'device_serial': serialController.text.trim(), 'battery': 100},
@@ -143,7 +154,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Device registered successfully!')),
           );
-          _fetchDevices();
+          _fetchDevices(); // Refresh the list after adding.
         } else {
           throw Exception(json['message'] ?? 'Failed to add device');
         }
@@ -157,7 +168,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   }
 
   // ------------------------------------------------------------------
-  // Edit device serial ONLY
+  // Edit device serial ONLY (no other fields editable here)
   // ------------------------------------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> device) async {
     final controller = TextEditingController(text: device['device_serial']);
@@ -200,6 +211,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
+        // Send a PUT request to update only the device serial.
         final response = await ApiClient.put(
           '/iot_device/${device['device_id']}',
           body: {'device_serial': controller.text.trim()},
@@ -210,7 +222,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Device updated successfully')),
           );
-          _fetchDevices();
+          _fetchDevices(); // Refresh the list after editing.
         } else {
           throw Exception(json['message'] ?? 'Update failed');
         }
@@ -224,7 +236,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   }
 
   // ------------------------------------------------------------------
-  // Delete device
+  // Delete device (with confirmation) – unlinks from medications/patients.
   // ------------------------------------------------------------------
   Future<void> _confirmDelete(Map<String, dynamic> device) async {
     final confirm = await showDialog<bool>(
@@ -263,7 +275,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text('Device deleted')));
-          _fetchDevices();
+          _fetchDevices(); // Refresh the list after deletion.
         } else {
           throw Exception(json['message'] ?? 'Delete failed');
         }
@@ -292,6 +304,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // Add device button (opens registration dialog)
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _showAddDeviceDialog,
@@ -331,6 +344,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                   final d = _devices[i];
                   final battery = d['battery_level'] ?? 100;
                   final isLowBattery = battery < 20;
+                  // If the device has a last_known_ip, consider it online.
                   final isOnline = d['last_known_ip'] != null;
 
                   return Card(
@@ -379,12 +393,12 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Edit button: opens edit serial dialog.
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _showEditDialog(
-                              d,
-                            ), // Now triggers purely Serial edit
+                            onPressed: () => _showEditDialog(d),
                           ),
+                          // Delete button: opens confirmation dialog.
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _confirmDelete(d),

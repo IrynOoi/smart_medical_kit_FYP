@@ -1,9 +1,15 @@
 // lib/services/api/caregiver_service.dart
+// Service class for all caregiver-related API calls (profile, patients, analytics, notifications, linking)
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 
 class CaregiverService {
+  // ---------------------- Get Caregiver Profile ----------------------
+  /// Fetch the full profile of a caregiver (including user details).
+  /// Returns a Map with 'success' and 'data' fields.
+  /// On error, returns a failure Map.
   Future<Map<String, dynamic>> getCaregiverProfile(int caregiverId) async {
     try {
       final response = await ApiClient.get('/caregiver/$caregiverId');
@@ -17,9 +23,13 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Caregiver's Patients ----------------------
+  /// Retrieve the list of patients assigned to this caregiver.
+  /// Parameter `show`: 'active' (default), 'inactive', or 'all'.
+  /// Returns a List of patient maps, or empty list on error.
   Future<List<Map<String, dynamic>>> getCaregiverPatients(
     int caregiverId, {
-    String show = 'active', // 'active', 'inactive', 'all'
+    String show = 'active',
   }) async {
     try {
       final response = await ApiClient.get(
@@ -37,6 +47,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get At-Risk Patients (AI) ----------------------
+  /// Fetch patients flagged as 'at risk' based on AI adherence predictions.
+  /// Returns a List of patient maps with risk information.
   Future<List<Map<String, dynamic>>> getAtRiskPatients(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -55,6 +68,10 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Low Stock Alerts ----------------------
+  /// Retrieve current low-stock/out-of-stock alerts for all medications
+  /// under this caregiver's patients.
+  /// Returns a List of alert maps (with medication, patient, inventory info).
   Future<List<Map<String, dynamic>>> getLowStockAlerts(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -73,6 +90,10 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Caregiver Overview Statistics ----------------------
+  /// Returns summary stats for the caregiver dashboard:
+  /// taken/missed/pending doses, total patients, low stock count, adherence score, etc.
+  /// On error, returns a default zero-filled Map.
   Future<Map<String, dynamic>> getCaregiverOverview(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -101,6 +122,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get All Recent Adherence Logs ----------------------
+  /// Fetch the most recent 20 adherence log entries across all patients of this caregiver.
+  /// Returns a List of log maps, or empty list on error.
   Future<List<Map<String, dynamic>>> getAllRecentLogs(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -118,6 +142,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Recent Alerts (for Caregiver) ----------------------
+  /// Fetches a list of recent alerts (missed doses, low stock, etc.)
+  /// for the caregiver. Returns List of alert maps.
   Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -135,6 +162,13 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Chart Data (Adherence over Time) ----------------------
+  /// Returns taken/missed counts for a given period ('Day', 'Week', 'Month').
+  /// The response contains two lists: 'taken' and 'missed' with lengths:
+  ///   - Week: 7 entries
+  ///   - Month: 4 entries
+  ///   - Day: 6 entries (if using 6-hour intervals)
+  /// Returns empty lists on error (all zeros).
   Future<Map<String, List<double>>> getChartData(
     int caregiverId,
     String period,
@@ -161,6 +195,7 @@ class CaregiverService {
     }
   }
 
+  // Helper to generate empty chart data with correct length
   Map<String, List<double>> _emptyChartData(String period) {
     int length = period == 'Month' ? 4 : (period == 'Day' ? 6 : 7);
     return {
@@ -169,6 +204,10 @@ class CaregiverService {
     };
   }
 
+  // ---------------------- Get Analytics Overview (AI Summary) ----------------------
+  /// Returns a summary of AI predictions for all patients:
+  /// overall_adherence_prediction (average score), high/medium risk counts,
+  /// total analyzed patients. On error, returns zeros.
   Future<Map<String, dynamic>> getAnalyticsOverview(int caregiverId) async {
     try {
       final response = await ApiClient.get(
@@ -194,6 +233,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Caregiver Notifications (In-app) ----------------------
+  /// Retrieve all in-app notifications for the caregiver (including stock alerts).
+  /// Returns a List of notification maps.
   Future<List<Map<String, dynamic>>> getCaregiverNotifications(
     int caregiverId,
   ) async {
@@ -214,6 +256,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Stock Notifications (Aggregated) ----------------------
+  /// Returns a formatted list of stock notifications, grouped by medication,
+  /// showing worst status and affected patients.
   Future<List<Map<String, dynamic>>> getCaregiverStockNotifications(
     int caregiverId,
   ) async {
@@ -234,6 +279,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Low Stock Alerts (Alternative) ----------------------
+  /// Similar to getLowStockAlerts, but may return raw alert rows.
+  /// (Keep for compatibility.)
   Future<List<Map<String, dynamic>>> getCaregiverLowStockAlerts(
     int caregiverId,
   ) async {
@@ -254,6 +302,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Mark a Notification as Read ----------------------
+  /// Mark a single caregiver notification as read by its notification_id.
+  /// Returns true on success, false otherwise.
   Future<bool> markCaregiverNotificationRead(int notificationId) async {
     try {
       final response = await ApiClient.put(
@@ -267,9 +318,13 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Get Available Patients (for Linking) ----------------------
+  /// Retrieve patients that are not currently assigned to this caregiver.
+  /// Optional `status` filter: 'active', 'inactive', 'all' (default 'all').
+  /// Returns a List of patient maps.
   Future<List<Map<String, dynamic>>> getAvailablePatients(
     int caregiverId, {
-    String status = 'all', // 'active', 'inactive', 'all'
+    String status = 'all',
   }) async {
     try {
       final response = await ApiClient.get(
@@ -288,6 +343,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Deactivate Caregiver Account (Soft Delete) ----------------------
+  /// Deactivate the caregiver account (set is_active = False).
+  /// Returns true on success, false otherwise.
   Future<bool> deactivateCaregiver(int caregiverId) async {
     try {
       final response = await ApiClient.put(
@@ -301,6 +359,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Link a Patient to Caregiver ----------------------
+  /// Assign a patient to this caregiver.
+  /// Returns true on success, false otherwise.
   Future<bool> linkPatient(int caregiverId, int patientId) async {
     try {
       final response = await ApiClient.post(
@@ -318,6 +379,9 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Unlink a Patient from Caregiver ----------------------
+  /// Remove the patient from this caregiver (set cg_id = NULL).
+  /// Returns true on success, false otherwise.
   Future<bool> unlinkPatient(int caregiverId, int patientId) async {
     try {
       final response = await ApiClient.delete(

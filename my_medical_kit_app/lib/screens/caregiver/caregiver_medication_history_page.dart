@@ -1,4 +1,9 @@
-//caregiver_medication_history_page.dart
+// caregiver_medication_history_page.dart
+// Caregiver view of medication adherence history. Shows a summary card with total doses taken
+// across all patients, and a list of recent dose records (TAKEN, MISSED, PENDING) with patient names,
+// medication names, status badges, and scheduled times. Data is fetched from the API using CaregiverService.
+// (The AI Doctor feature is commented out – it was a patient‑specific feature.)
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
@@ -13,20 +18,24 @@ class MedicationHistoryScreen extends StatefulWidget {
 }
 
 class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
+  // ⚠️ Hardcoded server IP – used for the AI feature (commented out), not currently in use.
   final String serverIp = "172.20.10.9";
 
-  List<Map<String, dynamic>> _alerts = [];
-  int _totalDoses = 0;
+  // Data holders
+  List<Map<String, dynamic>> _alerts = []; // List of dose records (log entries)
+  int _totalDoses = 0; // Total doses taken across all patients
   bool _isLoading = true;
   String _error = '';
-  int _caregiverId = 0;
+  int _caregiverId = 0; // Caregiver ID fetched from SharedPreferences
 
   @override
   void initState() {
     super.initState();
-    _initializeData();
+    _initializeData(); // Start loading data when screen is created
   }
 
+  // Fetches caregiver data from the API.
+  // If [showLoading] is true (default), shows the loading spinner; otherwise updates silently.
   Future<void> _initializeData({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -34,9 +43,11 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     });
 
     try {
+      // Get the caregiver ID from SharedPreferences (set during login)
       final prefs = await SharedPreferences.getInstance();
       _caregiverId = prefs.getInt('caregiver_id') ?? 0;
 
+      // If no caregiver ID is found, show an error.
       if (_caregiverId == 0) {
         setState(() {
           _error = 'Session expired. Please login again.';
@@ -45,16 +56,18 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
         return;
       }
 
+      // Fetch overview stats (including total taken count) and recent logs.
       final overview = await CaregiverService().getCaregiverOverview(
         _caregiverId,
       );
       final allLogs = await CaregiverService().getAllRecentLogs(_caregiverId);
 
+      // Debug prints to verify data (kept as per original).
       print("✅ Overview: $overview");
       print("✅ Logs count: ${allLogs.length}");
 
       setState(() {
-        // overview IS already the data map — access keys directly
+        // overview IS already the data map – access keys directly.
         final rawCount = overview['taken_count'];
         _totalDoses = rawCount is int
             ? rawCount
@@ -72,7 +85,13 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
       });
     }
   }
+
   /*
+  // ------------------------------------------------------------------
+  // (Commented out) AI Doctor feature – used a hardcoded patient and
+  // a local prediction endpoint. This was probably moved to a separate
+  // screen or is no longer used in the caregiver flow.
+  // ------------------------------------------------------------------
   Future<void> _askAIDoctor() async {
     final String apiUrl = "http://$serverIp:5000/predict";
     final Map<String, dynamic> patientData = {
@@ -97,7 +116,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
 
       if (!context.mounted) return;
       Navigator.pop(context);
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
@@ -159,6 +178,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
   }
   */
 
+  // Helper to format a DateTime string to a human-readable format (DD/MM/YYYY HH:MM AM/PM).
   String _formatDateTime(String? dateTimeStr) {
     if (dateTimeStr == null) return '';
     try {
@@ -216,7 +236,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
             )
           : Column(
               children: [
-                // Total Doses Card (fixed header)
+                // ─────────────────────────────────────────────────────
+                // Total Doses Card (fixed header with gradient)
+                // ─────────────────────────────────────────────────────
                 Container(
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.symmetric(
@@ -275,7 +297,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                   ),
                 ),
 
+                // ─────────────────────────────────────────────────────
                 // Recent Activity Title
+                // ─────────────────────────────────────────────────────
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: Row(
@@ -299,7 +323,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                 ),
                 const SizedBox(height: 8),
 
-                // Scrollable list with RefreshIndicator (FIXED)
+                // ─────────────────────────────────────────────────────
+                // Scrollable list with RefreshIndicator
+                // ─────────────────────────────────────────────────────
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => _initializeData(showLoading: false),
@@ -336,6 +362,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                               final isTaken = status == 'TAKEN';
                               final isMissed = status == 'MISSED';
 
+                              // Determine status colour and background based on status.
                               Color statusColor =
                                   Colors.orange; // default PENDING
                               Color bgColor = Colors.orange.shade50;
@@ -348,6 +375,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                 bgColor = Colors.red.shade50;
                               }
 
+                              // Each log entry is displayed as a card with a left colour bar.
                               return Container(
                                 margin: const EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -372,7 +400,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                   child: IntrinsicHeight(
                                     child: Row(
                                       children: [
-                                        // colored left indicator bar
+                                        // Colored indicator bar on the left.
                                         Container(width: 6, color: statusColor),
                                         Expanded(
                                           child: Padding(
@@ -386,6 +414,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                       MainAxisAlignment
                                                           .spaceBetween,
                                                   children: [
+                                                    // Patient name
                                                     Expanded(
                                                       child: Text(
                                                         act['patient_name'] ??
@@ -402,6 +431,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                             .ellipsis,
                                                       ),
                                                     ),
+                                                    // Status badge
                                                     Container(
                                                       padding:
                                                           const EdgeInsets.symmetric(
@@ -428,6 +458,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                   ],
                                                 ),
                                                 const SizedBox(height: 8),
+                                                // Medication name
                                                 Text(
                                                   '${act['medication_name'] ?? 'Medication'}',
                                                   style: const TextStyle(
@@ -436,6 +467,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                   ),
                                                 ),
                                                 const SizedBox(height: 8),
+                                                // Scheduled time
                                                 Row(
                                                   children: [
                                                     Icon(

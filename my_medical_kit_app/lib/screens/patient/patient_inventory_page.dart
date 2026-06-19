@@ -1,4 +1,9 @@
 // lib/screens/patient/patient_inventory_page.dart
+// Patient view of their medication inventory and IoT device controls.
+// Displays assigned medications with stock levels, device status (battery, online/offline),
+// and provides a remote control panel for the IoT pill dispenser (LED, buzzer, display, stepper motors).
+// Patients can view but NOT restock medications – that is a caregiver/admin function.
+
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -6,7 +11,7 @@ import 'package:my_medical_kit_app/services/api/medication_service.dart';
 import 'package:my_medical_kit_app/services/api/device_service.dart';
 
 class PatientInventoryPage extends StatefulWidget {
-  final int userId;
+  final int userId; // Patient's user ID
 
   const PatientInventoryPage({super.key, required this.userId});
 
@@ -15,26 +20,33 @@ class PatientInventoryPage extends StatefulWidget {
 }
 
 class _PatientInventoryPageState extends State<PatientInventoryPage> {
+  // State flags
   bool _isLoading = true;
   bool _isRefreshing = false;
   String _errorMessage = '';
 
-  Map<String, dynamic> _deviceData = {};
-  List<Map<String, dynamic>> _inventoryList = [];
+  // Data containers
+  Map<String, dynamic> _deviceData =
+      {}; // Device info from backend (serial, battery, IP, etc.)
+  List<Map<String, dynamic>> _inventoryList =
+      []; // List of medications with stock and prescription IDs
 
+  // Direct device test (local IP control) – used for debugging
   int _selectedTestMotor = 1;
   String _testEspIp = '';
   final TextEditingController _espIpController = TextEditingController();
 
+  // Threshold to consider device online (hours since last heartbeat)
   static const int _onlineThresholdHours = 24;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    _espIpController.text = _testEspIp; // ✅ Add this
+    _espIpController.text = _testEspIp; // Initialise controller
   }
 
+  // ---------------------- Load Data from API ----------------------
   Future<void> _loadData({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -42,6 +54,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     });
 
     try {
+      // 1. Get device linked to this patient
       final device = await DeviceService().getPatientDevice(widget.userId);
       _deviceData = device.isNotEmpty
           ? device
@@ -52,16 +65,18 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
               'last_known_ip': null,
             };
 
-      // ✅ Auto-populate IP from DB
+      // Auto-populate the ESP IP from the device's last known IP
       final ipFromDb = _deviceData['last_known_ip'];
       if (ipFromDb != null && ipFromDb.toString().isNotEmpty) {
         _testEspIp = ipFromDb.toString();
         _espIpController.text = _testEspIp;
       }
 
+      // 2. Get all medications (prescriptions) for this patient
       final prescriptions = await MedicationService().getPatientMedications(
         widget.userId,
       );
+      // Map to a simpler format for display
       _inventoryList = prescriptions
           .map(
             (med) => {
@@ -92,12 +107,14 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   // ------------------------------------------------------------
-  // RESTOCK MEDICATION
+  // RESTOCK MEDICATION (Disabled for patients – this is a caregiver action)
+  // The methods are kept but not used in the UI.
   // ------------------------------------------------------------
   Future<void> _showRestockDialog(
     int prescriptionId,
     String medicationName,
   ) async {
+    // This dialog is NOT currently triggered in the UI (the Restock button is removed).
     final quantityController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -156,6 +173,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     String medicationName,
     int quantity,
   ) async {
+    // This is only used if the dialog is triggered, but the Restock button is not shown.
     setState(() => _isRefreshing = true);
     try {
       final success = await MedicationService().restockMedication(
@@ -189,6 +207,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
 
   // ------------------------------------------------------------
   // IOT CONTROL METHODS (Using Backend Proxy)
+  // These send commands via the Flask backend, which forwards to the ESP32.
   // ------------------------------------------------------------
   Future<void> _controlLed(bool turnOn) async {
     final success = await DeviceService().controlLed(widget.userId, turnOn);
@@ -250,6 +269,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   // ------------------------------------------------------------
   // HELPER METHODS
   // ------------------------------------------------------------
+  /// Formats a timestamp to a human-readable relative time (e.g., "2h ago").
   String _formatLastActive(String? timestamp) {
     if (timestamp == null) return 'Never';
     try {
@@ -265,6 +285,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     }
   }
 
+  /// Determines if the device is considered online based on its last heartbeat.
   bool _isDeviceOnlineFromTimestamp(String? timestamp) {
     if (timestamp == null) return false;
     try {
@@ -280,6 +301,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    // Show loading spinner while data is being fetched.
     if (_isLoading) {
       return const Scaffold(
         body: Center(
@@ -288,6 +310,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
       );
     }
 
+    // Show error message with retry option.
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
         body: Center(
@@ -318,6 +341,8 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
       );
     }
 
+    // Main UI: Device header, inventory summary, (optional direct test section),
+    // and inventory list.
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5F5),
       body: RefreshIndicator(
@@ -332,7 +357,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
               const SizedBox(height: 24),
               _buildInventorySummary(),
               const SizedBox(height: 24),
-              // _buildDirectTestSection(), // Renders Photo 1 Card View
+              // _buildDirectTestSection(), // (Commented out in original) Renders the full Device Control panel
               const SizedBox(height: 24),
               _buildInventorySection(),
               const SizedBox(height: 32),
@@ -343,6 +368,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // ------------------------------------------------------------
+  // DIRECT COMMANDS TO ESP32 (using local IP, bypassing backend)
+  // These are used in the "Direct Test" section for debugging.
+  // ------------------------------------------------------------
   Future<void> _sendDirectCommand(String endpoint, String successMsg) async {
     if (_testEspIp.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -377,6 +406,11 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     }
   }
 
+  // ------------------------------------------------------------
+  // DIRECT TEST SECTION – Full remote control panel (Photo 1)
+  // This section is called from the build but was commented out in the original.
+  // It provides direct HTTP commands to the ESP32 using its IP.
+  // ------------------------------------------------------------
   Widget _buildDirectTestSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -395,7 +429,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header — shows auto-detected IP, editable if needed
+            // Header with editable IP field
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -431,7 +465,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
               ),
             ),
             const Divider(height: 1),
-            // LED & Buzzer
+            // LED & Buzzer controls
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -632,6 +666,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // Helper for direct test motor buttons
   Widget _buildDirectMotorButton(String label, String endpoint) {
     return ElevatedButton(
       onPressed: () => _sendDirectCommand(endpoint, label),
@@ -644,6 +679,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // ------------------------------------------------------------
+  // DEVICE HEADER – Shows device name, status, battery, and stats
+  // ------------------------------------------------------------
   Widget _buildDeviceHeader() {
     final batteryLevel = _deviceData['battery_level'];
     final isLowBattery = batteryLevel != null && batteryLevel < 20;
@@ -717,6 +755,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                   ],
                 ),
               ),
+              // Online/Offline badge
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -757,6 +796,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
             ],
           ),
           const SizedBox(height: 28),
+          // Three stat cards: Battery, Status, Sync
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -785,6 +825,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // Individual stat card for the header
   Widget _buildDeviceStatCard(
     String label,
     String value,
@@ -812,7 +853,8 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   // ------------------------------------------------------------
-  // REMOTE DEVICE CONTROLS (Photo 1)
+  // REMOTE DEVICE CONTROLS (Photo 1 style – used if uncommented)
+  // These are the backend‑proxy versions.
   // ------------------------------------------------------------
   Widget _buildRemoteControls() {
     return Padding(
@@ -913,6 +955,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // Helper for remote control buttons
   Widget _buildControlButton(String text, Color color, VoidCallback onPressed) {
     return ElevatedButton(
       onPressed: onPressed,
@@ -1031,7 +1074,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   // ------------------------------------------------------------
-  // INVENTORY SUMMARY & LIST
+  // INVENTORY SUMMARY (Top cards: Total, Low Stock, Out of Stock)
   // ------------------------------------------------------------
   Widget _buildInventorySummary() {
     if (_inventoryList.isEmpty) return const SizedBox.shrink();
@@ -1123,6 +1166,9 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // ------------------------------------------------------------
+  // INVENTORY LIST – Shows each medication with stock bar and status
+  // ------------------------------------------------------------
   Widget _buildInventorySection() {
     if (_inventoryList.isEmpty) {
       return Padding(
@@ -1169,12 +1215,14 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     );
   }
 
+  // Individual medication card with stock bar, status badge, and (removed) restock button.
   Widget _buildInventoryCard(Map<String, dynamic> med) {
     final current = med['current_inventory'] as int;
     final threshold = med['refill_threshold'] as int;
     final isLowStock = current <= threshold;
     final isOutOfStock = current == 0;
 
+    // Compute progress bar value (clamped between 0 and 1)
     final maxInventory = (threshold * 2) > current ? (threshold * 2) : current;
     final progressValue = maxInventory > 0
         ? (current / maxInventory).clamp(0.0, 1.0)
@@ -1206,6 +1254,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
         children: [
           Row(
             children: [
+              // Status icon
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -1241,6 +1290,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                   ),
                 ),
               ),
+              // Status badge
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -1295,6 +1345,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
+                    // Stock progress bar
                     LinearProgressIndicator(
                       value: progressValue,
                       backgroundColor: Colors.grey.shade200,
@@ -1307,7 +1358,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                   ],
                 ),
               ),
-              // ❌ RESTOCK BUTTON REMOVED – patients cannot restock
+              // ❌ RESTOCK BUTTON REMOVED – patients cannot restock.
             ],
           ),
         ],

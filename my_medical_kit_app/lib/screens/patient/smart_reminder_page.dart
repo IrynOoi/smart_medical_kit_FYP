@@ -1,5 +1,9 @@
 // lib/screens/smart_reminder_page.dart
 
+// lib/screens/smart_reminder_page.dart
+// Displays active medication reminders (unread notifications) for the patient.
+// Each reminder card shows medication details, stock status, and actions to mark as read or dismiss.
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/services/reminder_service.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -10,7 +14,7 @@ import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
-// 🌟 新增：专门用来组合“通知”和“对应药物详情”的数据类
+// 🌟 Helper class that combines a notification with its matching prescription (if any)
 class ReminderItem {
   final NotificationModel notification;
   final Prescription? prescription;
@@ -26,10 +30,11 @@ class SmartReminderPage extends StatefulWidget {
 }
 
 class _SmartReminderPageState extends State<SmartReminderPage> {
-  Timer? _autoRefreshTimer;
+  Timer?
+  _autoRefreshTimer; // (currently unused, but can be used for periodic refresh)
   bool _isLoading = true;
 
-  // 🌟 修改：列表数据源从 List<Prescription> 变成了 List<ReminderItem>
+  // 🌟 Data source for the list of reminders (each item combines notification + prescription)
   List<ReminderItem> _reminders = [];
   int _patientId = 0;
 
@@ -45,6 +50,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     super.dispose();
   }
 
+  // Load patient ID from shared preferences and then fetch medications/reminders
   Future<void> _loadPatientId() async {
     final prefs = await SharedPreferences.getInstance();
     final id = prefs.getInt('patient_id');
@@ -56,56 +62,59 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     }
   }
 
+  // Fetch all medications and notifications, then build the reminder list
   Future<void> _loadMedications({bool showLoading = true}) async {
     if (showLoading) setState(() => _isLoading = true);
     try {
+      // Get all active prescriptions for the patient
       final allMeds = await MedicationService().getPatientMedications(
         _patientId,
       );
+      // Check and send any pending reminders (this also creates notifications)
       await ReminderService.checkAndSendReminders(medications: allMeds);
+      // Fetch all notifications for the patient
       final notifications = await PatientService().getNotifications(_patientId);
 
-      // 取出所有未读通知
+      // Filter only unread notifications
       final unreadNotifications = notifications
           .where((notification) => !notification.isRead)
           .toList();
 
       List<ReminderItem> items = [];
 
-      // 🌟 核心逻辑：遍历每一个未读通知，为它们各自生成一张卡片！
+      // 🌟 Core logic: for each unread notification, try to find a matching prescription
       for (var notif in unreadNotifications) {
         final title = notif.title.toLowerCase();
 
         Prescription? matchedMed;
         try {
-          // 尝试找到对应的药物
+          // Match by checking if the notification message contains the medication name
           matchedMed = allMeds.firstWhere(
             (med) => notif.message.toLowerCase().contains(
               med.medicationName.toLowerCase(),
             ),
           );
         } catch (e) {
-          // 找不到对应的药物也没关系，matchedMed 保持为 null
+          // No matching medication found; keep matchedMed null
         }
 
-        // 只要是 Medication/Reminder，或者类型是 ALERT/OUT_OF_STOCK，都显示
+        // Show the notification if it is medication/reminder related or a stock alert
         if (title.contains('medication') ||
             title.contains('reminder') ||
             notif.type == 'ALERT' ||
             notif.type == 'OUT_OF_STOCK' ||
             notif.type == 'LOW_STOCK') {
-          // 如果是普通的吃药提醒，必须要有 prescription 才能吃药。
-          // 但如果是 ALERT 等其它类型，即使找不到 prescription 也允许显示。
+          // For medication reminders, we must have a matching prescription to show the dose button
           if ((title.contains('medication') || title.contains('reminder')) &&
               matchedMed == null) {
-            continue; // 忽略找不到药的吃药提醒
+            continue; // Skip if no matching med for a reminder
           }
 
           items.add(
             ReminderItem(notification: notif, prescription: matchedMed),
           );
         } else {
-          // 其它未知类型的通知也加进来，以防漏掉
+          // For any other notification type, still add it (safety net)
           items.add(
             ReminderItem(notification: notif, prescription: matchedMed),
           );
@@ -113,10 +122,11 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
       }
 
       setState(() {
-        _reminders = items; // 更新 UI
+        _reminders = items; // Update UI with the new list
         _isLoading = false;
       });
 
+      // Schedule upcoming reminders for future times (local notifications)
       try {
         await ReminderService.scheduleUpcomingMedicationReminders(
           _patientId,
@@ -135,6 +145,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     }
   }
 
+  // (Unused method – originally for marking a dose as taken via the kit)
   Future<void> _markTaken(int prescriptionId, int? deviceId) async {
     final actualDeviceId = deviceId ?? 0;
     final success = await MedicationService().recordMedicationTaken(
@@ -160,10 +171,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     }
   }
 
-  // 🌟 新增：格式化通知的具体生成时间 (方便区分 48 和 49)
-  // 🌟 Modified: Format time to 12-hour (AM/PM) system
+  // 🌟 Format a DateTime to a readable string with day/month/year and 12‑hour time
   String _formatNotificationTime(DateTime time) {
-    final year = time.year.toString(); // 🌟 ADDED YEAR
+    final year = time.year.toString();
     final month = time.month.toString().padLeft(2, '0');
     final day = time.day.toString().padLeft(2, '0');
 
@@ -174,10 +184,10 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     hour = hour % 12;
     if (hour == 0) hour = 12;
 
-    // 🌟 ADDED YEAR TO THE OUTPUT STRING
     return '$day/$month/$year at $hour:$minute $amPm';
   }
 
+  // Convert a list of dispense times (e.g. ['08:00:00', '20:00:00']) into human‑readable format
   String _getReadableSchedule(List<String> times) {
     if (times.isEmpty) return 'No schedule';
     final formattedTimes = times.map((t) {
@@ -196,6 +206,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     return 'Daily at ${formattedTimes.join(', ')}';
   }
 
+  // Build the header with gradient background, back button, title, and "Read All" action
   Widget _buildHeader() {
     final topPadding = MediaQuery.of(context).padding.top;
     return Container(
@@ -214,6 +225,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Back button
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
@@ -237,120 +249,112 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              Row(
-                children: [
-                  // 🌟 CHANGED: Mark All As Read Text Button
-                  if (_reminders.isNotEmpty)
-                    GestureDetector(
-                      onTap: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Mark all as read?'),
-                            content: const Text(
-                              'This will dismiss all active reminders.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryPurple,
-                                ),
-                                child: const Text(
-                                  'Yes',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-
-                        if (confirm != true) return;
-
-                        // Mark all currently displayed notifications as read
-                        for (var item in _reminders) {
-                          await PatientService().markNotificationRead(
-                            item.notification.notificationId,
-                          );
-                        }
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('All reminders cleared'),
-                              backgroundColor: Colors.teal,
-                            ),
-                          );
-                          _loadMedications();
-                        }
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
+              // "Read All" button to mark all current reminders as read
+              if (_reminders.isNotEmpty)
+                GestureDetector(
+                  onTap: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Mark all as read?'),
+                        content: const Text(
+                          'This will dismiss all active reminders.',
                         ),
-                        child: Text(
-                          'Read All',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold, // 🌟 Still bold!
-                            fontSize:
-                                16, // Made slightly bigger since it has no background
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
                           ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryPurple,
+                            ),
+                            child: const Text(
+                              'Yes',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm != true) return;
+
+                    // Mark each notification as read
+                    for (var item in _reminders) {
+                      await PatientService().markNotificationRead(
+                        item.notification.notificationId,
+                      );
+                    }
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('All reminders cleared'),
+                          backgroundColor: Colors.teal,
                         ),
+                      );
+                      _loadMedications();
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    child: Text(
+                      'Read All',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
                     ),
-
-                  // GestureDetector(
-                  //   onTap: () async {
-                  //     await ReminderService.triggerTestDualNotification(
-                  //       context,
-                  //     );
-                  //     _loadMedications();
-                  //   },
-                  //   child: Container(
-                  //     margin: const EdgeInsets.only(right: 10),
-                  //     padding: const EdgeInsets.all(10),
-                  //     decoration: BoxDecoration(
-                  //       color: Colors.orangeAccent.withValues(alpha: 0.8),
-                  //       borderRadius: BorderRadius.circular(12),
-                  //     ),
-                  //     child: const Icon(
-                  //       Icons.bug_report,
-                  //       color: Colors.white,
-                  //       size: 18,
-                  //     ),
-                  //   ),
-                  // ),
-                  // GestureDetector(
-                  //   onTap: () async {
-                  //     ScaffoldMessenger.of(context).showSnackBar(
-                  //       const SnackBar(content: Text('Checking schedule...')),
-                  //     );
-                  //     await ReminderService.checkAndSendReminders();
-                  //     if (mounted) {
-                  //       await _loadMedications();
-                  //     }
-                  //   },
-                  //   child: Container(
-                  //     padding: const EdgeInsets.all(10),
-                  //     decoration: BoxDecoration(
-                  //       color: Colors.white.withValues(alpha: 0.2),
-                  //       borderRadius: BorderRadius.circular(12),
-                  //     ),
-                  //     child: const Icon(
-                  //       Icons.sync,
-                  //       color: Colors.white,
-                  //       size: 18,
-                  //     ),
-                  //   ),
-                  // ),
-                ],
-              ),
+                  ),
+                ),
+              // (Commented-out debug/test buttons)
+              // GestureDetector(
+              //   onTap: () async {
+              //     await ReminderService.triggerTestDualNotification(
+              //       context,
+              //     );
+              //     _loadMedications();
+              //   },
+              //   child: Container(
+              //     margin: const EdgeInsets.only(right: 10),
+              //     padding: const EdgeInsets.all(10),
+              //     decoration: BoxDecoration(
+              //       color: Colors.orangeAccent.withValues(alpha: 0.8),
+              //       borderRadius: BorderRadius.circular(12),
+              //     ),
+              //     child: const Icon(
+              //       Icons.bug_report,
+              //       color: Colors.white,
+              //       size: 18,
+              //     ),
+              //   ),
+              // ),
+              // GestureDetector(
+              //   onTap: () async {
+              //     ScaffoldMessenger.of(context).showSnackBar(
+              //       const SnackBar(content: Text('Checking schedule...')),
+              //     );
+              //     await ReminderService.checkAndSendReminders();
+              //     if (mounted) {
+              //       await _loadMedications();
+              //     }
+              //   },
+              //   child: Container(
+              //     padding: const EdgeInsets.all(10),
+              //     decoration: BoxDecoration(
+              //       color: Colors.white.withValues(alpha: 0.2),
+              //       borderRadius: BorderRadius.circular(12),
+              //     ),
+              //     child: const Icon(
+              //       Icons.sync,
+              //       color: Colors.white,
+              //       size: 18,
+              //     ),
+              //   ),
+              // ),
             ],
           ),
           const SizedBox(height: 24),
@@ -419,7 +423,8 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                         final notif = item.notification;
                         final med = item.prescription;
 
-                        // If it's a generic alert or we couldn't find a prescription, show a simplified card
+                        // If no prescription found or the notification is a generic alert/stock alert,
+                        // show a simplified card with only the notification details.
                         if (med == null ||
                             notif.type == 'ALERT' ||
                             notif.type == 'OUT_OF_STOCK' ||
@@ -447,6 +452,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Icon and title/date
                                   Row(
                                     children: [
                                       Container(
@@ -494,6 +500,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                     ],
                                   ),
                                   const SizedBox(height: 16),
+                                  // Notification message
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     width: double.infinity,
@@ -513,6 +520,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
+                                  // Mark as read button
                                   Align(
                                     alignment: Alignment.centerRight,
                                     child: ElevatedButton(
@@ -538,7 +546,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                           );
                         }
 
-                        // 💡 UPDATED LOGIC: Split into 3 distinct stock states
+                        // 💡 Full medication reminder card: shows prescription details and stock status
                         final isOutOfStock = med.currentInventory <= 0;
                         final isLowStock =
                             med.currentInventory > 0 &&
@@ -568,6 +576,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // Medication icon, name, and notification time
                                 Row(
                                   children: [
                                     Container(
@@ -613,7 +622,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Display Notification Message
+                                // Notification message
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
@@ -648,7 +657,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                 ),
                                 const SizedBox(height: 12),
 
-                                // Display Type & Dispense Schedule
+                                // Notification type and dispense schedule
                                 Row(
                                   children: [
                                     Expanded(
@@ -699,6 +708,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                 ),
 
                                 const SizedBox(height: 16),
+                                // Dosage info
                                 Row(
                                   children: [
                                     Icon(
@@ -717,13 +727,14 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
+                                // Stock badge + "Mark as Read" button
                                 Wrap(
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   spacing: 8.0,
                                   runSpacing: 12.0,
                                   children: [
-                                    // 💡 UPDATED LOGIC: Stock Badge (Red = Out of Stock, Orange = Low, Green = OK)
+                                    // 💡 Stock status badge: red for out-of-stock, orange for low, green for OK
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
@@ -782,6 +793,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                           WrapCrossAlignment.center,
                                       spacing: 8.0,
                                       children: [
+                                        // Instruction to use physical kit
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 14,
@@ -815,6 +827,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             ],
                                           ),
                                         ),
+                                        // "Mark as Read" button (dismisses this reminder)
                                         ElevatedButton(
                                           onPressed: () async {
                                             final confirm = await showDialog<bool>(
@@ -913,7 +926,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                   ],
                                 ),
 
-                                // 💡 UPDATED LOGIC: Bottom Warning Box changes text based on severity
+                                // Bottom warning box for low/out-of-stock
                                 if (hasStockIssue)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 12),

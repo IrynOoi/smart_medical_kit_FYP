@@ -1,4 +1,7 @@
-//onboarding_page.dart
+// screens/onboarding_page.dart
+// Onboarding screen shown after splash screen. Displays a carousel of 3 pages
+// introducing the app features, with dot indicators and a "NEXT"/"GET STARTED" button.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/colors.dart';
@@ -12,17 +15,19 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
+  // PageController to control the carousel swiping
   final PageController _controller = PageController();
-  int currentPage = 0;
+  int currentPage = 0; // Current page index (0-based)
 
-  // 🌟 Onboarding pages data
+  // Data for each onboarding slide: title, description, image asset, and whether
+  // the SVG icon should be recolored to white (for dark gradient backgrounds).
   final List<OnboardingContent> pages = [
     OnboardingContent(
       title: 'Never Miss a Dose',
       description:
           'The Smart Medical Kit reminds you exactly when to take your medication.',
       image: 'assets/images/reminder-icon.svg',
-      isWhiteIcon: true, // needs to be converted to white
+      isWhiteIcon: true, // force SVG to white
     ),
     OnboardingContent(
       title: 'AI Health Insights',
@@ -42,9 +47,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
+        // Full‑screen gradient background
         decoration: const BoxDecoration(gradient: AppColors.mainGradient),
         child: Column(
           children: [
+            // ---------- PageView (carousel) takes most space ----------
             Expanded(
               flex: 3,
               child: PageView.builder(
@@ -57,13 +64,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // 🌟 Icon container with fixed size
+                      // Fixed‑size container for the SVG icon
                       SizedBox(
                         width: 220,
                         height: 220,
                         child: SvgPicture.asset(
                           item.image,
-                          // 🌟 Apply white color conditionally
+                          // If isWhiteIcon is true, recolor the SVG to white;
+                          // otherwise keep its original colors.
                           colorFilter: item.isWhiteIcon
                               ? const ColorFilter.mode(
                                   Colors.white,
@@ -72,9 +80,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                               : null,
                         ),
                       ),
-
                       const SizedBox(height: 40),
-
+                      // Title
                       Text(
                         item.title,
                         textAlign: TextAlign.center,
@@ -84,9 +91,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           color: Colors.white,
                         ),
                       ),
-
                       const SizedBox(height: 15),
-
+                      // Description
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 30),
                         child: Text(
@@ -105,10 +111,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
             ),
 
-            // dots + button section
+            // ---------- Dot indicators and action button ----------
             Expanded(
               child: Column(
                 children: [
+                  // Animated dots indicating current page
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
@@ -116,6 +123,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       (i) => AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         margin: const EdgeInsets.all(4),
+                        // Active dot is wider (20) and fully opaque;
+                        // inactive dots are small (8) and semi‑transparent.
                         width: currentPage == i ? 20 : 8,
                         height: 8,
                         decoration: BoxDecoration(
@@ -127,9 +136,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                     ),
                   ),
-
-                  const Spacer(),
-
+                  const Spacer(), // Pushes the button to the bottom
+                  // "NEXT" or "GET STARTED" button
                   Padding(
                     padding: const EdgeInsets.all(30),
                     child: ElevatedButton(
@@ -143,6 +151,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                       onPressed: () {
                         if (currentPage == pages.length - 1) {
+                          // Last page → navigate to LandingPage (login/register)
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
@@ -150,6 +159,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             ),
                           );
                         } else {
+                          // Not last page → advance to next page
                           _controller.nextPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut,
@@ -177,12 +187,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 }
 
-// 🌟 Data model
+/// Simple data model for each onboarding page.
 class OnboardingContent {
   final String title;
   final String description;
-  final String image;
-  final bool isWhiteIcon;
+  final String image; // Asset path to the SVG
+  final bool isWhiteIcon; // If true, the SVG is recolored to white
 
   OnboardingContent({
     required this.title,

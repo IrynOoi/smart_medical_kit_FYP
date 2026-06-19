@@ -1,14 +1,19 @@
-//patient_prescriptions_page.dart
+// patient_prescriptions_page.dart
+// Displays a list of prescriptions for a specific patient (used by caregiver view).
+// Allows editing and deleting prescriptions via icon buttons. The data is fetched
+// from the MedicationService API and displayed in a list with medication details
+// like dosage, schedule, days, and inventory.
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
-import 'caregiver_dashboard_page.dart';
+import 'caregiver_dashboard_page.dart'; // (unused import – could be removed)
 
 import 'edit_prescription_page.dart';
 
 class PatientPrescriptionsPage extends StatefulWidget {
-  final Map<String, dynamic> patient;
+  final Map<String, dynamic> patient; // Patient data (contains patient_id)
 
   const PatientPrescriptionsPage({super.key, required this.patient});
 
@@ -18,10 +23,12 @@ class PatientPrescriptionsPage extends StatefulWidget {
 }
 
 class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
-  List<Map<String, dynamic>> _prescriptions = [];
+  List<Map<String, dynamic>> _prescriptions = []; // List of prescription maps
   bool _isLoading = true;
   String _error = '';
 
+  // Helper to format a list of dispense times (e.g., ["08:00:00", "20:00:00"])
+  // into a human-readable schedule (e.g., "8:00 AM, 8:00 PM").
   String _formatSchedule(List<dynamic> times) {
     if (times.isEmpty) return 'No schedule';
     final formattedTimes = times.map((t) {
@@ -39,25 +46,38 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     return '${formattedTimes.join(', ')}';
   }
 
+  // Helper to format a list of day numbers (1=Mon, 7=Sun) into day abbreviations.
+  // If empty or null, returns 'Everyday'.
   String _formatDays(List<dynamic>? days) {
     if (days == null || days.isEmpty) return 'Everyday';
-    
+
     final dayNames = {
-      1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun'
+      1: 'Mon',
+      2: 'Tue',
+      3: 'Wed',
+      4: 'Thu',
+      5: 'Fri',
+      6: 'Sat',
+      7: 'Sun',
     };
-    
-    final sortedDays = days.map((e) => int.tryParse(e.toString()) ?? 0).where((d) => d > 0 && d <= 7).toList();
+
+    // Parse days to ints, filter valid range, sort.
+    final sortedDays = days
+        .map((e) => int.tryParse(e.toString()) ?? 0)
+        .where((d) => d > 0 && d <= 7)
+        .toList();
     sortedDays.sort();
-    
+
     return sortedDays.map((d) => dayNames[d]).join(', ');
   }
 
   @override
   void initState() {
     super.initState();
-    _fetchPrescriptions();
+    _fetchPrescriptions(); // Load data when screen opens.
   }
 
+  // Fetches prescriptions for the patient and updates state.
   Future<void> _fetchPrescriptions({bool showLoading = true}) async {
     setState(() {
       if (showLoading) _isLoading = true;
@@ -79,7 +99,8 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
     }
   }
 
-  // ---- Edit Prescription ----
+  // Navigates to EditPrescriptionPage with the current prescription data.
+  // Refreshes list if edit was successful.
   void _editPrescription(Map<String, dynamic> prescription) async {
     final result = await Navigator.push(
       context,
@@ -88,11 +109,11 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       ),
     );
     if (result == true) {
-      _fetchPrescriptions(); // refresh after edit
+      _fetchPrescriptions(); // Refresh after edit.
     }
   }
 
-  // ---- Delete Prescription ----
+  // Shows a confirmation dialog and deletes the prescription if confirmed.
   Future<void> _deletePrescription(Map<String, dynamic> prescription) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -126,7 +147,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Prescription deleted')));
-      _fetchPrescriptions(); // refresh list
+      _fetchPrescriptions(); // Refresh list after deletion.
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -209,9 +230,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                             Text(
                               'Schedule: ${_formatSchedule(rx['dispense_times'] ?? [])}',
                             ),
-                            Text(
-                              'Days: ${_formatDays(rx['dispense_days'])}',
-                            ),
+                            Text('Days: ${_formatDays(rx['dispense_days'])}'),
                             Text(
                               'Inventory: ${rx['current_inventory'] ?? 0} left',
                             ),
@@ -221,6 +240,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Edit button
                           IconButton(
                             icon: const Icon(
                               Icons.edit_outlined,
@@ -229,6 +249,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
                             onPressed: () => _editPrescription(rx),
                             tooltip: 'Edit',
                           ),
+                          // Delete button
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,

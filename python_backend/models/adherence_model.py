@@ -1,7 +1,19 @@
-#adherence_model.py
+# adherence_model.py - Functions for tracking and analyzing medication adherence.
+# Handles individual patient adherence, caregiver aggregations, chart data,
+# alerts, and retake operations.
+
 from db import get_db_connection
 
+
+# ----------------------------------------------------------------------
+# Get adherence statistics for a single patient (last 7 days)
+# ----------------------------------------------------------------------
 def get_patient_adherence_stats(patient_id):
+    """
+    Retrieve counts of TAKEN, MISSED, and PENDING (upcoming) doses for a patient
+    over the past 7 days.
+    Returns a dict with keys: taken_count, missed_count, upcoming_count.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
@@ -18,7 +30,16 @@ def get_patient_adherence_stats(patient_id):
         cursor.close()
     return stats
 
+
+# ----------------------------------------------------------------------
+# Get detailed adherence logs for a patient (paginated)
+# ----------------------------------------------------------------------
 def get_patient_adherence_logs(patient_id, limit):
+    """
+    Fetch the most recent adherence log entries for a patient, including
+    medication name. Limited by 'limit' parameter.
+    Returns a list of dicts.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
@@ -36,7 +57,15 @@ def get_patient_adherence_logs(patient_id, limit):
         cursor.close()
     return logs
 
+
+# ----------------------------------------------------------------------
+# Get recent adherence logs for all patients of a caregiver
+# ----------------------------------------------------------------------
 def get_all_recent_logs(caregiver_id, limit):
+    """
+    Fetch the most recent adherence logs (with patient name and medication name)
+    for all patients under a caregiver. Used for caregiver dashboard activity feed.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
@@ -56,10 +85,25 @@ def get_all_recent_logs(caregiver_id, limit):
         cursor.close()
     return logs
 
+
+# ----------------------------------------------------------------------
+# Get caregiver overview stats: adherence counts, patient count, low stock, etc.
+# ----------------------------------------------------------------------
 def get_caregiver_overview_stats(caregiver_id):
+    """
+    Returns a comprehensive set of summary statistics for a caregiver's dashboard:
+      - adherence counts (taken, missed, pending)
+      - total active patients
+      - number of low‑stock medications (prescription + device‑only)
+      - total active prescriptions
+      - distinct medication types in the system
+
+    Returns: (stats_dict, total_patients, low_stock_count, total_rx, distinct_meds)
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         
+        # 1. Adherence counts (all time, not just last 7 days)
         cursor.execute('''
             SELECT
                 COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken_count,
@@ -73,6 +117,7 @@ def get_caregiver_overview_stats(caregiver_id):
         ''', (caregiver_id,))
         stats = cursor.fetchone()
 
+        # 2. Total active patients
         cursor.execute('''
             SELECT COUNT(*) AS total_patients
             FROM patient p
@@ -82,6 +127,7 @@ def get_caregiver_overview_stats(caregiver_id):
         ''', (caregiver_id,))
         total_patients = cursor.fetchone()['total_patients'] or 0
 
+        # 3. Low‑stock count (from prescription‑linked medications)
         cursor.execute('''
             SELECT COUNT(*) AS low_stock_count
             FROM prescription_config pc
@@ -94,6 +140,7 @@ def get_caregiver_overview_stats(caregiver_id):
         low = cursor.fetchone()
         low_stock_count = low['low_stock_count'] or 0
 
+        # 4. Low‑stock from device‑only medications (no active prescription for this caregiver)
         cursor.execute('''
             SELECT COUNT(DISTINCT m.medication_id) AS low_stock_count
             FROM medications m
@@ -123,25 +170,39 @@ def get_caregiver_overview_stats(caregiver_id):
         device_low = cursor.fetchone()
         low_stock_count += device_low['low_stock_count'] or 0
 
+        # 5. Total active prescriptions for this caregiver (only for active patients)
         cursor.execute('''
-                    SELECT COUNT(*) AS total_prescriptions
-                    FROM prescription_config pc
-                    JOIN patient p ON pc.patient_id = p.patient_id
-                    JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
-                    JOIN users u ON p.patient_id = u.user_id   -- 🌟 1. 链接 users 表
-                    WHERE pcm.caregiver_id = %s
-                    AND u.is_active = true                   -- 🌟 2. 确保只计算活跃的病患
-                    AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
-                ''', (caregiver_id,))
+            SELECT COUNT(*) AS total_prescriptions
+            FROM prescription_config pc
+            JOIN patient p ON pc.patient_id = p.patient_id
+            JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            JOIN users u ON p.patient_id = u.user_id   -- filter active patients
+            WHERE pcm.caregiver_id = %s
+            AND u.is_active = true
+            AND (pc.end_date IS NULL OR pc.end_date >= CURRENT_DATE)
+        ''', (caregiver_id,))
         total_rx = cursor.fetchone()['total_prescriptions'] or 0
 
+        # 6. Distinct medication names in the entire system (global)
         cursor.execute('SELECT COUNT(*) AS distinct_meds FROM medications')
         distinct_meds = cursor.fetchone()['distinct_meds'] or 0
 
         cursor.close()
     return stats, total_patients, low_stock_count, total_rx, distinct_meds
 
+
+# ----------------------------------------------------------------------
+# Get chart data for caregiver dashboard (adherence over time)
+# ----------------------------------------------------------------------
 def get_caregiver_chart_data(caregiver_id, period):
+    """
+    Return aggregated taken/missed counts for a caregiver's patients,
+    grouped by period:
+      - 'Day'   : by hour of the current day (0‑23)
+      - 'Month' : by week (last 4 weeks)
+      - 'Week'  : by day of week (1‑7) for the past 7 days (default)
+    Returns a list of rows with keys: (hour|week_ago|dow), taken, missed.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         
@@ -179,7 +240,7 @@ def get_caregiver_chart_data(caregiver_id, period):
                 ORDER BY week_ago
             ''', (caregiver_id,))
             
-        else:
+        else:   # default 'Week'
             cursor.execute('''
                 SELECT 
                     (WEEKDAY(al.scheduled_time) + 1) AS dow,
@@ -200,7 +261,16 @@ def get_caregiver_chart_data(caregiver_id, period):
         cursor.close()
     return rows
 
+
+# ----------------------------------------------------------------------
+# Get alerts (missed or pending doses) for a caregiver
+# ----------------------------------------------------------------------
 def get_caregiver_alerts(caregiver_id, limit):
+    """
+    Retrieve recent alerts for a caregiver: logs with status 'MISSED' or 'PENDING',
+    including patient name, medication, dosage, and current inventory.
+    Used for the caregiver's "recent alerts" list.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
@@ -223,10 +293,23 @@ def get_caregiver_alerts(caregiver_id, limit):
         cursor.close()
     return alerts
 
+
+# ----------------------------------------------------------------------
+# Get analytics overview for a caregiver (AI risk summary)
+# ----------------------------------------------------------------------
 def get_caregiver_analytics_overview(caregiver_id):
+    """
+    Return high‑level analytics for a caregiver:
+      - total active patients
+      - counts of patients with HIGH, MEDIUM risk (based on latest AI prediction)
+      - analysed patients count, total score sum, average prediction score
+
+    Returns: (total_patients, stats_dict)
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         
+        # Total active patients
         cursor.execute('''
             SELECT COUNT(*) AS total_patients
             FROM patient p
@@ -236,6 +319,7 @@ def get_caregiver_analytics_overview(caregiver_id):
         ''', (caregiver_id,))
         total = cursor.fetchone()['total_patients']
         
+        # AI summary: latest prediction per patient (using ROW_NUMBER to get most recent)
         cursor.execute('''
             SELECT 
                 COUNT(CASE WHEN a.risk_level = 'HIGH' THEN 1 END) AS high_risk_patients,
@@ -252,7 +336,7 @@ def get_caregiver_analytics_overview(caregiver_id):
                            ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY predicted_at DESC) as rn
                     FROM ai_adherence_prediction
                 ) ranked
-                WHERE rn = 1
+                WHERE rn = 1   -- only the most recent prediction per patient
             ) a ON p.patient_id = a.patient_id
             JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
             WHERE pcm.caregiver_id = %s AND u.is_active = true
@@ -261,7 +345,14 @@ def get_caregiver_analytics_overview(caregiver_id):
         cursor.close()
     return total, stats
 
+
+# ----------------------------------------------------------------------
+# Save a manual medication log (for ML training or audit)
+# ----------------------------------------------------------------------
 def save_medication_log(patient_id, age, day_of_week, time_of_day, status):
+    """
+    Insert a record into the medication_logs table (used for ML model training).
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -271,7 +362,14 @@ def save_medication_log(patient_id, age, day_of_week, time_of_day, status):
         conn.commit()
         cursor.close()
 
+
+# ----------------------------------------------------------------------
+# Get all medication logs (latest 20)
+# ----------------------------------------------------------------------
 def get_all_medication_logs():
+    """
+    Retrieve the most recent 20 entries from the medication_logs table.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('SELECT * FROM medication_logs ORDER BY timestamp DESC LIMIT 20')
@@ -279,10 +377,23 @@ def get_all_medication_logs():
         cursor.close()
     return logs
 
+
+# ----------------------------------------------------------------------
+# Retake a missed dose (update log and adjust inventory)
+# ----------------------------------------------------------------------
 def retake_missed_dose(adlog_id):
+    """
+    Allow a patient to take a missed dose within 30 minutes of the scheduled time.
+    Steps:
+      1. Check if the log exists and status is 'MISSED'.
+      2. Verify that the current time is within 30 minutes of scheduled_time.
+      3. Update the log status to 'TAKEN' and set dispensed_time to NOW().
+      4. Decrease the medication inventory by the dosage_tablet for that prescription.
+    Returns: (success_bool, message_string)
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        # 1. Get prescription_id, status, and scheduled_time
+        # 1. Fetch prescription_id, status, and scheduled_time
         cursor.execute('''
             SELECT prescription_id, status, scheduled_time
             FROM adherence_logs
@@ -316,7 +427,7 @@ def retake_missed_dose(adlog_id):
             WHERE adlog_id = %s
         ''', (adlog_id,))
 
-        # 4. Decrement inventory by the prescribed dosage
+        # 4. Decrement inventory by the dosage (dosage_tablet from prescription_config)
         cursor.execute('''
             UPDATE medications m
             JOIN prescription_config pc ON m.medication_id = pc.medication_id

@@ -1,4 +1,7 @@
-//bottom_nav_bar.dart
+// bottom_nav_bar.dart - A bottom navigation bar with a central floating action button.
+// Dynamically switches pages based on user role (patient/caregiver) and includes
+// a persistent bottom bar with home, AI, inventory (FAB), history, and profile tabs.
+
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/screens/patient/patient_dashboard_page.dart';
 import 'package:my_medical_kit_app/screens/caregiver/caregiver_dashboard_page.dart';
@@ -10,12 +13,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_medical_kit_app/screens/caregiver/ai_analytics_page_caregiver.dart';
 import 'package:my_medical_kit_app/screens/patient/ai_prediction_patient.dart';
 
-// 👇 Import the two new separated inventory pages
+// Import the two role‑specific inventory pages (separate screens for patient and caregiver)
 import 'package:my_medical_kit_app/screens/patient/patient_inventory_page.dart';
 import 'package:my_medical_kit_app/screens/caregiver/caregiver_inventory_page.dart';
 
+// ----------------------------------------------------------------------
+// ComingSoonPage – a placeholder screen for features not yet implemented.
+// Used when a tab points to an unfinished feature.
+// ----------------------------------------------------------------------
 class ComingSoonPage extends StatelessWidget {
-  final String title;
+  final String title; // Title of the feature
+
   const ComingSoonPage({super.key, required this.title});
 
   @override
@@ -27,6 +35,7 @@ class ComingSoonPage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Circular icon with hourglass
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -40,6 +49,7 @@ class ComingSoonPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
+            // Feature title (e.g., "Smart Reminders")
             Text(
               title,
               style: const TextStyle(
@@ -49,6 +59,7 @@ class ComingSoonPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
+            // Subtitle
             Text(
               'Feature Coming Soon',
               style: TextStyle(
@@ -63,6 +74,11 @@ class ComingSoonPage extends StatelessWidget {
   }
 }
 
+// ----------------------------------------------------------------------
+// BottomNavBar – the main navigation widget for the app after login.
+// It displays a bottom bar with 5 items (Home, AI, Inventory via FAB, History, Profile).
+// The content changes depending on the user's role (patient or caregiver).
+// ----------------------------------------------------------------------
 class BottomNavBar extends StatefulWidget {
   const BottomNavBar({super.key});
 
@@ -71,24 +87,30 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class _BottomNavBarState extends State<BottomNavBar> {
-  int selectedIndex = 0;
+  int selectedIndex =
+      0; // Current selected tab index (0=Home, 1=AI, 2=Inventory (FAB), 3=History, 4=Profile)
 
-  // Role and ID loaded from SharedPreferences (saved during login)
+  // Role and user ID loaded from SharedPreferences after login
   String _role = 'patient';
   int _userId = 0;
-  bool _sessionLoaded = false;
+  bool _sessionLoaded = false; // Flag to avoid building before data is ready
 
   @override
   void initState() {
     super.initState();
-    _loadRole();
+    _loadRole(); // Load user session data
   }
 
+  // ----------------------------------------------------------------------
+  // Load the logged‑in user's role and ID from SharedPreferences.
+  // Then update the state so the UI can reflect the correct role.
+  // ----------------------------------------------------------------------
   Future<void> _loadRole() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _role = prefs.getString('role') ?? 'patient';
 
+      // Retrieve the appropriate ID based on role
       if (_role == 'patient') {
         _userId = prefs.getInt('patient_id') ?? 1;
       } else {
@@ -99,12 +121,17 @@ class _BottomNavBarState extends State<BottomNavBar> {
     });
   }
 
-  // Pages change based on role
+  // ----------------------------------------------------------------------
+  // Build the list of pages based on the current role.
+  // Each tab corresponds to a different widget.
+  // ----------------------------------------------------------------------
   List<Widget> get _pages {
+    // Home page: depends on role
     final homePage = _role == 'caregiver'
         ? const CaregiverDashboardPage()
         : const PatientDashboardPage();
 
+    // History page: also role‑specific
     Widget historyPage;
     if (_role == 'patient') {
       historyPage = const PatientHistoryPage();
@@ -112,6 +139,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
       historyPage = const MedicationHistoryScreen();
     }
 
+    // AI / Analytics page: role‑specific (patient sees prediction, caregiver sees analytics)
     Widget aiPage;
     if (_role == 'patient') {
       aiPage = const AIPredictionPatientPage();
@@ -119,7 +147,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
       aiPage = AiAnalyticsPage(caregiverId: _userId);
     }
 
-    // 👇 Dynamically assign the correct inventory page
+    // Inventory page: dynamic based on role (patient vs caregiver)
     Widget inventoryPage;
     if (_role == 'patient') {
       inventoryPage = PatientInventoryPage(userId: _userId);
@@ -127,10 +155,11 @@ class _BottomNavBarState extends State<BottomNavBar> {
       inventoryPage = CaregiverInventoryPage(userId: _userId);
     }
 
+    // Return the list of pages in the order of the bottom bar indices
     return [
       homePage, // Index 0: Home
       aiPage, // Index 1: AI Predict
-      inventoryPage, // 👇 Index 2: Inventory (Now fully dynamic)
+      inventoryPage, // 👉 Index 2: Inventory (accessed via FAB)
       historyPage, // Index 3: History
       const ProfilePage(), // Index 4: Profile
     ];
@@ -138,6 +167,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
   @override
   Widget build(BuildContext context) {
+    // Show a loading indicator while session data is being loaded
     if (!_sessionLoaded) {
       return const Scaffold(
         backgroundColor: Color(0xFFF4F6FB),
@@ -145,6 +175,9 @@ class _BottomNavBarState extends State<BottomNavBar> {
       );
     }
 
+    // Wrap the scaffold with PopScope to handle Android back button behaviour.
+    // If the user is on the home tab (index 0), allow back navigation (pop).
+    // Otherwise, go back to the home tab.
     return PopScope(
       canPop: selectedIndex == 0,
       onPopInvokedWithResult: (didPop, result) {
@@ -153,8 +186,13 @@ class _BottomNavBarState extends State<BottomNavBar> {
         }
       },
       child: Scaffold(
+        // Display the currently selected page
         body: _pages[selectedIndex],
 
+        // ----------------------------------------------------------------------
+        // Floating Action Button – centrally placed in the bottom bar.
+        // Tapping it selects the Inventory tab (index 2).
+        // ----------------------------------------------------------------------
         floatingActionButton: SizedBox(
           height: 62,
           width: 62,
@@ -166,7 +204,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
             ),
             onPressed: () {
               setState(() {
-                selectedIndex = 2;
+                selectedIndex = 2; // Switch to Inventory page
               });
             },
             child: const Icon(
@@ -176,10 +214,16 @@ class _BottomNavBarState extends State<BottomNavBar> {
             ),
           ),
         ),
+        // Position the FAB in the centre of the bottom app bar
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
+        // ----------------------------------------------------------------------
+        // Bottom Navigation Bar with a notch for the FAB.
+        // It displays four items: Home, AI Predict, History, Profile.
+        // The Inventory button is the FAB itself.
+        // ----------------------------------------------------------------------
         bottomNavigationBar: BottomAppBar(
-          shape: const CircularNotchedRectangle(),
+          shape: const CircularNotchedRectangle(), // Notch for FAB
           notchMargin: 8,
           height: 60,
           padding: EdgeInsets.zero,
@@ -188,10 +232,15 @@ class _BottomNavBarState extends State<BottomNavBar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              // Home tab
               _buildNavItem(Icons.home_outlined, 'Home', 0),
+              // AI tab
               _buildNavItem(Icons.analytics_outlined, 'AI Predict', 1),
+              // Spacer to align with the FAB notch
               const SizedBox(width: 48),
+              // History tab
               _buildNavItem(Icons.history_outlined, 'History', 3),
+              // Profile tab
               _buildNavItem(Icons.person_outline, 'Profile', 4),
             ],
           ),
@@ -200,6 +249,10 @@ class _BottomNavBarState extends State<BottomNavBar> {
     );
   }
 
+  // ----------------------------------------------------------------------
+  // Helper to build each navigation item (icon + label).
+  // Highlights the item if it matches the selected index.
+  // ----------------------------------------------------------------------
   Widget _buildNavItem(IconData icon, String label, int index) {
     final bool isSelected = selectedIndex == index;
     return InkWell(
