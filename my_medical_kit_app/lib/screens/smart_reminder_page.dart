@@ -79,17 +79,7 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
     }
   }
 
-  String _formatCron(String cron) {
-    final parts = cron.split(' ');
-    if (parts.length < 5) return cron;
-    final minute = parts[0];
-    final hour = parts[1];
-    if (hour.contains(',')) {
-      final times = hour.split(',').map((h) => '$h:$minute').join(', ');
-      return 'Daily at $times';
-    }
-    return 'Daily at ${hour.padLeft(2, '0')}:${minute.padLeft(2, '0')}';
-  }
+
 
   Widget _buildHeader() {
     final topPadding = MediaQuery.of(context).padding.top;
@@ -262,9 +252,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                _formatCron(
-                                                  med.dispenseSchedule,
-                                                ),
+                                                med.dispenseTimes.isNotEmpty
+                                                    ? 'Daily at ${med.dispenseTimes.map((t) => t.length >= 5 ? t.substring(0, 5) : t).join(', ')}'
+                                                    : 'No schedule',
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   color: Colors.grey.shade700,

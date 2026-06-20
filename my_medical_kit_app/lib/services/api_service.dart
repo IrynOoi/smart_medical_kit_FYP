@@ -476,7 +476,25 @@ class ApiService {
     }
   }
 
-  // (Commented out: getCaregiverAlerts – similar functionality may exist elsewhere)
+  // ---------------------- Get Recent Alerts (for Caregiver) ----------------------
+  Future<List<Map<String, dynamic>>> getCaregiverAlerts(int caregiverId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/caregiver/$caregiverId/recent_alerts'),
+        headers: {'ngrok-skip-browser-warning': 'true'},
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return List<Map<String, dynamic>>.from(jsonResponse['data']);
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Error getting caregiver alerts: $e');
+      return [];
+    }
+  }
 
   // ==========================================
   // 📊 AI ANALYTICS ENDPOINTS
