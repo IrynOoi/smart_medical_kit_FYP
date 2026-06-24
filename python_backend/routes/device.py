@@ -292,32 +292,36 @@ def get_device_prescriptions(device_id):
 @device_bp.route('/device/<device_serial>/pending_dose', methods=['GET'])
 def get_pending_dose(device_serial):
     """
-    Endpoint used by the ESP32 device to poll for the next dose to dispense.
+    Endpoint used by the ESP32 device to poll for due doses to dispense.
     Returns:
       - has_pending: True/False
-      - is_empty: True if inventory is <= 0 (so ESP32 can show "empty" state)
-      - data: details of the pending dose (medication, motor slot, etc.)
+      - doses: list of due dose objects (each with is_empty + dispense metadata)
+      - data: first due dose object (compatibility for older clients)
     This is a critical route for the device's operation.
     """
     try:
-        dose = get_pending_dose_for_device(device_serial)
+        doses = get_pending_dose_for_device(device_serial)
 
-        if dose:
-            # ⚠️ Critical check: if inventory is zero or less, flag the device
-            is_empty = False
-            if dose.get('current_inventory', 0) <= 0:
-                is_empty = True
+        if doses:
+            enriched_doses = []
+            for dose in doses:
+                item = dict(dose)
+                item['is_empty'] = item.get('current_inventory', 0) <= 0
 
-            # Remove inventory field from the returned data to keep the payload lightweight
-            if 'current_inventory' in dose:
-                del dose['current_inventory']
+                # Remove inventory field from payload to keep responses lightweight
+                if 'current_inventory' in item:
+                    del item['current_inventory']
 
-            # Return the dose with the is_empty flag
+                enriched_doses.append(item)
+
+            # Compatibility fields for older firmware that expects a single `data` item.
+            first_dose = enriched_doses[0]
             return jsonify({
                 "success": True,
                 "has_pending": True,
-                "is_empty": is_empty,   # ESP32 uses this to show "Empty" state
-                "data": dose
+                "is_empty": first_dose['is_empty'],
+                "doses": enriched_doses,
+                "data": first_dose
             })
         else:
             return jsonify({"success": True, "has_pending": False})
