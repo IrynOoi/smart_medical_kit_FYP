@@ -49,10 +49,17 @@ unsigned long doseStartTime = 0;
 const unsigned long doseTimeout = 10000;         // 10 seconds to press the button
 
 bool isDoseWaiting = false;          // True when a dose is due and awaiting user action
-int pendingMotorSlot = 0;            // Which stepper motor to rotate (1‑3)
-int pendingAdlogId = 0;              // Adherence log ID from server
-int pendingPrescriptionId = 0;       // Prescription ID for marking taken
-String pendingMedName = "";          // Medication name (for display)
+const int maxPendingDoses = 12;      // Safety cap to keep RAM usage predictable on ESP32
+struct PendingDose {
+  int motorSlot;
+  int adlogId;
+  int prescriptionId;
+  String medName;
+  bool isEmpty;
+};
+PendingDose pendingDoses[maxPendingDoses];
+int pendingDoseCount = 0;
+String pendingMedName = "";          // Summary name for display
 
 // ── Out‑of‑stock alarm state ────────────────────────────────
 bool isOutOfStockBeeping = false;    // True when we are beeping because a slot is empty
@@ -64,6 +71,10 @@ bool outOfStockBuzzerState = false;  // Current buzzer state for toggling (beep 
 // ── Function prototypes (defined later) ─────────────────────
 void setupTouch();  
 void handleTouch(); 
+void clearPendingDoses();
+bool enqueuePendingDose(int motorSlot, int adlogId, int prescriptionId, const String& medName, bool isEmpty);
+void markAllPendingAsMissed();
+void showFirstPendingWarning();
 
 // ──────────────────────────────────────────────────────────────
 // Helper: Build full URL from a path
@@ -167,6 +178,40 @@ void markDoseAsMissed(int adlogId) {
   http.end();
 }
 
+void clearPendingDoses() {
+  pendingDoseCount = 0;
+  pendingMedName = "";
+}
+
+bool enqueuePendingDose(int motorSlot, int adlogId, int prescriptionId, const String& medName, bool isEmpty) {
+  if (pendingDoseCount >= maxPendingDoses) return false;
+  pendingDoses[pendingDoseCount].motorSlot = motorSlot;
+  pendingDoses[pendingDoseCount].adlogId = adlogId;
+  pendingDoses[pendingDoseCount].prescriptionId = prescriptionId;
+  pendingDoses[pendingDoseCount].medName = medName;
+  pendingDoses[pendingDoseCount].isEmpty = isEmpty;
+  pendingDoseCount++;
+  if (pendingMedName.length() == 0) pendingMedName = medName;
+  return true;
+}
+
+void markAllPendingAsMissed() {
+  for (int i = 0; i < pendingDoseCount; i++) {
+    markDoseAsMissed(pendingDoses[i].adlogId);
+  }
+}
+
+void showFirstPendingWarning() {
+  if (pendingDoseCount == 0) return;
+  for (int i = 0; i < pendingDoseCount; i++) {
+    if (pendingDoses[i].isEmpty) {
+      updateDisplayState("Slot " + String(pendingDoses[i].motorSlot) + " Empty", "Refill " + pendingDoses[i].medName);
+      return;
+    }
+  }
+  updateDisplayState("Medicine Due!", pendingMedName);
+}
+
 // ──────────────────────────────────────────────────────────────
 // Poll the server for any pending dose for this device
 // ──────────────────────────────────────────────────────────────
@@ -188,41 +233,52 @@ void checkForPendingDose() {
   
   if (httpCode == 200) {
     String payload = http.getString();
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(4096);   // Batch payload buffer (supports multiple due doses)
     deserializeJson(doc, payload);
 
     if (doc["success"] == true && doc["has_pending"] == true) {
+      clearPendingDoses();
+      bool hasEmptyDose = false;
 
-      // 💡 Check if the server says the inventory is empty
-      if (doc["is_empty"] == true) { 
-        pendingMedName = doc["data"]["medication_name"].as<String>();
-        String slotNum = doc["data"]["motor_slot"].as<String>();
-        pendingAdlogId = doc["data"]["adlog_id"];
-        
-        Serial.println("⚠️ Out of stock: " + pendingMedName + " (Slot " + slotNum + ")");
-        updateDisplayState("Slot " + slotNum + " Empty", "Refill " + pendingMedName);
-        
-        isOutOfStockBeeping = true;                   // Start the out‑of‑stock alarm
-        outOfStockStartTime = millis();
-        lastBuzzerToggleTime = millis();
-        outOfStockBuzzerState = true;
-        triggerBuzzerHardware(true);                  // Turn buzzer on initially
-        
-        http.end();
-        return;   // Stop processing – we are in alarm state
+      if (!doc["doses"].isNull()) {
+        JsonArray doses = doc["doses"].as<JsonArray>();
+        for (JsonVariant dose : doses) {
+          bool isEmpty = dose["is_empty"] | false;
+          if (isEmpty) hasEmptyDose = true;
+          enqueuePendingDose(
+            dose["motor_slot"] | 0,
+            dose["adlog_id"] | 0,
+            dose["prescription_id"] | 0,
+            dose["medication_name"] | "Medicine",
+            isEmpty
+          );
+        }
+      } else if (!doc["data"].isNull()) {
+        JsonVariant dose = doc["data"];
+        bool isEmpty = dose["is_empty"] | (doc["is_empty"] | false);
+        if (isEmpty) hasEmptyDose = true;
+        enqueuePendingDose(
+          dose["motor_slot"] | 0,
+          dose["adlog_id"] | 0,
+          dose["prescription_id"] | 0,
+          dose["medication_name"] | "Medicine",
+          isEmpty
+        );
       }
 
-      // ⚙️ Normal dose: extract data and start the dispense waiting state
-      pendingMotorSlot     = doc["data"]["motor_slot"];
-      pendingAdlogId       = doc["data"]["adlog_id"];
-      pendingPrescriptionId= doc["data"]["prescription_id"];
-      pendingMedName       = doc["data"]["medication_name"].as<String>();
-      
-      Serial.println("🚨 Dose due: " + pendingMedName);
-      isDoseWaiting = true;
-      doseStartTime = millis(); 
-      triggerBuzzerHardware(true);                    // Buzz to alert user
-      updateDisplayState("Medicine Due!", pendingMedName);
+      if (pendingDoseCount > 0) {
+        Serial.println("🚨 Dose batch due. Count: " + String(pendingDoseCount));
+        isDoseWaiting = true;
+        isOutOfStockBeeping = hasEmptyDose;
+        doseStartTime = millis();
+        if (hasEmptyDose) {
+          outOfStockStartTime = millis();
+          lastBuzzerToggleTime = millis();
+          outOfStockBuzzerState = true;
+        }
+        triggerBuzzerHardware(true);
+        showFirstPendingWarning();
+      }
     }
   } else {
     Serial.print("⚠️ checkForPendingDose HTTP code: ");
@@ -235,29 +291,41 @@ void checkForPendingDose() {
 // Dispense action – called when the physical touch button is pressed
 // ──────────────────────────────────────────────────────────────
 void executeDispense() {
-  // If we are in out‑of‑stock alarm, pressing the button dismisses it
-  if (isOutOfStockBeeping) {
+  // If we are in standalone out‑of‑stock alarm, pressing the button dismisses it
+  if (isOutOfStockBeeping && !isDoseWaiting) {
     Serial.println("🛑 User dismissed out-of-stock alarm.");
     isOutOfStockBeeping = false;
     triggerBuzzerHardware(false);
-    if (WiFi.status() == WL_CONNECTED) markDoseAsMissed(pendingAdlogId); 
     updateDisplayState("MedSmart System", "Ready!"); 
     return;
   }
 
-  // Normal dose waiting: dispense the medication
+  // Batch dose waiting: dispense each due medication sequentially
   if (isDoseWaiting) {
     isDoseWaiting = false; 
+    isOutOfStockBeeping = false;
     triggerBuzzerHardware(false);
     
-    Serial.println("⚙️ Dispensing: " + pendingMedName);
-    updateDisplayState("Dispensing...", pendingMedName);
-    
-    rotateMotorHardware(pendingMotorSlot);            // Rotate the stepper motor
-    markDoseAsTaken(pendingAdlogId, pendingPrescriptionId);
+    for (int i = 0; i < pendingDoseCount; i++) {
+      PendingDose dose = pendingDoses[i];
+      if (dose.isEmpty) {
+        Serial.println("⚠️ Out of stock: " + dose.medName + " (Slot " + String(dose.motorSlot) + ")");
+        updateDisplayState("Slot " + String(dose.motorSlot) + " Empty", "Refill " + dose.medName);
+        if (WiFi.status() == WL_CONNECTED) markDoseAsMissed(dose.adlogId);
+        continue;
+      }
+
+      Serial.println("⚙️ Dispensing: " + dose.medName);
+      updateDisplayState("Dispensing...", dose.medName);
+      rotateMotorHardware(dose.motorSlot);
+      if (WiFi.status() == WL_CONNECTED) {
+        markDoseAsTaken(dose.adlogId, dose.prescriptionId);
+      }
+    }
     
     updateDisplayState("Finished!", "Take Meds");
     delay(4000); 
+    clearPendingDoses();
     updateDisplayState("MedSmart System", "Ready!"); 
   }
 }
@@ -337,17 +405,17 @@ void setup() {
       // Cancel any ongoing out‑of‑stock or normal waiting
       isOutOfStockBeeping = false;
       triggerBuzzerHardware(false);
+      clearPendingDoses();
 
-      // Put the device into dose‑waiting mode
+      // Put the device into dose‑waiting mode with a single queued retake dose
+      if (!enqueuePendingDose(motorSlot, adlogId, prescriptionId, medName, false)) {
+        server.send(500, "text/plain", "Retake queue full");
+        return;
+      }
       isDoseWaiting = true;
-      pendingMotorSlot = motorSlot;
-      pendingAdlogId = adlogId;
-      pendingPrescriptionId = prescriptionId;
-      pendingMedName = medName;
       doseStartTime = millis();
-
       triggerBuzzerHardware(true);
-      updateDisplayState("Medicine Due!", pendingMedName);
+      showFirstPendingWarning();
 
       server.send(200, "text/plain", "Retake started");
     } else {
@@ -404,14 +472,13 @@ void loop() {
     }
   }
 
-  // 3A. Out‑of‑stock beeping pattern (toggle buzzer every 500 ms)
-  if (isOutOfStockBeeping) {
+  // 3A. Standalone out‑of‑stock beeping pattern (toggle buzzer every 500 ms)
+  if (isOutOfStockBeeping && !isDoseWaiting) {
     if (millis() - outOfStockStartTime > outOfStockTimeout) {
       // Timeout – automatically miss the dose and stop beeping
       isOutOfStockBeeping = false;
       triggerBuzzerHardware(false);
-      Serial.println("🛑 Out-of-stock timeout. Marking as missed.");
-      if (WiFi.status() == WL_CONNECTED) markDoseAsMissed(pendingAdlogId); 
+      Serial.println("🛑 Out-of-stock timeout.");
       updateDisplayState("MedSmart System", "Ready!");
     } else {
       if (millis() - lastBuzzerToggleTime > 500) {
@@ -425,11 +492,13 @@ void loop() {
   // 3B. Normal dose timeout – user didn't press the button in time
   if (isDoseWaiting) {
     if (millis() - doseStartTime > doseTimeout) {
-      Serial.println("⏰ Dose timeout — marked as missed.");
+      Serial.println("⏰ Dose timeout — batch marked as missed.");
       isDoseWaiting = false; 
+      isOutOfStockBeeping = false;
       triggerBuzzerHardware(false); 
       updateDisplayState("Missed Dose", pendingMedName);
-      if (WiFi.status() == WL_CONNECTED) markDoseAsMissed(pendingAdlogId); 
+      if (WiFi.status() == WL_CONNECTED) markAllPendingAsMissed();
+      clearPendingDoses();
       delay(4000);
       updateDisplayState("MedSmart System", "Ready!"); 
     }

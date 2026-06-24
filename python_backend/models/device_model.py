@@ -214,13 +214,12 @@ def record_device_heartbeat(device_serial, battery_level, ip_address, wifi_rssi=
 # ---------------------- Get Pending Dose for Device (Polling) ----------------------
 def get_pending_dose_for_device(device_serial):
     """
-    Query for the next pending dose that should be dispensed by the device.
-    - Finds a PENDING adherence log for any medication linked to this device.
-    - The dose must be scheduled at or before the current time.
-    - Returns the earliest such pending dose (LIMIT 1), including:
-        adlog_id, scheduled_time, prescription_id, dosage_tablet, motor_slot,
-        patient_id, medication_name, and current_inventory.
-    - Returns None if no pending dose exists.
+    Query for all due pending doses that should be dispensed by the device.
+    - Finds PENDING adherence logs for medications linked to this device.
+    - Doses must be scheduled at or before the current time.
+    - Returns a list ordered by scheduled time, then motor slot.
+    - Each row includes adlog_id, scheduled_time, prescription_id, dosage_tablet,
+      motor_slot, patient_id, medication_name, and current_inventory.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
@@ -237,10 +236,9 @@ def get_pending_dose_for_device(device_serial):
             WHERE d.device_serial = %s
               AND al.status = 'PENDING'
               AND al.scheduled_time <= CURRENT_TIMESTAMP
-            ORDER BY al.scheduled_time ASC
-            LIMIT 1
+            ORDER BY al.scheduled_time ASC, med.motor_slot ASC, al.adlog_id ASC
         ''', (device_serial,))
-        pending = cursor.fetchone()
+        pending = cursor.fetchall()
         cursor.close()
     return pending
 
