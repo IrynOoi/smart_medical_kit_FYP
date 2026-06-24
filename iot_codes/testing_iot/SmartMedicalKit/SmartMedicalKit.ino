@@ -311,7 +311,6 @@ void executeDispense() {
       if (dose.isEmpty) {
         Serial.println("⚠️ Out of stock: " + dose.medName + " (Slot " + String(dose.motorSlot) + ")");
         updateDisplayState("Slot " + String(dose.motorSlot) + " Empty", "Refill " + dose.medName);
-        delay(1200);
         if (WiFi.status() == WL_CONNECTED) markDoseAsMissed(dose.adlogId);
         continue;
       }
@@ -322,7 +321,6 @@ void executeDispense() {
       if (WiFi.status() == WL_CONNECTED) {
         markDoseAsTaken(dose.adlogId, dose.prescriptionId);
       }
-      delay(1200);
     }
     
     updateDisplayState("Finished!", "Take Meds");
