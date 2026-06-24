@@ -1,72 +1,88 @@
-// SmartMedicalKit.ino
+// ──────────────────────────────────────────────────────────────
+// SmartMedicalKit.ino – Main firmware for the ESP32‑based 
+// medication dispenser. It handles:
+//   • WiFi connection and HTTPS communication with the backend
+//   • Polling for pending doses (via /pending_dose)
+//   • Dispensing medication using stepper motors
+//   • Buzzer alerts and OLED display feedback
+//   • Heartbeat to keep the server informed of device status
+//   • A built‑in web server for remote control / debugging
+// ──────────────────────────────────────────────────────────────
 
-#include <WiFi.h>
-#include <WebServer.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>      
-#include "dispenser_motor.h" 
-#include "buzzer_control.h" 
-#include <ArduinoJson.h>
-#include "display_control.h" 
-#include "secrets.h"
-#include <Preferences.h>
+// ── External libraries ────────────────────────────────────────
+#include <WiFi.h>                   // WiFi connectivity
+#include <WebServer.h>              // HTTP server for remote control
+#include <WiFiClientSecure.h>       // HTTPS (SSL/TLS) client
+#include <HTTPClient.h>             // HTTP/HTTPS requests
+#include <ArduinoJson.h>            // JSON parsing / construction
+#include <Preferences.h>            // Persistent storage (flash)
 
-Preferences prefs;
+// ── Custom hardware abstraction layers ──────────────────────
+#include "dispenser_motor.h"        // Stepper motor control functions
+#include "buzzer_control.h"         // Buzzer on/off functions
+#include "display_control.h"        // OLED display functions
+#include "secrets.h"                // WiFi SSID + password (not in repo)
 
+// ──────────────────────────────────────────────────────────────
+// Global objects
+// ──────────────────────────────────────────────────────────────
+Preferences prefs;  // For saving server URL across reboots
 
-String serverBase = "https://reluctant-scrambled-badge.ngrok-free.dev";
+// ── Server & device configuration ────────────────────────────
+String serverBase = "https://reluctant-scrambled-badge.ngrok-free.dev"; 
+// Default ngrok URL (can be changed at runtime via /config/seturl)
 
-const String deviceSerial = "DISP-1"; 
+const String deviceSerial = "DISP-1";  // Unique device ID – must match backend
 
-WebServer server(80);
-const int ledPin = 18; 
+WebServer server(80);                  // HTTP server on port 80
+const int ledPin = 18;                 // On‑board LED (for testing)
 
-// ⏱️ Timers
+// ── Timers ────────────────────────────────────────────────────
 unsigned long lastHeartbeatTime = 0;
-const unsigned long heartbeatInterval = 30000; 
+const unsigned long heartbeatInterval = 30000;   // Send heartbeat every 30s
 
 unsigned long lastDoseCheckTime = 0;
-const unsigned long doseCheckInterval = 10000; 
+const unsigned long doseCheckInterval = 10000;   // Poll server every 10s
 
-// ⏳ Normal dose timeout
+// ── Dose waiting state ──────────────────────────────────────
 unsigned long doseStartTime = 0;
-const unsigned long doseTimeout = 10000;
+const unsigned long doseTimeout = 10000;         // 10 seconds to press the button
 
-// 🧠 Normal dose state machine
-bool isDoseWaiting = false;
-int pendingMotorSlot = 0;
-int pendingAdlogId = 0;
-int pendingPrescriptionId = 0;
-String pendingMedName = "";
+bool isDoseWaiting = false;          // True when a dose is due and awaiting user action
+int pendingMotorSlot = 0;            // Which stepper motor to rotate (1‑3)
+int pendingAdlogId = 0;              // Adherence log ID from server
+int pendingPrescriptionId = 0;       // Prescription ID for marking taken
+String pendingMedName = "";          // Medication name (for display)
 
-// 🚨 Out-of-stock alarm state
-bool isOutOfStockBeeping = false;
+// ── Out‑of‑stock alarm state ────────────────────────────────
+bool isOutOfStockBeeping = false;    // True when we are beeping because a slot is empty
 unsigned long outOfStockStartTime = 0;
-const unsigned long outOfStockTimeout = 10000; 
+const unsigned long outOfStockTimeout = 10000;   // Beep for 10s then auto‑miss
 unsigned long lastBuzzerToggleTime = 0;
-bool outOfStockBuzzerState = false;
+bool outOfStockBuzzerState = false;  // Current buzzer state for toggling (beep pattern)
 
+// ── Function prototypes (defined later) ─────────────────────
 void setupTouch();  
 void handleTouch(); 
 
-// ─────────────────────────────────────────────
-// Helper: build full URL from path
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Helper: Build full URL from a path
+// ──────────────────────────────────────────────────────────────
 String buildURL(String path) {
   return serverBase + path;
 }
 
-// ─────────────────────────────────────────────
-// WiFi
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// WiFi connection routine
+// ──────────────────────────────────────────────────────────────
 void connectToWiFi() {
-  WiFi.disconnect(true);
+  WiFi.disconnect(true);        // Clear any previous WiFi settings
   delay(1000); 
-  WiFi.mode(WIFI_STA); 
+  WiFi.mode(WIFI_STA);          // Station mode (not AP)
   
   Serial.print("Connecting to WiFi: ");
   Serial.println(SECRET_SSID);
-  updateDisplayState("Connecting...", "WiFi");
+  updateDisplayState("Connecting...", "WiFi");   // Show on OLED
   
   WiFi.begin(SECRET_SSID, SECRET_PASS); 
 
@@ -90,26 +106,26 @@ void connectToWiFi() {
   }
 }
 
-// ─────────────────────────────────────────────
-// HTTP Helpers
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// HTTP Helper: Add common headers to every request
+// ──────────────────────────────────────────────────────────────
 void addCommonHeaders(HTTPClient &http) {
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("ngrok-skip-browser-warning", "true");
+  http.addHeader("ngrok-skip-browser-warning", "true");  // Required for ngrok
   http.setConnectTimeout(10000);
   http.setTimeout(10000);
-  http.addHeader("Connection", "close");
+  http.addHeader("Connection", "close");   // Prevent keep‑alive issues
 }
 
-// ─────────────────────────────────────────────
-// Mark dose as TAKEN
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Mark a dose as successfully taken (called after motor rotation)
+// ──────────────────────────────────────────────────────────────
 void markDoseAsTaken(int adlogId, int prescriptionId) {
   HTTPClient http;
   String url = buildURL("/device/dispense_success");
   
   WiFiClientSecure secureClient;
-  secureClient.setInsecure(); // Bypass SSL verification
+  secureClient.setInsecure();   // Accept self‑signed / ngrok certificates
 
   http.begin(secureClient, url);
   addCommonHeaders(http);
@@ -126,9 +142,9 @@ void markDoseAsTaken(int adlogId, int prescriptionId) {
   http.end();
 }
 
-// ─────────────────────────────────────────────
-// Mark dose as MISSED
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Mark a dose as missed (called on timeout or user cancellation)
+// ──────────────────────────────────────────────────────────────
 void markDoseAsMissed(int adlogId) {
   HTTPClient http;
   String url = buildURL("/device/dispense_missed");
@@ -151,9 +167,9 @@ void markDoseAsMissed(int adlogId) {
   http.end();
 }
 
-// ─────────────────────────────────────────────
-// Poll server for pending dose
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Poll the server for any pending dose for this device
+// ──────────────────────────────────────────────────────────────
 void checkForPendingDose() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -177,7 +193,7 @@ void checkForPendingDose() {
 
     if (doc["success"] == true && doc["has_pending"] == true) {
 
-      // 💡 Out of stock?
+      // 💡 Check if the server says the inventory is empty
       if (doc["is_empty"] == true) { 
         pendingMedName = doc["data"]["medication_name"].as<String>();
         String slotNum = doc["data"]["motor_slot"].as<String>();
@@ -186,17 +202,17 @@ void checkForPendingDose() {
         Serial.println("⚠️ Out of stock: " + pendingMedName + " (Slot " + slotNum + ")");
         updateDisplayState("Slot " + slotNum + " Empty", "Refill " + pendingMedName);
         
-        isOutOfStockBeeping = true;
+        isOutOfStockBeeping = true;                   // Start the out‑of‑stock alarm
         outOfStockStartTime = millis();
         lastBuzzerToggleTime = millis();
         outOfStockBuzzerState = true;
-        triggerBuzzerHardware(true); 
+        triggerBuzzerHardware(true);                  // Turn buzzer on initially
         
         http.end();
-        return;
+        return;   // Stop processing – we are in alarm state
       }
 
-      // ⚙️ Normal dispense
+      // ⚙️ Normal dose: extract data and start the dispense waiting state
       pendingMotorSlot     = doc["data"]["motor_slot"];
       pendingAdlogId       = doc["data"]["adlog_id"];
       pendingPrescriptionId= doc["data"]["prescription_id"];
@@ -205,7 +221,7 @@ void checkForPendingDose() {
       Serial.println("🚨 Dose due: " + pendingMedName);
       isDoseWaiting = true;
       doseStartTime = millis(); 
-      triggerBuzzerHardware(true);
+      triggerBuzzerHardware(true);                    // Buzz to alert user
       updateDisplayState("Medicine Due!", pendingMedName);
     }
   } else {
@@ -215,10 +231,11 @@ void checkForPendingDose() {
   http.end();
 }
 
-// ─────────────────────────────────────────────
-// Dispense (touch button handler)
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Dispense action – called when the physical touch button is pressed
+// ──────────────────────────────────────────────────────────────
 void executeDispense() {
+  // If we are in out‑of‑stock alarm, pressing the button dismisses it
   if (isOutOfStockBeeping) {
     Serial.println("🛑 User dismissed out-of-stock alarm.");
     isOutOfStockBeeping = false;
@@ -228,6 +245,7 @@ void executeDispense() {
     return;
   }
 
+  // Normal dose waiting: dispense the medication
   if (isDoseWaiting) {
     isDoseWaiting = false; 
     triggerBuzzerHardware(false);
@@ -235,7 +253,7 @@ void executeDispense() {
     Serial.println("⚙️ Dispensing: " + pendingMedName);
     updateDisplayState("Dispensing...", pendingMedName);
     
-    rotateMotorHardware(pendingMotorSlot);
+    rotateMotorHardware(pendingMotorSlot);            // Rotate the stepper motor
     markDoseAsTaken(pendingAdlogId, pendingPrescriptionId);
     
     updateDisplayState("Finished!", "Take Meds");
@@ -244,13 +262,13 @@ void executeDispense() {
   }
 }
 
-// ─────────────────────────────────────────────
-// Setup
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Arduino setup() – runs once on power‑up
+// ──────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
 
-  // Load saved ngrok URL from flash (if any)
+  // ── Load saved server URL from flash (persistent across reboots) ──
   prefs.begin("medsmart", false);
   String savedURL = prefs.getString("server_url", "");
   if (savedURL.length() > 0) {
@@ -259,15 +277,19 @@ void setup() {
   }
   prefs.end();
   
+  // ── Initialise hardware ──────────────────────────────────────
   pinMode(ledPin, OUTPUT);
-  setupStepper(); 
-  setupBuzzer(); 
-  setupDisplay(); 
-  setupTouch();
+  setupStepper();    // from dispenser_motor.h
+  setupBuzzer();     // from buzzer_control.h
+  setupDisplay();    // from display_control.h
+  setupTouch();      // defined below (or in another file)
 
+  // ── Connect to WiFi ─────────────────────────────────────────
   connectToWiFi();
 
-  // ── REST API routes ──────────────────────────
+  // ── Set up HTTP server endpoints ────────────────────────────
+  
+  // LED control (for testing)
   server.on("/led/on", []() {
     digitalWrite(ledPin, HIGH);
     server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -279,58 +301,61 @@ void setup() {
     server.send(200, "text/plain", "LED IS OFF");
   });
 
+  // Buzzer, display, and motor endpoints – functions are defined in the included headers
   server.on("/buzzer/on",      handleBuzzerOn);
   server.on("/buzzer/off",     handleBuzzerOff);
   server.on("/display/hello",  handleDisplayHello);
   server.on("/display/clear",  handleDisplayClear);
-  server.on("/display/sv",     handleDisplaySV); 
+  server.on("/display/sv",     handleDisplaySV);   // Show system info (IP, etc.)
   
+  // Stepper motor 1 (slot 1)
   server.on("/stepper/forward",   handleMotorForward);
   server.on("/stepper/backward",  handleMotorBackward);
   server.on("/stepper/90",        handleMotor90);
   server.on("/stepper/180",       handleMotor180);
 
+  // Stepper motor 2 (slot 2)
   server.on("/stepper2/forward",  handleMotor2Forward);
   server.on("/stepper2/backward", handleMotor2Backward);
   server.on("/stepper2/90",       handleMotor290);
   server.on("/stepper2/180",      handleMotor2180);
 
+  // Stepper motor 3 (slot 3)
   server.on("/stepper3/forward",  handleMotor3Forward);
   server.on("/stepper3/backward", handleMotor3Backward);
   server.on("/stepper3/90",       handleMotor390);
   server.on("/stepper3/180",      handleMotor3180);
 
-
-server.on("/retake", HTTP_GET, []() {
+  // ── Special endpoint for retake (initiated by the backend) ──
+  server.on("/retake", HTTP_GET, []() {
     if (server.hasArg("adlog_id") && server.hasArg("prescription_id") && server.hasArg("slot")) {
-        int adlogId = server.arg("adlog_id").toInt();
-        int prescriptionId = server.arg("prescription_id").toInt();
-        int motorSlot = server.arg("slot").toInt();
-        String medName = server.hasArg("med_name") ? server.arg("med_name") : "Medicine";
+      int adlogId = server.arg("adlog_id").toInt();
+      int prescriptionId = server.arg("prescription_id").toInt();
+      int motorSlot = server.arg("slot").toInt();
+      String medName = server.hasArg("med_name") ? server.arg("med_name") : "Medicine";
 
-        // Cancel any ongoing out‑of‑stock or normal waiting
-        isOutOfStockBeeping = false;
-        triggerBuzzerHardware(false);
+      // Cancel any ongoing out‑of‑stock or normal waiting
+      isOutOfStockBeeping = false;
+      triggerBuzzerHardware(false);
 
-        // Set the device into dose‑waiting mode
-        isDoseWaiting = true;
-        pendingMotorSlot = motorSlot;
-        pendingAdlogId = adlogId;
-        pendingPrescriptionId = prescriptionId;
-        pendingMedName = medName;
-        doseStartTime = millis();
+      // Put the device into dose‑waiting mode
+      isDoseWaiting = true;
+      pendingMotorSlot = motorSlot;
+      pendingAdlogId = adlogId;
+      pendingPrescriptionId = prescriptionId;
+      pendingMedName = medName;
+      doseStartTime = millis();
 
-        triggerBuzzerHardware(true);
-        updateDisplayState("Medicine Due!", pendingMedName);
+      triggerBuzzerHardware(true);
+      updateDisplayState("Medicine Due!", pendingMedName);
 
-        server.send(200, "text/plain", "Retake started");
+      server.send(200, "text/plain", "Retake started");
     } else {
-        server.send(400, "text/plain", "Missing parameters: adlog_id, prescription_id, slot");
+      server.send(400, "text/plain", "Missing parameters: adlog_id, prescription_id, slot");
     }
-});
+  });
 
-  // 🔧 Update server URL without reflashing
-  // Usage: http://<esp32-ip>/config/seturl?url=https://xxxx.ngrok-free.app
+  // ── Configuration endpoint: update server URL without re‑flashing ──
   server.on("/config/seturl", []() {
     if (server.hasArg("url")) {
       String newURL = server.arg("url");
@@ -345,24 +370,25 @@ server.on("/retake", HTTP_GET, []() {
     }
   });
 
-  // 🔍 Check current config
+  // ── Configuration status endpoint ──
   server.on("/config/status", []() {
     String json = "{\"server_url\":\"" + serverBase + "\",\"device_serial\":\"" + deviceSerial + "\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
     server.send(200, "application/json", json);
   });
 
+  // ── Start the HTTP server ──
   server.begin();
   Serial.println("🚀 HTTP server started");
 }
 
-// ─────────────────────────────────────────────
-// Loop
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// Arduino loop() – runs continuously
+// ──────────────────────────────────────────────────────────────
 void loop() {
-  handleTouch();
-  server.handleClient();
+  handleTouch();      // Check if the physical button was pressed
+  server.handleClient(); // Process incoming HTTP requests
 
-  // 1. WiFi watchdog
+  // 1. WiFi watchdog – reconnect if disconnected
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("⚠️ WiFi lost. Reconnecting...");
     WiFi.disconnect();
@@ -370,7 +396,7 @@ void loop() {
     delay(2000); 
   }
 
-  // 2. Poll for pending dose
+  // 2. Poll for pending dose from the server (only if not already waiting)
   if (WiFi.status() == WL_CONNECTED) {
     if (!isDoseWaiting && !isOutOfStockBeeping && (millis() - lastDoseCheckTime > doseCheckInterval)) {
       checkForPendingDose();
@@ -378,9 +404,10 @@ void loop() {
     }
   }
 
-  // 3A. Out-of-stock beeping pattern
+  // 3A. Out‑of‑stock beeping pattern (toggle buzzer every 500 ms)
   if (isOutOfStockBeeping) {
     if (millis() - outOfStockStartTime > outOfStockTimeout) {
+      // Timeout – automatically miss the dose and stop beeping
       isOutOfStockBeeping = false;
       triggerBuzzerHardware(false);
       Serial.println("🛑 Out-of-stock timeout. Marking as missed.");
@@ -395,7 +422,7 @@ void loop() {
     }
   }
 
-  // 3B. Normal dose timeout
+  // 3B. Normal dose timeout – user didn't press the button in time
   if (isDoseWaiting) {
     if (millis() - doseStartTime > doseTimeout) {
       Serial.println("⏰ Dose timeout — marked as missed.");
@@ -408,7 +435,7 @@ void loop() {
     }
   }
 
-  // 4. Heartbeat
+  // 4. Heartbeat – send device status to the server every 30 seconds
   if (millis() - lastHeartbeatTime > heartbeatInterval) {
     if (WiFi.status() == WL_CONNECTED) {
       HTTPClient http;
@@ -416,9 +443,8 @@ void loop() {
 
       Serial.println("💓 Sending heartbeat to: " + url);
 
-      // FIX: Use WiFiClientSecure for HTTPS connections
       WiFiClientSecure secureClient;
-      secureClient.setInsecure(); // Bypass strict certificate validation for ngrok
+      secureClient.setInsecure();   // Accept ngrok's self‑signed certificate
 
       if (http.begin(secureClient, url)) {
         addCommonHeaders(http);

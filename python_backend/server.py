@@ -18,6 +18,7 @@ from routes.caregiver import caregiver_bp
 from routes.medication import medication_bp
 from routes.device import device_bp
 from routes.analytics import analytics_bp
+from routes.notification import notification_bp
 
 import os
 import sys
@@ -73,6 +74,7 @@ app.register_blueprint(caregiver_bp)
 app.register_blueprint(medication_bp)
 app.register_blueprint(device_bp)
 app.register_blueprint(analytics_bp)
+app.register_blueprint(notification_bp)
 
 # ==========================================
 # 🧹 5. Logging Configuration

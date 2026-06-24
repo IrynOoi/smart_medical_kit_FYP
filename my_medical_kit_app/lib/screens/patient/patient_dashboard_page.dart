@@ -1,6 +1,5 @@
 // lib/screens/patient_dashboard_page.dart
 import 'dart:async';
-import 'package:flutter/widgets.dart';
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
 import 'dart:math';
@@ -17,6 +16,8 @@ import 'package:my_medical_kit_app/models/prescription.dart';
 import 'package:my_medical_kit_app/models/adherence_log.dart';
 import 'package:my_medical_kit_app/models/notification.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_medical_kit_app/widget/caregiver_wdgt/curved_chart_painter.dart';
+import 'patient_adherence_details_page.dart';
 
 class PatientDashboardPage extends StatefulWidget {
   const PatientDashboardPage({super.key});
@@ -28,7 +29,6 @@ class PatientDashboardPage extends StatefulWidget {
 class _PatientDashboardPageState extends State<PatientDashboardPage>
     with WidgetsBindingObserver {
   Timer? _refreshTimer;
-  bool _isPaused = false;
   // ✅ FIXED: Get patient ID from shared preferences (login session)
   int _currentPatientId = 0;
 
@@ -42,13 +42,12 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
   Map<String, dynamic> _adherenceStats = {};
   List<NotificationModel> _notifications = [];
 
-  // Weekly data: [Mon, Tue, Wed, Thu, Fri, Sat, Sun] taken count
-  List<double> _weeklyTaken = [0, 0, 0, 0, 0, 0, 0];
-
   // Dynamic Graph State
   String _selectedPeriod = 'Week'; // Options: 'Day', 'Week', 'Month'
   List<double> _graphData = [0, 0, 0, 0, 0, 0, 0];
   List<String> _graphLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // -1 means no finger is touching; we fall back to the last point (latest data).
+  int _touchedGraphIndex = -1;
   List<AdherenceLog> get _missedLogs {
     final now = DateTime.now();
     return _recentLogs.where((log) {
@@ -238,29 +237,62 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
       Map<String, double> groupedData = {};
 
       if (period == 'Day') {
+        // Collect today's logs sorted by time
         final todaysLogs = _recentLogs.where((log) {
           if (log.scheduledTime == null) return false;
           return log.scheduledTime!.day == now.day &&
               log.scheduledTime!.month == now.month &&
               log.scheduledTime!.year == now.year;
-        }).toList();
-
-        todaysLogs.sort((a, b) => a.scheduledTime!.compareTo(b.scheduledTime!));
+        }).toList()
+          ..sort((a, b) => a.scheduledTime!.compareTo(b.scheduledTime!));
 
         if (todaysLogs.isEmpty) {
-          groupedData = {'8am': 0.0, '12pm': 0.0, '4pm': 0.0, '8pm': 0.0};
+          // No data today: show a flat zero baseline
+          groupedData = {
+            '12:00 AM': 0.0,
+            _formatFullTime(
+              DateTime(now.year, now.month, now.day, now.hour),
+            ): 0.0,
+          };
         } else {
+          // Build a raw map of (DateTime key → taken count)
+          final Map<DateTime, double> rawByTime = {};
           for (var log in todaysLogs) {
-            String timeLabel = _formatFullTime(log.scheduledTime!);
-            groupedData.putIfAbsent(timeLabel, () => 0.0);
-            if (log.isTaken) {
-              groupedData[timeLabel] = groupedData[timeLabel]! + 1.0;
-            }
+            final dt = log.scheduledTime!;
+            final key = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
+            rawByTime[key] = (rawByTime[key] ?? 0) + (log.isTaken ? 1.0 : 0.0);
           }
-          if (groupedData.length == 1) {
-            String onlyKey = groupedData.keys.first;
-            double val = groupedData[onlyKey]!;
-            groupedData = {'12am': 0.0, onlyKey: val, '11pm': 0.0};
+          final sortedKeys = rawByTime.keys.toList()..sort();
+
+          // ── Inject 0-value S-curve anchor points ───────────────────
+          // Anchor BEFORE: 1 hour before the first event (min: midnight)
+          final midnight = DateTime(now.year, now.month, now.day, 0, 0);
+          final anchorBefore =
+              sortedKeys.first.subtract(const Duration(hours: 1));
+          final beforePoint =
+              anchorBefore.isBefore(midnight) ? midnight : anchorBefore;
+          groupedData[_formatFullTime(beforePoint)] = 0.0;
+
+          // Real data points
+          for (final k in sortedKeys) {
+            groupedData[_formatFullTime(k)] = rawByTime[k]!;
+          }
+
+          // Anchor AFTER: 1 hour after the last event (max: current time)
+          final anchorAfter =
+              sortedKeys.last.add(const Duration(hours: 1));
+          final afterPoint = anchorAfter.isAfter(now) ? now : anchorAfter;
+          final afterLabel = _formatFullTime(
+            DateTime(
+              afterPoint.year,
+              afterPoint.month,
+              afterPoint.day,
+              afterPoint.hour,
+              afterPoint.minute,
+            ),
+          );
+          if (!groupedData.containsKey(afterLabel)) {
+            groupedData[afterLabel] = 0.0;
           }
         }
       } else if (period == 'Week') {
@@ -308,105 +340,37 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
   }
 
   // ──────────────────────────────────────────
-  // IN-APP NOTIFICATION BOTTOM SHEET
+  // CHART TOUCH HANDLER
   // ──────────────────────────────────────────
-  void _showNotificationsSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  /// Converts a raw touch X position on the canvas into the nearest data-point
+  /// index, using the same coordinate formula as CurvedChartPainter.
+  void _handleGraphTouch(double touchX, double canvasWidth) {
+    const double leftPadding = 30.0;
+    final n = _graphData.length;
+    if (n <= 1) return;
+    final chartWidth = canvasWidth - leftPadding;
+    final rawIndex = (touchX - leftPadding) / chartWidth * (n - 1);
+    final clamped = rawIndex.round().clamp(0, n - 1);
+    if (clamped != _touchedGraphIndex) {
+      setState(() => _touchedGraphIndex = clamped);
+    }
+  }
+
+  void _navigateToAdherenceDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PatientAdherenceDetailsPage(
+          patientId: _currentPatientId,
+          chartData: _graphData,
+          chartLabels: _graphLabels,
+          period: _selectedPeriod,
+        ),
       ),
-      builder: (sheetContext) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          height: MediaQuery.of(sheetContext).size.height * 0.5,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  'Notifications',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ),
-              const Divider(height: 30),
-              // Inside _showNotificationsSheet, replace the existing Expanded child with:
-              Expanded(
-                child: _notifications.where((n) => !n.isRead).isEmpty
-                    ? Center(
-                        child: Text(
-                          'No unread notifications.',
-                          style: TextStyle(color: Colors.grey.shade500),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _notifications
-                            .where((n) => !n.isRead)
-                            .length,
-                        itemBuilder: (context, index) {
-                          final notif = _notifications
-                              .where((n) => !n.isRead)
-                              .toList()[index];
-                          return Card(
-                            elevation: 0,
-                            color: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: AppColors.primaryPurple.withValues(
-                                  alpha: 0.2,
-                                ),
-                              ),
-                            ),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: AppColors.primaryPurple,
-                                child: Icon(
-                                  Icons.medication_liquid_rounded,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              title: Text(
-                                notif.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(notif.message),
-                              ),
-                              onTap: () async {
-                                final success = await PatientService()
-                                    .markNotificationRead(notif.notificationId);
-                                if (!mounted) return;
-                                if (success) {
-                                  await _loadAll(
-                                    showLoading: false,
-                                  ); // refresh dashboard data
-                                  if (sheetContext.mounted) {
-                                    Navigator.pop(sheetContext); // close sheet
-                                  }
-                                }
-                              },
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    ).then((_) {
+      // Re-fetch data if needed when coming back, or reset state
+      setState(() => _touchedGraphIndex = -1);
+    });
   }
 
   void _redirectToLogin() {
@@ -451,7 +415,6 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
         _recentLogs = logs;
         _adherenceStats = results[3] as Map<String, dynamic>;
         _notifications = notifications;
-        _weeklyTaken = _computeWeekly(logs);
         if (showLoading) _isLoading = false;
       });
       _updateChartPeriod(_selectedPeriod);
@@ -473,35 +436,7 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
     }
   }
 
-  // ✅ FIXED: Compute max inventory from actual data, not hardcoded multiplier
-  int _getMaxInventory(Prescription med) {
-    // Use refill_threshold * 2 as max, or fallback to current inventory if higher
-    final calculatedMax = med.refillThreshold * 2;
-    if (med.currentInventory > calculatedMax) {
-      return med.currentInventory;
-    }
-    return calculatedMax;
-  }
-
   // Compute weekly taken count from adherence_logs.scheduled_time
-  List<double> _computeWeekly(List<AdherenceLog> logs) {
-    final counts = List<double>.filled(7, 0);
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-
-    for (final log in logs) {
-      if (!log.isTaken) continue;
-      final scheduledTime = log.scheduledTime;
-      if (scheduledTime == null) continue;
-      final diff = scheduledTime.difference(
-        DateTime(weekStart.year, weekStart.month, weekStart.day),
-      );
-      if (diff.inDays >= 0 && diff.inDays < 7) {
-        counts[diff.inDays] += 1;
-      }
-    }
-    return counts;
-  }
 
   int get _streak {
     int streak = 0;
@@ -1031,150 +966,40 @@ class _PatientDashboardPageState extends State<PatientDashboardPage>
           ],
         ),
         const SizedBox(height: 16),
-        _card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: 110,
-                child: CustomPaint(
-                  size: const Size(double.infinity, 110),
-                  painter: _LinePainter(
-                    data: _graphData.isEmpty ? [0] : _graphData,
-                    lineColor: AppColors.primaryPurple,
+        GestureDetector(
+          onTap: _navigateToAdherenceDetails,
+          child: _card(
+            child: LayoutBuilder(
+            builder: (context, constraints) {
+              final canvasWidth = constraints.maxWidth;
+              final effectiveIndex = _touchedGraphIndex == -1
+                  ? (_graphData.isEmpty ? 0 : _graphData.length - 1)
+                  : _touchedGraphIndex;
+              return GestureDetector(
+                // Drag across the chart to scrub through data points
+                onPanUpdate: (d) =>
+                    _handleGraphTouch(d.localPosition.dx, canvasWidth),
+                // Tap on a specific point — tooltip stays until next tap/drag
+                onTapDown: (d) =>
+                    _handleGraphTouch(d.localPosition.dx, canvasWidth),
+                child: SizedBox(
+                  height: 180,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: CurvedChartPainter(
+                      data: _graphData.isEmpty ? [0.0] : _graphData,
+                      labels: _graphLabels.isEmpty ? [''] : _graphLabels,
+                      lineColor: AppColors.primaryPurple,
+                      selectedIndex: effectiveIndex,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: _graphLabels.length == 1
-                    ? MainAxisAlignment.center
-                    : MainAxisAlignment.spaceBetween,
-                children: _graphLabels
-                    .map(
-                      (d) => Text(
-                        d,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
+              );
+            },
           ),
         ),
-      ],
-    );
-  }
-
-  // ──────────────────────────────────────────
-  // NEXT DOSE CARD
-  // ──────────────────────────────────────────
-  Widget _buildNextDoseCard() {
-    final dose = _nextDose;
-    if (dose == null) {
-      return _card(
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.primaryPurple.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.celebration,
-                color: AppColors.primaryPurple,
-                size: 26,
-              ),
-            ),
-            const SizedBox(width: 14),
-            const Text(
-              'All caught up! 🎉 No pending doses.',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final deviceId = dose.deviceId;
-    final canTake = deviceId != null && deviceId > 0;
-
-    return _card(
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              Icons.medication_rounded,
-              color: AppColors.primaryPurple,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Next Dose',
-                  style: TextStyle(fontSize: 15, color: Colors.grey),
-                ),
-                Text(
-                  dose.medicationName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '${dose.dosageTablet.toStringAsFixed(0)} tablet · Stock: ${dose.currentInventory}',
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
-          ),
-          if (canTake)
-            ElevatedButton(
-              onPressed: () => _markTaken(dose.prescriptionId, deviceId),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryPurple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Take',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                'No device',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-        ],
       ),
+      ],
     );
   }
 

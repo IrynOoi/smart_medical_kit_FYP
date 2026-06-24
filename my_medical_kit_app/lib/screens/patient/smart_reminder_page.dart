@@ -1,6 +1,5 @@
 // lib/screens/smart_reminder_page.dart
 
-// lib/screens/smart_reminder_page.dart
 // Displays active medication reminders (unread notifications) for the patient.
 // Each reminder card shows medication details, stock status, and actions to mark as read or dismiss.
 
@@ -223,7 +222,6 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Back button
               GestureDetector(
@@ -241,24 +239,30 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                   ),
                 ),
               ),
-              const Text(
-                'Smart Reminders',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(width: 12), // spacing between back and title
+              // Title takes the remaining space
+              Expanded(
+                child: Center(
+                  child: const Text(
+                    'Smart Reminders',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-              // "Read All" button to mark all current reminders as read
+              // "Read All" button
               if (_reminders.isNotEmpty)
                 GestureDetector(
                   onTap: () async {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('Mark all as read?'),
-                        content: const Text(
-                          'This will dismiss all active reminders.',
+                        title: const Text('Mark All as Read'),
+                        content: Text(
+                          'This will dismiss all ${_reminders.length} active reminder(s). Are you sure?',
                         ),
                         actions: [
                           TextButton(
@@ -269,37 +273,44 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                             onPressed: () => Navigator.pop(ctx, true),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryPurple,
+                              foregroundColor: Colors.white,
                             ),
-                            child: const Text(
-                              'Yes',
-                              style: TextStyle(color: Colors.white),
-                            ),
+                            child: const Text('Yes, Mark All'),
                           ),
                         ],
                       ),
                     );
 
                     if (confirm != true) return;
+                    if (!mounted) return;
 
-                    // Mark each notification as read
-                    for (var item in _reminders) {
-                      await PatientService().markNotificationRead(
-                        item.notification.notificationId,
-                      );
-                    }
+                    // Mark every unread notification as read
+                    final futures = _reminders
+                        .map((item) => PatientService().markNotificationRead(
+                              item.notification.notificationId,
+                            ))
+                        .toList();
 
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('All reminders cleared'),
-                          backgroundColor: Colors.teal,
+                    final results = await Future.wait(futures);
+                    if (!mounted) return;
+
+                    final allSuccess = results.every((r) => r == true);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          allSuccess
+                              ? '✅ All reminders marked as read'
+                              : '⚠️ Some reminders could not be marked as read',
                         ),
-                      );
-                      _loadMedications();
-                    }
+                        backgroundColor:
+                            allSuccess ? Colors.teal : Colors.orange,
+                      ),
+                    );
+
+                    await _loadMedications(showLoading: false);
                   },
                   child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Text(
                       'Read All',
                       style: TextStyle(
@@ -310,51 +321,6 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                     ),
                   ),
                 ),
-              // (Commented-out debug/test buttons)
-              // GestureDetector(
-              //   onTap: () async {
-              //     await ReminderService.triggerTestDualNotification(
-              //       context,
-              //     );
-              //     _loadMedications();
-              //   },
-              //   child: Container(
-              //     margin: const EdgeInsets.only(right: 10),
-              //     padding: const EdgeInsets.all(10),
-              //     decoration: BoxDecoration(
-              //       color: Colors.orangeAccent.withValues(alpha: 0.8),
-              //       borderRadius: BorderRadius.circular(12),
-              //     ),
-              //     child: const Icon(
-              //       Icons.bug_report,
-              //       color: Colors.white,
-              //       size: 18,
-              //     ),
-              //   ),
-              // ),
-              // GestureDetector(
-              //   onTap: () async {
-              //     ScaffoldMessenger.of(context).showSnackBar(
-              //       const SnackBar(content: Text('Checking schedule...')),
-              //     );
-              //     await ReminderService.checkAndSendReminders();
-              //     if (mounted) {
-              //       await _loadMedications();
-              //     }
-              //   },
-              //   child: Container(
-              //     padding: const EdgeInsets.all(10),
-              //     decoration: BoxDecoration(
-              //       color: Colors.white.withValues(alpha: 0.2),
-              //       borderRadius: BorderRadius.circular(12),
-              //     ),
-              //     child: const Icon(
-              //       Icons.sync,
-              //       color: Colors.white,
-              //       size: 18,
-              //     ),
-              //   ),
-              // ),
             ],
           ),
           const SizedBox(height: 24),
@@ -708,24 +674,24 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                 ),
 
                                 const SizedBox(height: 16),
-                                // Dosage info
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.medication,
-                                      size: 18,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '${med.dosageTablet.toStringAsFixed(0)} tablet(s) missed',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                // // Dosage info
+                                // Row(
+                                //   children: [
+                                //     Icon(
+                                //       Icons.medication,
+                                //       size: 18,
+                                //       color: Colors.grey.shade600,
+                                //     ),
+                                //     const SizedBox(width: 6),
+                                //     Text(
+                                //       '${med.dosageTablet.toStringAsFixed(0)} tablet(s) missed',
+                                //       style: TextStyle(
+                                //         fontSize: 14,
+                                //         color: Colors.grey.shade700,
+                                //       ),
+                                //     ),
+                                //   ],
+                                // ),
                                 const SizedBox(height: 12),
                                 // Stock badge + "Mark as Read" button
                                 Wrap(

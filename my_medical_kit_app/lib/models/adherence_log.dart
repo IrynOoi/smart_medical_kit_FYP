@@ -6,6 +6,7 @@ class AdherenceLog {
   final String status;
   final DateTime? scheduledTime;
   final DateTime? takenTime;
+  final DateTime? recordedAt; // 👈 new field
   final String? medicationName;
   final int? deviceId;
 
@@ -19,6 +20,7 @@ class AdherenceLog {
     required this.status,
     this.scheduledTime,
     this.takenTime,
+    this.recordedAt,
     this.medicationName,
     this.deviceId,
   });
@@ -34,6 +36,9 @@ class AdherenceLog {
           : null,
       takenTime: json['dispensed_time'] != null
           ? DateTime.tryParse(json['dispensed_time'])
+          : null,
+      recordedAt: json['recorded_at'] != null
+          ? DateTime.tryParse(json['recorded_at'])
           : null,
       medicationName: json['medication_name'] ?? 'Medication',
       deviceId: json['device_id'],

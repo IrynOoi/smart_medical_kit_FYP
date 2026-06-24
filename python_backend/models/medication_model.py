@@ -59,7 +59,8 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
     """
     Create a new prescription for a patient.
     - Looks up the medication by name; fails if not found.
-    - Inserts into prescription_config, then adds schedules (one per dispense_time, optionally per day_of_week).
+    - 🆕 Checks if the patient already has an active prescription for this medication.
+    - Inserts into prescription_config, then adds schedules.
     - Updates the medication's inventory, device_id, and refill_threshold if provided.
     - Syncs stock notifications for the patient's caregivers.
     Returns (success, message, new_prescription_dict).
@@ -67,14 +68,26 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         
-        # Find the medication ID by name
+        # 1️⃣ Look up the medication_id by medication name
         cursor.execute('SELECT medication_id FROM medications WHERE medication_name = %s', (medication_name,))
         med_row = cursor.fetchone()
         if not med_row:
             return False, f"Medication '{medication_name}' not found", None
         medication_id = med_row['medication_id']
 
-        # Insert the prescription config
+        # =============================================
+        # 🛡️ CRITICAL FIX: Check if the patient already has an active prescription for this medication
+        # =============================================
+        cursor.execute('''
+            SELECT 1 FROM prescription_config
+            WHERE patient_id = %s 
+              AND medication_id = %s
+              AND (end_date IS NULL OR end_date >= CURRENT_DATE)
+        ''', (patient_id, medication_id))
+        if cursor.fetchone():
+            return False, f"Patient already has an active prescription for {medication_name}.", None
+
+        # 2️⃣ Insert the prescription configuration (prescription_config)
         cursor.execute('''
             INSERT INTO prescription_config 
             (patient_id, medication_id, dosage_tablet, start_date, end_date)
@@ -82,7 +95,7 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
         ''', (patient_id, medication_id, dosage_tablet, start_date, end_date))
         new_prescription_id = cursor.lastrowid
 
-        # Insert schedules: if dispense_days provided, create entries for each day and time combination
+        # 3️⃣ Insert the medication schedules (prescription_schedules)
         for dt in dispense_times:
             if dispense_days and len(dispense_days) > 0:
                 for day in dispense_days:
@@ -91,13 +104,13 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
                         VALUES (%s, %s, %s)
                     ''', (new_prescription_id, dt, day))
             else:
-                # No specific days → daily (day_of_week = NULL)
+                # No specific days selected → default to every day (day_of_week = NULL)
                 cursor.execute('''
                     INSERT INTO prescription_schedules (prescription_id, dispense_time, day_of_week)
                     VALUES (%s, %s, NULL)
                 ''', (new_prescription_id, dt))
 
-        # Update medication fields if provided
+        # 4️⃣ Update medication fields (inventory, device, threshold) if provided
         if current_inventory is not None:
             cursor.execute('UPDATE medications SET current_inventory = %s WHERE medication_id = %s',
                            (current_inventory, medication_id))
@@ -108,7 +121,7 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
             cursor.execute('UPDATE medications SET refill_threshold = %s WHERE medication_id = %s',
                            (refill_threshold, medication_id))
         
-        # Build a response dict with the new prescription details
+        # 5️⃣ Build the response dictionary with the new prescription data
         new_prescription = {
             "prescription_id": new_prescription_id,
             "patient_id": patient_id,
@@ -125,7 +138,7 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
         conn.commit()
         cursor.close()
 
-    # Sync stock notifications after creation
+    # 6️⃣ Sync stock notifications (so that caregivers are informed about the new prescription / inventory changes)
     sync_patient_caregiver_stock_notifications(patient_id)
     return True, "Success", new_prescription
 

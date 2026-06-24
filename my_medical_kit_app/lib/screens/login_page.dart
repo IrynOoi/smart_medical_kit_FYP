@@ -1,5 +1,3 @@
-// lib/screens/login_page.dart
-
 // lib/screens/login_page.dart – Login screen with email/password authentication,
 // plus a fully functional password reset (ForgotPasswordPage) UI.
 
@@ -189,6 +187,7 @@ class _LoginPageState extends State<LoginPage> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
+        // color: AppColors.premiumLight.withValues(alpha: 0.15),
         decoration: const BoxDecoration(gradient: AppColors.mainGradient),
         child: SingleChildScrollView(
           child: Padding(
@@ -536,7 +535,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       // Wrap body with a translucent purple background (premiumLight with alpha).
       body: Container(
         height: double.infinity,
-        color: AppColors.premiumLight.withValues(alpha: 0.15),
+        color: AppColors.premiumLight.withValues(alpha: 0.20),
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),

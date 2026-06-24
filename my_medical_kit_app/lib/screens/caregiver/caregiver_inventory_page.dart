@@ -343,8 +343,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         String medName = med.medicationName;
 
         if (consolidatedInventory.containsKey(medName)) {
-          // If it exists, just add the current inventory to the existing total
-          consolidatedInventory[medName]!['current_inventory'] +=
+          // If it exists, just set the current inventory (they share the same physical inventory)
+          consolidatedInventory[medName]!['current_inventory'] =
               med.currentInventory;
         } else {
           // Otherwise, add a new entry
@@ -410,8 +410,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           'refill_threshold': threshold,
         });
 
-        // SUM the inventory correctly
-        groupedInventory[name]!['current_inventory_total'] += currentInv;
+        // Set the inventory correctly (do not sum, as they share the same physical stock)
+        groupedInventory[name]!['current_inventory_total'] = currentInv;
       }
 
       setState(() {
@@ -452,7 +452,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 return 'Please enter a quantity';
               }
               final qty = int.tryParse(value);
-              if (qty == null || qty <= 0) return 'Enter a positive number';
+              if (qty == null || qty < 0) return 'Enter a non‑negative number';
               return null;
             },
           ),
@@ -1937,8 +1937,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       return 'Enter a quantity';
                     }
                     final qty = int.tryParse(value);
-                    if (qty == null || qty <= 0) {
-                      return 'Enter a positive number';
+                    if (qty == null || qty < 0) {
+                      return 'Enter a non‑negative number';
                     }
                     return null;
                   },

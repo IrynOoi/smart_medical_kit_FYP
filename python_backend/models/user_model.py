@@ -444,3 +444,34 @@ def soft_delete_caregiver(caregiver_id):
         ''', (caregiver_id,))
         conn.commit()
         cursor.close()
+
+
+def get_user_password_by_email(email):
+    """
+    Retrieve the current password (plain text) for a user by email.
+    Returns the password string or None if user not found.
+    """
+    # Open a connection to the database using the custom context manager.
+    # This ensures the connection is properly closed when the block exits,
+    # even if an exception occurs.
+    with get_db_connection() as conn:
+        # Create a cursor that returns rows as dictionaries.
+        # This allows us to access columns by name (e.g., row['password'])
+        # instead of by index.
+        cursor = conn.cursor(dictionary=True)
+
+        # Execute a parameterised SELECT query to fetch the password column
+        # for the user with the given email address.
+        # Using a parameterised query (%s) prevents SQL injection attacks.
+        cursor.execute('SELECT password FROM users WHERE email = %s', (email,))
+
+        # Fetch the first (and only) row from the result set.
+        # If no user with that email exists, fetchone() returns None.
+        row = cursor.fetchone()
+
+        # Close the cursor to release database resources.
+        cursor.close()
+
+        # If a row was found, return the password string.
+        # Otherwise, return None to indicate the email does not exist.
+        return row['password'] if row else None

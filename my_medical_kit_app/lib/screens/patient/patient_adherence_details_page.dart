@@ -1,27 +1,17 @@
-//caregiver_performance_details_page.dart
-
-// Displays detailed performance metrics for a caregiver over a selected period.
-// Shows a total doses count and a curved chart visualizing the number of taken doses
-// per time unit (day, week, or month), along with some insights like the highest activity day.
-
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
-
 import '../../widget/caregiver_wdgt/curved_chart_painter.dart';
 
-class CaregiverPerformanceDetailsPage extends StatelessWidget {
-  final int
-  caregiverId; // ID of the caregiver (currently unused but kept for future use)
-  final List<double>
-  chartData; // List of dose counts for each time unit (e.g., 7 values for a week)
-  final List<String>
-  chartLabels; // Corresponding labels for the x‑axis (e.g., ['Mon', 'Tue', ...])
-  final String period; // The selected time period ('Day', 'Week', or 'Month')
+class PatientAdherenceDetailsPage extends StatelessWidget {
+  final int patientId;
+  final List<double> chartData;
+  final List<String> chartLabels;
+  final String period;
 
-  const CaregiverPerformanceDetailsPage({
+  const PatientAdherenceDetailsPage({
     super.key,
-    required this.caregiverId,
+    required this.patientId,
     required this.chartData,
     required this.chartLabels,
     required this.period,
@@ -34,7 +24,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('$period Performance Details'),
+        title: Text('$period Adherence Details'),
         backgroundColor: AppColors.primaryPurple,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -90,9 +80,7 @@ class CaregiverPerformanceDetailsPage extends StatelessWidget {
                         data: chartData,
                         labels: chartLabels,
                         lineColor: AppColors.primaryPurple,
-                        selectedIndex:
-                            chartData.length -
-                            1, // Highlights the last data point
+                        selectedIndex: chartData.length > 0 ? chartData.length - 1 : 0, // Highlights the last data point
                       ),
                     ),
                   ),

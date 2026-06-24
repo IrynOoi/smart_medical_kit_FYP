@@ -1,24 +1,37 @@
 // display_control.cpp
+// This file provides functions to initialize and control an OLED display (SH1106)
+// over I2C. It includes handlers for displaying messages like "Hello World",
+// supervisor name, and clearing the screen. The display is used to show system
+// status and user information.
+// The I2C pins are explicitly set to 21 (SDA) and 22 (SCL) to match hardware wiring.
+
 #include "display_control.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
+// OLED I2C address (common for SH1106)
 #define i2c_Address 0x3C 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET -1   
+#define OLED_RESET -1   // No reset pin used
 
+// Create the display object with the specified dimensions and I2C bus
 Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+// ========================================================
+// Setup function – called once at system startup
+// Initializes I2C, scans for the OLED, and shows a welcome message.
+// ========================================================
 void setupDisplay() {
-  delay(1000); // 留着这个延时，防止启动抢跑
+  // Small delay to allow power to stabilize before I2C communication
+  delay(1000);
   Serial.println("\n--- Starting OLED Setup ---");
 
-  // 🌟 核心修复：将针脚改回 21 (SDA) 和 22 (SCL)
+  // Explicitly set I2C pins to 21 (SDA) and 22 (SCL) – this is critical for correct wiring.
   Wire.begin(21, 22); 
   
-  // 2. 迷你硬件扫描器
+  // Scan the I2C bus to detect connected devices (useful for debugging)
   Serial.println("Scanning I2C bus for OLED...");
   byte error, address;
   int nDevices = 0;
@@ -36,15 +49,16 @@ void setupDisplay() {
     Serial.println("❌ ERROR: Cannot find screen! (Hardware issue)");
   }
 
-  // 3. 初始化屏幕
+  // Attempt to initialize the display with the given I2C address
   if(!display.begin(i2c_Address, true)) {
     Serial.println(F("❌ SH1106 Screen allocation failed!"));
     return;
   }
 
-  // 4. 强制把屏幕亮度调到最高
+  // Set maximum contrast for clear visibility
   display.setContrast(255);
 
+  // Clear the buffer and show a startup message
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
@@ -55,6 +69,9 @@ void setupDisplay() {
   Serial.println("✅ OLED Display Initialized Successfully!");
 }
 
+// ========================================================
+// HTTP handler – displays "Hello World" on the OLED
+// ========================================================
 void handleDisplayHello() {
   Serial.println("Displaying Hello World");
   display.clearDisplay();
@@ -68,22 +85,26 @@ void handleDisplayHello() {
   server.send(200, "text/plain", "Hello world displayed on OLED");
 }
 
+// ========================================================
+// HTTP handler – displays supervisor name (Dr Noorrezam bin Yusop)
+// ========================================================
 void handleDisplaySV() {
   Serial.println("Displaying SV Name");
   display.clearDisplay();
   
+  // Show label "Supervisor:" in small font
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
   display.setCursor(0, 0);
   display.println("Supervisor:");
   
+  // Show title "Dr" in small font
   display.setTextSize(1); 
   display.setCursor(0, 15);
   display.println("Dr");
   
-  // 💡 友情提示：Size 2 的字体非常大，一行大概只能显示 10 个字母左右。
-  // "Noorrezam bin Yusop" 太长了，用 Size 2 肯定会超出屏幕换行，导致排版很难看。
-  // 我建议把名字的字体改回 Size 1，或者分两行写。这里我帮你改成了 Size 1。
+  // Show the full name. Using size 1 ensures the long name fits on one line.
+  // (Size 2 would be too large and cause ugly wrapping.)
   display.setTextSize(1); 
   display.setCursor(0, 30);
   display.println("Noorrezam bin Yusop");
@@ -93,15 +114,19 @@ void handleDisplaySV() {
   server.send(200, "text/plain", "SV Name displayed");
 }
 
+// ========================================================
+// Generic function to update display with a title (small) and subtitle (large)
+// Useful for dynamic status messages from other parts of the system.
+// ========================================================
 void updateDisplayState(String title, String subtitle) {
   display.clearDisplay();
   
-  // Print Top Title (smaller)
+  // Print top title in small font
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println(title);
   
-  // Print Main Subtitle (bigger)
+  // Print main subtitle in large font
   display.setTextSize(2);
   display.setCursor(0, 20);
   display.println(subtitle);
@@ -109,6 +134,9 @@ void updateDisplayState(String title, String subtitle) {
   display.display();
 }
 
+// ========================================================
+// HTTP handler – clears the OLED screen completely
+// ========================================================
 void handleDisplayClear() {
   Serial.println("Clearing Display");
   display.clearDisplay();

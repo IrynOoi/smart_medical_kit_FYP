@@ -74,17 +74,14 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   // HELPER FORMATTING METHODS
   // ------------------------------------------------------------
 
-  /// Formats a DateTime to a human-readable string (Today/Yesterday or DD/MM/YYYY HH:MM).
+  /// Formats a DateTime to a human-readable string (DD/MM/YYYY HH:MM AM/PM).
   String _formatDateTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inDays == 0) {
-      return 'Today ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays == 1) {
-      return 'Yesterday ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    }
+    final hours = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final amPm = dt.hour >= 12 ? 'PM' : 'AM';
+    final minutes = dt.minute.toString().padLeft(2, '0');
+    final day = dt.day.toString().padLeft(2, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    return '$day/$month/${dt.year} $hours:$minutes $amPm';
   }
 
   /// Returns the appropriate display time for a log entry.
@@ -103,190 +100,160 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   // UI BUILDERS
   // ------------------------------------------------------------
 
-  /// Builds the header with a gradient background, title, and subtitle.
-  Widget _buildHeader() {
-    final topPadding = MediaQuery.of(context).padding.top;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(24, topPadding + 16, 24, 32),
-      decoration: const BoxDecoration(
-        gradient: AppColors.mainGradient,
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // (Commented out a custom back button; the AppBar is not used)
-          // Row(
-          //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          //   children: [
-          //     const SizedBox(width: 38),
-          //     const Text(
-          //       'Medication History',
-          //       style: TextStyle(
-          //         color: Colors.white,
-          //         fontSize: 18,
-          //         fontWeight: FontWeight.bold,
-          //       ),
-          //     ),
-          //     const SizedBox(width: 38),
-          //   ],
-          // ),
-          const SizedBox(height: 24),
-          const Text(
-            'LOGS & RECORDS',
-            style: TextStyle(
-              fontSize: 14,
-              letterSpacing: 1.5,
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Your History',
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.premiumLight.withValues(alpha: 0.1),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _logs.isEmpty
-                ? const Center(child: Text('No history available'))
-                : RefreshIndicator(
-                    onRefresh: () => _loadLogs(showLoading: false),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(top: 8, bottom: 24),
-                      itemCount: _logs.length + 1, // +1 for the summary card
-                      itemBuilder: (context, index) {
-                        // If index == 0, build the summary card (total doses taken).
-                        if (index == 0) {
-                          return Container(
-                            margin: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.05),
+      appBar: AppBar(
+        title: const Text(
+          'Your Medication History',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppColors.primaryPurple,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primaryPurple),
+            )
+          : _logs.isEmpty
+          ? const Center(child: Text('No history available'))
+          : Column(
+              children: [
+                // ─────────────────────────────────────────────────────
+                // Total Doses Card (gradient, matches caregiver style)
+                // ─────────────────────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.mainGradient,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.premiumDark.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Total Doses Taken',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '$_takenCount',
+                            style: const TextStyle(
+                              fontSize: 40,
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                              fontWeight: FontWeight.bold,
                             ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryPurple.withOpacity(
-                                      0.1,
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.checklist_rounded,
-                                    color: AppColors.primaryPurple,
-                                    size: 28,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Total Doses Taken',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '$_takenCount',
-                                        style: const TextStyle(
-                                          color: AppColors.premiumDark,
-                                          fontSize: 32,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.premiumLight.withOpacity(
-                                      0.2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    '${_logs.length} total logs',
-                                    style: const TextStyle(
-                                      color: AppColors.premiumDark,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.medication,
+                          color: Colors.white,
+                          size: 40,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-                        // Otherwise, display a single log entry.
-                        final log = _logs[index - 1];
+                // ─────────────────────────────────────────────────────
+                // Recent Activity Title
+                // ─────────────────────────────────────────────────────
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.history_rounded,
+                        color: AppColors.primaryPurple,
+                        size: 24,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Recent Activity',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // ─────────────────────────────────────────────────────
+                // Scrollable list with RefreshIndicator
+                // ─────────────────────────────────────────────────────
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => _loadLogs(showLoading: false),
+                    color: AppColors.primaryPurple,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      itemCount: _logs.length,
+                      itemBuilder: (context, index) {
+                        final log = _logs[index];
                         final isTaken = log.isTaken;
                         final isMissed = log.isMissed;
-                        // Determine the status colour and text label
-                        final statusColor = isTaken
-                            ? Colors.green
-                            : isMissed
-                            ? Colors.redAccent
-                            : Colors.orange;
+
+                        Color statusColor = Colors.orange; // default PENDING
+                        Color bgColor = Colors.orange.shade50;
+
+                        if (isTaken) {
+                          statusColor = Colors.teal;
+                          bgColor = Colors.teal.shade50;
+                        } else if (isMissed) {
+                          statusColor = Colors.redAccent;
+                          bgColor = Colors.red.shade50;
+                        }
+
                         final statusText = isTaken
                             ? 'Taken'
                             : isMissed
                             ? 'Missed'
                             : 'Pending';
 
-                        // Format scheduled and dispensed times for display
+                        // Format times
                         String scheduledStr = log.scheduledTime != null
                             ? _formatDateTime(log.scheduledTime!)
                             : 'No schedule';
                         String dispensedStr = (isTaken && log.takenTime != null)
                             ? _formatDateTime(log.takenTime!)
                             : (isTaken ? 'No dispense time' : 'Not taken');
+                        String recordedStr = log.recordedAt != null
+                            ? _formatDateTime(log.recordedAt!)
+                            : 'Not recorded';
 
                         return Container(
                           margin: const EdgeInsets.symmetric(
-                            horizontal: 20,
+                            horizontal: 16,
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
@@ -294,134 +261,145 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.03),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                                color: Colors.grey.withValues(alpha: 0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
                             ],
+                            border: Border.all(color: Colors.grey.shade100),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ListTile(
-                                contentPadding: const EdgeInsets.only(
-                                  left: 16,
-                                  right: 16,
-                                  top: 8,
-                                ),
-                                leading: CircleAvatar(
-                                  backgroundColor: statusColor.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  child: Icon(
-                                    isTaken
-                                        ? Icons.check_circle
-                                        : isMissed
-                                        ? Icons.cancel
-                                        : Icons.schedule,
-                                    color: statusColor,
-                                  ),
-                                ),
-                                title: Text(
-                                  log.medicationName ?? 'Unknown Medication',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: AppColors.premiumDark,
-                                  ),
-                                ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    statusText,
-                                    style: TextStyle(
-                                      color: statusColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: IntrinsicHeight(
+                              child: Row(
+                                children: [
+                                  // Colored indicator bar on the left.
+                                  Container(width: 6, color: statusColor),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              // Medication name
+                                              Expanded(
+                                                child: Text(
+                                                  log.medicationName ??
+                                                      'Unknown Medication',
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.textDark,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              // Status badge
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: bgColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child: Text(
+                                                  statusText.toUpperCase(),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: statusColor,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          // Scheduled time row
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.schedule,
+                                                size: 14,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                scheduledStr,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          // Dispensed time row
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.done_all,
+                                                size: 14,
+                                                color: isTaken
+                                                    ? Colors.green
+                                                    : Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                dispensedStr,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: isTaken
+                                                      ? Colors.green
+                                                      : Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          // Recorded time row
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.history,
+                                                size: 14,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                recordedStr,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  0,
-                                  20,
-                                  16,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildDetailRow(
-                                      Icons.schedule,
-                                      'Scheduled',
-                                      scheduledStr,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildDetailRow(
-                                      Icons.done_all,
-                                      'Dispensed',
-                                      dispensedStr,
-                                      color: isTaken
-                                          ? Colors.green
-                                          : Colors.grey,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         );
                       },
                     ),
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Helper widget to display a single detail row (icon + label + value).
-  Widget _buildDetailRow(
-    IconData icon,
-    String label,
-    String value, {
-    Color? color, // Optional colour for the value text
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: color ?? Colors.grey.shade500),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade500,
-              fontWeight: FontWeight.w500,
+                ),
+              ],
             ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              color: color ?? Colors.black87,
-              fontWeight: color != null ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

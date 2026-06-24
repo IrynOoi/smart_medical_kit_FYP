@@ -302,17 +302,17 @@ class CaregiverMedicationsListPageState
                 ),
                 const SizedBox(height: 16),
                 // 2. Inventory Field
-                TextFormField(
-                  controller: inventoryController,
-                  decoration: _inputDecoration(
-                    'Current Inventory *',
-                    Icons.inventory,
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (v) => v == null || int.tryParse(v) == null
-                      ? 'Enter a valid number'
-                      : null,
-                ),
+                // TextFormField(
+                //   controller: inventoryController,
+                //   decoration: _inputDecoration(
+                //     'Current Inventory *',
+                //     Icons.inventory,
+                //   ),
+                //   keyboardType: TextInputType.number,
+                //   validator: (v) => v == null || int.tryParse(v) == null
+                //       ? 'Enter a valid number'
+                //       : null,
+                // ),
                 const SizedBox(height: 16),
                 // 3. Threshold Field
                 TextFormField(

@@ -12,18 +12,12 @@ from models.adherence_model import (
     get_caregiver_alerts,
     get_caregiver_analytics_overview
 )
-from models.user import (
+from models.user_model import (
     get_caregiver_profile,
     update_caregiver_profile,
     get_caregiver_patients_list
 )
-from models.notification_model import (
-    get_caregiver_notifications as get_caregiver_notifications_model,
-    get_caregiver_stock_alert_rows,
-    get_caregiver_stock_notification_rows,
-    mark_notification_as_read,
-    sync_caregiver_stock_notifications,
-)
+
 
 # Create Blueprint for caregiver routes
 caregiver_bp = Blueprint('caregiver', __name__)
@@ -155,34 +149,7 @@ def get_recent_alerts(caregiver_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ---------------------- Get Low Stock Alerts (Notifications) ----------------------
-@caregiver_bp.route('/caregiver/<int:caregiver_id>/low_stock_alerts', methods=['GET'])
-def get_low_stock_alerts(caregiver_id):
-    """
-    Return stock-related notifications for the caregiver.
-    """
-    try:
-        from models.notification_model import get_caregiver_stock_notification_rows
-        rows = get_caregiver_stock_notification_rows(caregiver_id)
-        return jsonify({"success": True, "data": rows})
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 500
 
-
-# ---------------------- Get Stock Notifications (Alternative route) ----------------------
-@caregiver_bp.route('/caregiver/<int:caregiver_id>/stock_notifications', methods=['GET'])
-def get_stock_notifications(caregiver_id):
-    """
-    Similar to /low_stock_alerts; returns stock notifications.
-    (Duplicate functionality, kept for compatibility.)
-    """
-    try:
-        alerts = get_caregiver_stock_notification_rows(caregiver_id)
-        return jsonify({"success": True, "data": alerts})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ---------------------- Get List of Patients Assigned to Caregiver ----------------------
@@ -257,30 +224,7 @@ def update_caregiver(caregiver_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ---------------------- Get In-App Notifications for Caregiver ----------------------
-@caregiver_bp.route('/caregiver/<int:caregiver_id>/notifications', methods=['GET'])
-def get_caregiver_notifications(caregiver_id):
-    """
-    Fetch all in-app notifications for the caregiver.
-    """
-    try:
-        notifs = get_caregiver_notifications_model(caregiver_id)
-        return jsonify({"success": True, "data": notifs})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
-
-# ---------------------- Mark a Caregiver Notification as Read ----------------------
-@caregiver_bp.route('/caregiver/notification/<int:notif_id>/read', methods=['PUT'])
-def mark_caregiver_notification_read(notif_id):
-    """
-    Mark a specific notification as read by its ID.
-    """
-    try:
-        mark_notification_as_read(notif_id)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ---------------------- Get Analytics Overview (AI Predictions Summary) ----------------------
@@ -306,7 +250,7 @@ def get_analytics_overview(caregiver_id):
         else:
             avg_score = stats['avg_prediction_score']
             if avg_score is None:
-                avg_score = 85.00   # fallback default
+                avg_score = 0.00 # fallback default
             else:
                 avg_score = float(avg_score)
         
@@ -345,7 +289,7 @@ def get_available_patients_route(caregiver_id):
     """
     try:
         status = request.args.get('status', 'all')
-        from models.user import get_available_patients
+        from models.user_model import get_available_patients
         patients = get_available_patients(caregiver_id, status_filter=status)
         return jsonify({"success": True, "data": patients})
     except Exception as e:
@@ -366,7 +310,7 @@ def link_patient_route(caregiver_id):
         if not patient_id:
             return jsonify({"success": False, "message": "patient_id required"}), 400
             
-        from models.user import link_patient_to_caregiver
+        from models.user_model import link_patient_to_caregiver
         link_patient_to_caregiver(caregiver_id, patient_id)
         return jsonify({"success": True, "message": "Patient linked successfully"})
     except Exception as e:
@@ -382,7 +326,8 @@ def deactivate_caregiver(caregiver_id):
     Soft‑delete a caregiver account (set is_active = False).
     """
     try:
-        from models.user import soft_delete_caregiver
+        # pyrefly: ignore [missing-import]
+        from models.user_model import soft_delete_caregiver
         soft_delete_caregiver(caregiver_id)
         return jsonify({"success": True, "message": "Caregiver account deactivated"})
     except Exception as e:
@@ -397,7 +342,7 @@ def unlink_patient_route(caregiver_id, patient_id):
     Remove the association between a patient and this caregiver (set patient.cg_id = NULL).
     """
     try:
-        from models.user import unlink_patient_from_caregiver
+        from models.user_model import unlink_patient_from_caregiver
         unlink_patient_from_caregiver(caregiver_id, patient_id)
         return jsonify({"success": True, "message": "Patient unlinked successfully"})
     except Exception as e:

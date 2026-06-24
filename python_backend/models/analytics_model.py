@@ -14,6 +14,12 @@ def get_latest_ai_prediction(patient_id):
     Returns a dictionary with: ad_id, patient_id, prediction_score, risk_level,
     predicted_at, features_used. If no prediction exists, returns None.
     """
+    # Safety check: if patient no longer has enough adherence logs, delete the stale prediction.
+    age, history_vals = get_patient_history_for_ai(patient_id)
+    if history_vals is None:
+        delete_ai_prediction(patient_id)
+        return None
+
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
@@ -102,15 +108,21 @@ def get_patient_history_for_ai(patient_id):
         history_rows = cursor.fetchall()
         cursor.close()
 
-    # No history → signal to skip prediction
+    # No history at all → signal to skip prediction
     if not history_rows:
+        return age, None
+
+    # ── Minimum data guard ─────────────────────────────────────────────
+    # Require at least 3 real TAKEN/MISSED records before running the model.
+    # Fewer than 3 records means the AI would be predicting on fabricated
+    # (padded) data, which is unreliable and misleading.
+    if len(history_rows) < 3:
+        print(f"[AI] Patient {patient_id} has only {len(history_rows)} adherence log(s). "
+              f"Minimum 3 required for a reliable prediction.")
         return age, None
 
     # Convert status strings to numeric: 1.0 for TAKEN, 0.0 for MISSED
     history_vals = [1.0 if r['status'] == 'TAKEN' else 0.0 for r in history_rows]
-    # Pad with 1.0 if fewer than 3 logs (assume adherence if not recorded)
-    while len(history_vals) < 3:
-        history_vals.insert(0, 1.0)
 
     return age, history_vals
 

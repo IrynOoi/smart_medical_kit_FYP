@@ -42,13 +42,19 @@ class CurvedChartPainter extends CustomPainter {
     // ------------------------------------------------------------------
     const double leftPadding = 30.0; // space for Y‑axis labels
     const double bottomPadding = 25.0; // space for X‑axis labels
+    const double topPadding = 35.0; // space for tooltips
     final double chartWidth = size.width - leftPadding;
-    final double chartHeight = size.height - bottomPadding;
+    final double chartHeight = size.height - bottomPadding - topPadding;
+    final double graphBottom = topPadding + chartHeight;
 
-    // Calculate the maximum value in the data, but ensure the top of the chart
-    // is at least 2 if the max is less than 2, so the line appears in the middle.
+    // Calculate the maximum value in the data. Make it an even integer
+    // so the Y-axis labels align perfectly with the graph points.
     double rawMax = data.isEmpty ? 0 : data.reduce(max);
-    final double maxV = rawMax < 2 ? 2.0 : rawMax * 1.2;
+    int topValue = rawMax < 2 ? 2 : rawMax.ceil();
+    if (topValue % 2 != 0) {
+      topValue += 1; // Make it even so the half-value is an integer
+    }
+    final double maxV = topValue.toDouble();
 
     // ------------------------------------------------------------------
     // 2. Draw Y‑axis labels (max, half, zero) on the left side
@@ -70,7 +76,7 @@ class CurvedChartPainter extends CustomPainter {
       );
       textPainter.layout();
       // Position the label vertically – evenly spaced across the chart height
-      final yPos = (i * (chartHeight / 2)) - (textPainter.height / 2);
+      final yPos = topPadding + (i * (chartHeight / 2)) - (textPainter.height / 2);
       textPainter.paint(canvas, Offset(0, yPos));
     }
 
@@ -80,7 +86,7 @@ class CurvedChartPainter extends CustomPainter {
     final int pointCount = min(data.length, labels.length);
     final points = List.generate(pointCount, (i) {
       final x = leftPadding + (i * chartWidth / (pointCount - 1));
-      final y = chartHeight - ((data[i] / maxV) * chartHeight);
+      final y = graphBottom - ((data[i] / maxV) * chartHeight);
       return Offset(x, y);
     });
 
@@ -90,7 +96,7 @@ class CurvedChartPainter extends CustomPainter {
     // 4. Draw the gradient fill under the curve
     // ------------------------------------------------------------------
     final fillPath = Path()
-      ..moveTo(points.first.dx, chartHeight); // start from bottom‑left
+      ..moveTo(points.first.dx, graphBottom); // start from bottom‑left
 
     // Build a smooth cubic Bézier path through the points
     for (int i = 0; i < points.length - 1; i++) {
@@ -111,7 +117,7 @@ class CurvedChartPainter extends CustomPainter {
       );
     }
     // Close the path by going to the bottom‑right and back to the start
-    fillPath.lineTo(points.last.dx, chartHeight);
+    fillPath.lineTo(points.last.dx, graphBottom);
     fillPath.close();
 
     // Paint the fill with a vertical gradient (line colour fading to transparent)
@@ -125,7 +131,7 @@ class CurvedChartPainter extends CustomPainter {
             lineColor.withValues(alpha: 0.3), // visible at the top
             lineColor.withValues(alpha: 0.0), // fully transparent at the bottom
           ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, chartHeight)),
+        ).createShader(Rect.fromLTWH(0, topPadding, size.width, chartHeight)),
     );
 
     // ------------------------------------------------------------------
@@ -174,7 +180,7 @@ class CurvedChartPainter extends CustomPainter {
       textPainter.layout();
       textPainter.paint(
         canvas,
-        Offset(points[i].dx - textPainter.width / 2, chartHeight + 10),
+        Offset(points[i].dx - textPainter.width / 2, graphBottom + 10),
       );
 
       // 6b. If this is the selected point and its value > 0, draw a dot + tooltip

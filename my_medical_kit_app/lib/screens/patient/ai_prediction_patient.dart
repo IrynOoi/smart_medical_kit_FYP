@@ -23,6 +23,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   bool _isLoading = true;
   AIPrediction? _prediction;
   int _patientId = 0;
+  bool _hasInsufficientData = false;
   late AnimationController _animationController;
 
   @override
@@ -52,18 +53,27 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     }
   }
 
-  // This loads data from PostgreSQL (does not run AI model)
-  // 🌟 FIX: 改为每次打开页面时，强制让后端重新运行 AI 模型！
+  // This loads data from PostgreSQL (does not run AI model automatically)
   Future<void> _loadPrediction({bool showLoading = true}) async {
     if (showLoading) setState(() => _isLoading = true);
     try {
-      // 👇 关键修改：调用重新计算的 API，确保永远获取包含最新 Miss/Take 的结果
-      final prediction = await PredictionService().recalculatePrediction(
+      final logs = await PatientService().getAdherenceLogs(_patientId);
+      if (logs.length < 3) {
+        setState(() {
+          _prediction = null;
+          _hasInsufficientData = true;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final prediction = await PredictionService().getAIPrediction(
         _patientId,
       );
 
       setState(() {
         _prediction = prediction;
+        _hasInsufficientData = false;
         _isLoading = false;
       });
       if (prediction != null) {
@@ -73,7 +83,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error running AI prediction: $e')),
+          SnackBar(content: Text('Error loading AI prediction: $e')),
         );
       }
     }
@@ -83,29 +93,29 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
   Future<void> _recalculatePrediction() async {
     setState(() => _isLoading = true);
     try {
+      final logs = await PatientService().getAdherenceLogs(_patientId);
+      
+      // We always call the backend so it can evaluate data sufficiency
+      // and delete any stale predictions from the database if logs < 3.
       final prediction = await PredictionService().recalculatePrediction(
         _patientId,
       );
-      if (prediction != null) {
+      
+      if (prediction != null && logs.length >= 3) {
         setState(() {
           _prediction = prediction;
+          _hasInsufficientData = false;
         });
         _animationController.forward(from: 0.0);
       } else {
-        // No prediction (possibly insufficient data)
+        // No prediction returned (insufficient data evaluated by backend)
+        setState(() {
+          _prediction = null;
+          _hasInsufficientData = true;
+        });
         if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Info'),
-              content: const Text('No adherence data for prediction.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Insufficient data: You need at least 3 medication logs.')),
           );
         }
       }
@@ -519,8 +529,10 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     final age = parsedFeatures['age']?.toString() ?? 'Unknown';
     final day = parsedFeatures['day_of_week'] ?? _getCurrentDayOfWeek();
     final time = parsedFeatures['time_of_day'] ?? _getCurrentTimeOfDay();
-    
-    final predictionDate = _prediction != null ? _prediction!.predictedAt : DateTime.now();
+
+    final predictionDate = _prediction != null
+        ? _prediction!.predictedAt
+        : DateTime.now();
     final exactDate = DateFormat('MMM dd, yyyy').format(predictionDate);
     final exactTime = DateFormat('hh:mm a').format(predictionDate);
 
@@ -698,7 +710,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                'Non-Adherence Probability',
+                'Forget Probability',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey,

@@ -70,7 +70,7 @@ def get_all_recent_logs(caregiver_id, limit):
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
             SELECT al.adlog_id, u.full_name AS patient_name,
-                   m.medication_name, al.scheduled_time, al.status
+                   m.medication_name, al.scheduled_time, al.dispensed_time, al.recorded_at, al.status
             FROM adherence_logs al
             JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
             JOIN medications m ON pc.medication_id = m.medication_id

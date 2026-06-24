@@ -28,11 +28,11 @@ def predict_and_save():
         # or None if there is insufficient adherence history.
         new_pred = compute_prediction_for_patient(patient_id)
         
-        # Handle the case where no adherence data is available to make a prediction.
+        # Handle the case where no adherence data is available (or insufficient records) to make a prediction.
         if new_pred is None:
             return jsonify({
-                "success": False, 
-                "message": "No adherence data found. Please take medication to generate insights."
+                "success": False,
+                "message": "Insufficient adherence data. At least 3 recorded doses (TAKEN or MISSED) are required to run a reliable AI prediction."
             }), 200  # 200 OK so the client doesn't treat it as a server error, but success flag is False
 
         # Prediction generated and saved (the service function already performs the upsert)

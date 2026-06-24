@@ -58,13 +58,15 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
 
       // 并发获取每个患者的最新预测
       final Map<int, AIPrediction?> predictions = {};
-      await Future.wait(
-        allPatients.map((patient) async {
-          final pid = patient['patient_id'];
-          final pred = await PredictionService().recalculatePrediction(pid);
-          predictions[pid] = pred;
-        }),
-      );
+      if (allPatients.isNotEmpty) {
+        await Future.wait(
+          allPatients.map((patient) async {
+            final pid = patient['patient_id'];
+            final pred = await PredictionService().getAIPrediction(pid);
+            predictions[pid] = pred;
+          }),
+        );
+      }
 
       setState(() {
         _overview = overview;
@@ -334,8 +336,14 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                                 const SizedBox(height: 8),
                                 _buildInfoRow('Name', patientName),
                                 _buildInfoRow('Age', '$age years'),
-                                _buildInfoRow('Date', '${DateFormat('MMM dd, yyyy').format(DateTime.now())} ($dayOfWeek)'),
-                                _buildInfoRow('Time', '${DateFormat('hh:mm a').format(DateTime.now())} ($timeOfDay)'),
+                                _buildInfoRow(
+                                  'Date',
+                                  '${DateFormat('MMM dd, yyyy').format(DateTime.now())} ($dayOfWeek)',
+                                ),
+                                _buildInfoRow(
+                                  'Time',
+                                  '${DateFormat('hh:mm a').format(DateTime.now())} ($timeOfDay)',
+                                ),
                                 const SizedBox(height: 8),
                                 const Divider(),
                                 const SizedBox(height: 8),
@@ -1191,8 +1199,8 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
             children: [
               _buildHeaderStat(
                 label: 'System Forecast',
-                value: '${overallScore.toStringAsFixed(1)}%',
-                subLabel: 'Expected Adherence',
+                value: '${overallScore.toStringAsFixed(2)}%',
+                subLabel: 'Expected Forget Probability',
               ),
               Container(
                 width: 1,

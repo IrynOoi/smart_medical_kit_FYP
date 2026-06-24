@@ -74,8 +74,9 @@ def add_prescription():
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
         dispense_times = data.get('dispense_times')   # List of times (e.g., ["08:00", "20:00"])
-        current_inventory = data.get('current_inventory', 0)
-        refill_threshold = data.get('refill_threshold', 5)
+        dispense_days = data.get('dispense_days')
+        current_inventory = data.get('current_inventory')
+        refill_threshold = data.get('refill_threshold')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         device_id = data.get('device_id')
@@ -87,7 +88,7 @@ def add_prescription():
         # Call model to create prescription; returns success, message, and new prescription data
         success, msg, new_prescription = create_prescription_config(
             patient_id, medication_name, dosage_tablet, dispense_times,
-            start_date, end_date, current_inventory, refill_threshold, device_id
+            start_date, end_date, current_inventory, refill_threshold, device_id, dispense_days
         )
 
         if not success:
@@ -184,6 +185,7 @@ def update_prescription(prescription_id):
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
         dispense_times = data.get('dispense_times')
+        dispense_days = data.get('dispense_days')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         current_inventory = data.get('current_inventory')
@@ -198,7 +200,7 @@ def update_prescription(prescription_id):
         check_none = 'device_id' in data
         success, msg = update_prescription_config(
             prescription_id, medication_name, dosage_tablet, dispense_times,
-            start_date, end_date, current_inventory, refill_threshold, device_id, check_none
+            start_date, end_date, current_inventory, refill_threshold, device_id, check_none, dispense_days
         )
         if not success:
             return jsonify({"success": False, "message": msg}), 400

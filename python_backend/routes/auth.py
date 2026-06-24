@@ -1,8 +1,10 @@
 # auth.py - Authentication Blueprint (login, registration, password reset)
 
+from models.user_model import get_user_password_by_email
 from flask import Blueprint, request, jsonify
 import mysql.connector
-from models.user import get_user_by_credentials, create_new_user, get_user_id_by_email, update_user_password
+
+from models.user_model import get_user_by_credentials, create_new_user, get_user_id_by_email, update_user_password
 from utils.sanitizers import clean_string  # Helper to strip dangerous characters from inputs
 
 # Create Blueprint for authentication routes
@@ -111,9 +113,18 @@ def reset_password():
 
         # Check if the email exists in the system
         user = get_user_id_by_email(email)   # Returns user_id if found, else None
-
         if not user:
             return jsonify({"success": False, "message": "Email not found"}), 404
+
+        # =============================================
+        # 🛡️ NEW: Prevent using the same password
+        # =============================================
+        current_password = get_user_password_by_email(email)
+        if current_password is not None and current_password == new_password:
+            return jsonify({
+                "success": False,
+                "message": "New password must be different from the current password."
+            }), 400
 
         # Update the password (model handles hashing)
         update_user_password(email, new_password)

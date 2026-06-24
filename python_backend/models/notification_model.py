@@ -564,9 +564,23 @@ def sync_stock_notifications(caregiver_id=None, patient_id=None, medication_id=N
 
         # Aggregate by medication
         aggregated = _aggregate_stock_alerts_by_medication(rows)
+
+        # ── Dedup: keep only ONE aggregated entry per (caregiver_id, medication_id).
+        # _fetch_stock_rows and _fetch_device_stock_rows can both return rows for
+        # the same medication, producing two separate aggregated items and therefore
+        # two duplicate notification INSERTs.  We merge them here before touching the DB.
+        seen_keys: set = set()
+        deduped_aggregated = []
+        for agg in aggregated:
+            key = (agg['caregiver_id'], agg['medication_id'])
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            deduped_aggregated.append(agg)
+
         created = 0
 
-        for agg in aggregated:
+        for agg in deduped_aggregated:
             caregiver = agg['caregiver_id']
             if caregiver is None:
                 continue   # Should not happen
@@ -589,7 +603,9 @@ def sync_stock_notifications(caregiver_id=None, patient_id=None, medication_id=N
                 _mark_related_stock_alerts_read(cursor, caregiver, agg['medication_name'], agg['medication_name'])
                 continue
 
-            # Check if there is already an unread stock notification for this medication
+            # Fetch ALL unread stock notifications for this medication name.
+            # If more than one exists (leftover duplicates from prior runs), we
+            # update the first one and delete the rest to self-heal the DB.
             cursor.execute('''
                 SELECT notification_id, type
                 FROM notifications
@@ -597,26 +613,34 @@ def sync_stock_notifications(caregiver_id=None, patient_id=None, medication_id=N
                   AND type IN ('LOW_STOCK', 'OUT_OF_STOCK')
                   AND is_read = 0
                   AND message LIKE %s
-                LIMIT 1
+                ORDER BY created_at ASC
             ''', (caregiver, f'%{agg["medication_name"]}%'))
-            existing = cursor.fetchone()
+            existing_rows = cursor.fetchall()
 
-            if existing:
-                # Update existing notification (refresh message and possibly type)
-                if existing['type'] != notif_type:
+            if existing_rows:
+                # Keep the oldest unread notification; mark any extras as read
+                primary = existing_rows[0]
+                for duplicate in existing_rows[1:]:
+                    cursor.execute(
+                        'UPDATE notifications SET is_read = 1 WHERE notification_id = %s',
+                        (duplicate['notification_id'],)
+                    )
+
+                # Update the surviving notification with the latest message/type
+                if primary['type'] != notif_type:
                     # Type changed (e.g., from LOW_STOCK to OUT_OF_STOCK)
                     cursor.execute('''
                         UPDATE notifications
                         SET title = %s, message = %s, type = %s, created_at = NOW()
                         WHERE notification_id = %s
-                    ''', (title, message, notif_type, existing['notification_id']))
+                    ''', (title, message, notif_type, primary['notification_id']))
                 else:
                     # Same type: just refresh message and timestamp
                     cursor.execute('''
                         UPDATE notifications
                         SET message = %s, created_at = NOW()
                         WHERE notification_id = %s
-                    ''', (message, existing['notification_id']))
+                    ''', (message, primary['notification_id']))
             else:
                 # No existing unread notification: insert a new one
                 cursor.execute('''

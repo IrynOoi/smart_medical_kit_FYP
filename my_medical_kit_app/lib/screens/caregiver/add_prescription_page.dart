@@ -113,17 +113,32 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
   // Validates and saves the new prescription.
   // Checks for duplicate active prescriptions for the same patient.
   Future<void> _savePrescription() async {
-    // Validate all form fields
-    if (!_formKey.currentState!.validate()) return;
+    // =============================================
+    // 🛡️ CRITICAL FIX 1: Prevent double‑tap (synchronous lock)
+    // Lock the button IMMEDIATELY before any async work or validation,
+    // so rapid taps cannot both slip through before setState fires.
+    // =============================================
+    if (_isSaving) return;
+    setState(() => _isSaving = true); // Lock synchronously right away
+
+    // =============================================
+    // 📝 Basic form validation (unlock if validation fails)
+    // =============================================
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _isSaving = false);
+      return;
+    }
+
     if (_selectedMedicationName == null) {
+      setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a medication')),
       );
       return;
     }
 
-    // Validate that end date is not before start date.
     if (_endDate != null && _endDate!.isBefore(_startDate)) {
+      setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('End date cannot be before start date'),
@@ -133,19 +148,23 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       return;
     }
 
-    // ---- Duplicate check: prevent prescribing the same medication twice ----
+    // =============================================
+    // 🔍 Check if an active prescription for this medication already exists (frontend safety)
+    // =============================================
     try {
       final patientId = widget.patient['patient_id'];
       final existing = await MedicationService().getPatientMedications(
         patientId,
       );
       final hasDuplicate = existing.any((p) {
-        // Only check active (non‑ended) prescriptions.
+        // Only check prescriptions that haven't ended
         if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
           return false;
         return p.medicationName == _selectedMedicationName;
       });
       if (hasDuplicate) {
+        if (!mounted) return;
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -157,58 +176,72 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
         return;
       }
     } catch (e) {
-      // If duplicate check fails, show an error and abort.
+      if (!mounted) return;
+      setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not verify duplicates: $e')),
       );
       return;
     }
 
-    setState(() => _isSaving = true);
+    try {
+      // Build the request payload
+      final List<String> dispenseTimes = _selectedTimes.map((t) {
+        final hour = t.hour.toString().padLeft(2, '0');
+        final minute = t.minute.toString().padLeft(2, '0');
+        return '$hour:$minute:00';
+      }).toList();
 
-    // Build the dispense times list (format: "HH:MM:00")
-    final List<String> dispenseTimes = _selectedTimes.map((t) {
-      final hour = t.hour.toString().padLeft(2, '0');
-      final minute = t.minute.toString().padLeft(2, '0');
-      return '$hour:$minute:00';
-    }).toList();
+      final DateFormat formatter = DateFormat('yyyy-MM-dd');
 
-    final DateFormat formatter = DateFormat('yyyy-MM-dd');
+      final data = {
+        'patient_id': widget.patient['patient_id'],
+        'medication_name': _selectedMedicationName,
+        'dosage_tablet': double.tryParse(_dosageController.text) ?? 1.0,
+        'dispense_times': dispenseTimes,
+        'dispense_days': _selectedDays,
+        'start_date': formatter.format(_startDate),
+        'end_date': _endDate != null ? formatter.format(_endDate!) : null,
+      };
 
-    // Build the request payload.
-    final data = {
-      'patient_id': widget.patient['patient_id'],
-      'medication_name': _selectedMedicationName,
-      'dosage_tablet': double.tryParse(_dosageController.text) ?? 1.0,
-      'dispense_times': dispenseTimes,
-      'dispense_days': _selectedDays,
-      'start_date': formatter.format(_startDate),
-      'end_date': _endDate != null ? formatter.format(_endDate!) : null,
-    };
+      // Call the backend API
+      final response = await MedicationService().addPrescription(data);
 
-    // Call the API to add the prescription.
-    final response = await MedicationService().addPrescription(data);
-    setState(() => _isSaving = false);
-
-    if (response['success'] == true) {
+      // Handle the response
+      if (response['success'] == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Prescription added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(
+          context,
+          true,
+        ); // Return to previous screen and refresh the list
+      } else {
+        if (!mounted) return;
+        String errorMsg =
+            response['message'] ?? response['error'] ?? 'Unknown error';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed: $errorMsg'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Exception handling
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Prescription added successfully'),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
-      Navigator.pop(context, true); // Return true to refresh the parent list.
-    } else {
-      if (!mounted) return;
-      String errorMsg =
-          response['message'] ?? response['error'] ?? 'Unknown error';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed: $errorMsg'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    } finally {
+      // =============================================
+      // 🔓 CRITICAL FIX 2: Always unlock the button, regardless of success or failure
+      // =============================================
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 

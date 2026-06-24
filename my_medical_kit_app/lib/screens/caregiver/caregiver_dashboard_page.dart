@@ -49,6 +49,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   List<Map<String, dynamic>> _recentActivities = [];
   List<double> _chartData = [0, 0, 0, 0, 0, 0, 0];
   List<String> _chartLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // -1 = no touch active; falls back to the most-recent / current-day point.
+  int _touchedChartIndex = -1;
 
   @override
   void initState() {
@@ -68,35 +70,76 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
     setState(() => _selectedPeriod = period);
 
     if (period == 'Day') {
-      // ---- DAY: use raw logs to match patient dashboard ----
+      // ---- DAY: use raw logs with S-curve anchor points ----
       try {
-        // Get all recent logs for this caregiver (last 30 days, but we filter to today)
         final allLogs = await CaregiverService().getAllRecentLogs(_caregiverId);
         final now = DateTime.now();
-        final todayLogs = allLogs.where((log) {
-          final scheduled = DateTime.tryParse(log['scheduled_time'] ?? '');
-          if (scheduled == null) return false;
-          return scheduled.year == now.year &&
-              scheduled.month == now.month &&
-              scheduled.day == now.day &&
-              log['status'] == 'TAKEN';
-        }).toList();
 
-        // Group by formatted time (e.g., "12:50 AM")
-        Map<String, double> grouped = {};
-        for (var log in todayLogs) {
-          final dt = DateTime.parse(log['scheduled_time']);
-          final timeLabel = _formatFullTime(dt); // reuse patient's formatter
-          grouped[timeLabel] = (grouped[timeLabel] ?? 0) + 1;
+        // Collect today's TAKEN logs as (DateTime, count) pairs
+        final Map<DateTime, double> rawByTime = {};
+        for (var log in allLogs) {
+          final scheduled = DateTime.tryParse(log['scheduled_time'] ?? '');
+          if (scheduled == null) continue;
+          if (scheduled.year != now.year ||
+              scheduled.month != now.month ||
+              scheduled.day != now.day) continue;
+          if (log['status'] != 'TAKEN') continue;
+          // Round to the scheduled minute as the key
+          final key = DateTime(
+            scheduled.year,
+            scheduled.month,
+            scheduled.day,
+            scheduled.hour,
+            scheduled.minute,
+          );
+          rawByTime[key] = (rawByTime[key] ?? 0) + 1;
         }
 
-        // If only one dose, add dummy points at 12am and 11pm for better visual
-        if (grouped.length == 1) {
-          final onlyKey = grouped.keys.first;
-          final val = grouped[onlyKey]!;
-          grouped = {'12:00 AM': 0.0, onlyKey: val, '11:00 PM': 0.0};
-        } else if (grouped.isEmpty) {
-          grouped = {'12:00 AM': 0.0, '12:00 PM': 0.0};
+        // Sort the real event points by time
+        final sortedKeys = rawByTime.keys.toList()..sort();
+
+        // ── Inject 0-value anchor points before & after real data ──────
+        // This gives the cubic Bézier enough surrounding points to curve
+        // (an isolated segment with equal Y values would otherwise be flat).
+        final Map<String, double> grouped = {};
+
+        if (sortedKeys.isEmpty) {
+          // No data today: show a flat zero baseline across the day
+          grouped['12:00 AM'] = 0.0;
+          grouped[_formatFullTime(
+            DateTime(now.year, now.month, now.day, now.hour),
+          )] = 0.0;
+        } else {
+          // Anchor BEFORE first event: 1 hour prior (or midnight if < 1h from midnight)
+          final first = sortedKeys.first;
+          final anchorBefore = first.subtract(const Duration(hours: 1));
+          final midnight = DateTime(now.year, now.month, now.day, 0, 0);
+          final beforePoint =
+              anchorBefore.isBefore(midnight) ? midnight : anchorBefore;
+          grouped[_formatFullTime(beforePoint)] = 0.0;
+
+          // Add all real data points
+          for (final k in sortedKeys) {
+            grouped[_formatFullTime(k)] = rawByTime[k]!;
+          }
+
+          // Anchor AFTER last event: 1 hour later (or current time if that's sooner)
+          final last = sortedKeys.last;
+          final anchorAfter = last.add(const Duration(hours: 1));
+          final afterPoint = anchorAfter.isAfter(now) ? now : anchorAfter;
+          // Only add if it's meaningfully different from the last real point
+          final afterLabel = _formatFullTime(
+            DateTime(
+              afterPoint.year,
+              afterPoint.month,
+              afterPoint.day,
+              afterPoint.hour,
+              afterPoint.minute,
+            ),
+          );
+          if (!grouped.containsKey(afterLabel)) {
+            grouped[afterLabel] = 0.0;
+          }
         }
 
         setState(() {
@@ -126,6 +169,20 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       });
     } catch (e) {
       debugPrint('Chart error: $e');
+    }
+  }
+
+  /// Converts a raw touch X position on the canvas into the nearest data-point
+  /// index, using the same coordinate formula as CurvedChartPainter.
+  void _handleChartTouch(double touchX, double canvasWidth) {
+    const double leftPadding = 30.0;
+    final n = _chartData.length;
+    if (n <= 1) return;
+    final chartWidth = canvasWidth - leftPadding;
+    final rawIndex = (touchX - leftPadding) / chartWidth * (n - 1);
+    final clamped = rawIndex.round().clamp(0, n - 1);
+    if (clamped != _touchedChartIndex) {
+      setState(() => _touchedChartIndex = clamped);
     }
   }
 
@@ -284,15 +341,15 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         DeviceService().getDevices(), // 🌟 ADD THIS: Fetch all global devices
       ]);
 
-      _lowStockAlerts = results[4] as List<Map<String, dynamic>>;
       final overview = results[0] as Map<String, dynamic>;
       final patients = results[1] as List<Map<String, dynamic>>;
       final alerts = results[2] as List<Map<String, dynamic>>;
       _notifications = results[3] as List<Map<String, dynamic>>;
-      _unreadCount = _notifications.where((n) => n['is_read'] == 0).length;
-
+      _lowStockAlerts = results[4] as List<Map<String, dynamic>>;
       final allDevices =
           results[5] as List<dynamic>; // 🌟 ADD THIS: Extract device data
+
+      _unreadCount = _notifications.where((n) => n['is_read'] == 0).length;
 
       await _fetchChartData('Week');
 
@@ -445,7 +502,19 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                   child: Column(
                     children: [
                       _buildHeader(), // Remove bell icon from here if you move it to Stack
-                      // ... rest of your body content
+                      Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Center(
+                          child: Text(
+                            _errorMessage,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 16,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1094,20 +1163,38 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
                   ),
                 ],
               ),
-              child: SizedBox(
-                height: 180,
-                width: double.infinity,
-                child: CustomPaint(
-                  // 🌟 Draws the smooth curve based on real PostgreSQL data!
-                  painter: CurvedChartPainter(
-                    data: _chartData,
-                    labels: _chartLabels,
-                    lineColor: AppColors.primaryPurple,
-                    selectedIndex: _selectedPeriod == 'Week'
-                        ? (DateTime.now().weekday - 1)
-                        : _chartData.length - 1, // Highlights today or latest
-                  ),
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final canvasWidth = constraints.maxWidth;
+                  // While touching: use the dragged index.
+                  // After release or not touching: fall back to current-day
+                  // (Week) or last point (Day / Month).
+                  final defaultIndex = _selectedPeriod == 'Week'
+                      ? (DateTime.now().weekday - 1)
+                      : _chartData.length - 1;
+                  final effectiveIndex = _touchedChartIndex == -1
+                      ? defaultIndex
+                      : _touchedChartIndex;
+                  return GestureDetector(
+                    onPanUpdate: (d) =>
+                        _handleChartTouch(d.localPosition.dx, canvasWidth),
+                    // Tap a point — tooltip stays until the next tap/drag
+                    onTapDown: (d) =>
+                        _handleChartTouch(d.localPosition.dx, canvasWidth),
+                    child: SizedBox(
+                      height: 180,
+                      width: double.infinity,
+                      child: CustomPaint(
+                        painter: CurvedChartPainter(
+                          data: _chartData,
+                          labels: _chartLabels,
+                          lineColor: AppColors.primaryPurple,
+                          selectedIndex: effectiveIndex,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),

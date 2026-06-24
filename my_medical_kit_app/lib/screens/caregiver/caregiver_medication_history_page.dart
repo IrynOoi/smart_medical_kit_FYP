@@ -490,6 +490,48 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                     ),
                                                   ],
                                                 ),
+                                                const SizedBox(height: 4),
+                                                // Dispensed time
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.done_all,
+                                                      size: 14,
+                                                      color: isTaken ? Colors.green : Colors.grey.shade600,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      (isTaken && act['dispensed_time'] != null)
+                                                          ? _formatDateTime(act['dispensed_time'])
+                                                          : (isTaken ? 'No dispense time' : 'Not taken'),
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        color: isTaken ? Colors.green : Colors.grey.shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                // Recorded time
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.history,
+                                                      size: 14,
+                                                      color: Colors.grey.shade600,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      act['recorded_at'] != null
+                                                          ? _formatDateTime(act['recorded_at'])
+                                                          : 'Not recorded',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        color: Colors.grey.shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ],
                                             ),
                                           ),
