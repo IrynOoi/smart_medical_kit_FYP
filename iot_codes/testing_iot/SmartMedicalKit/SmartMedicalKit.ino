@@ -49,7 +49,7 @@ unsigned long doseStartTime = 0;
 const unsigned long doseTimeout = 10000;         // 10 seconds to press the button
 
 bool isDoseWaiting = false;          // True when a dose is due and awaiting user action
-const int maxPendingDoses = 12;
+const int maxPendingDoses = 12;      // Safety cap to keep RAM usage predictable on ESP32
 struct PendingDose {
   int motorSlot;
   int adlogId;
@@ -233,7 +233,7 @@ void checkForPendingDose() {
   
   if (httpCode == 200) {
     String payload = http.getString();
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(4096);   // Batch payload buffer (supports multiple due doses)
     deserializeJson(doc, payload);
 
     if (doc["success"] == true && doc["has_pending"] == true) {

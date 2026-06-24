@@ -305,7 +305,7 @@ def get_pending_dose(device_serial):
         if doses:
             enriched_doses = []
             for dose in doses:
-                item = dict(dose)
+                item = dose.copy()
                 item['is_empty'] = item.get('current_inventory', 0) <= 0
 
                 # Remove inventory field from payload to keep responses lightweight
