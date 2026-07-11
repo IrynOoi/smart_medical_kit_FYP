@@ -1,4 +1,4 @@
-# About system
+# About this medical kit system
 -Designed primarily for the elder patients managing chronic, long-term illnesses.
 -Automate medication management to improve patient adherence
 
