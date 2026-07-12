@@ -87,3 +87,16 @@ By linking software + hardware + AI prediction, the platform supports safer and 
 2. Develop an automated IoT pill dispenser with multi-channel reminder support.
 3. Implement real-time medication monitoring and inventory tracking.
 4. Integrate machine learning for missed-dose probability prediction using adherence time-series data.
+
+
+
+## PHOTO OF MY SMART MEDICAL KIT 
+
+<img width="960" height="1280" alt="image" src="https://github.com/user-attachments/assets/36cacc00-a2f3-4351-abad-ccc257eb5f57" />
+
+<br>
+<img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/c8c3b15d-bb33-4be2-9bc7-b4943e81ef9e" />
+
+
+
+
