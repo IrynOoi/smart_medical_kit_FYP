@@ -94,7 +94,7 @@ By linking software + hardware + AI prediction, the platform supports safer and 
 
 <img width="960" height="1280" alt="image" src="https://github.com/user-attachments/assets/36cacc00-a2f3-4351-abad-ccc257eb5f57" />
 
-<br>
+<br><br>
 <img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/c8c3b15d-bb33-4be2-9bc7-b4943e81ef9e" />
 
 
