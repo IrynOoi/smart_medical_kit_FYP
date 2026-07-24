@@ -1,0 +1,228 @@
+:root {
+  /* Premium Purple Color Palette matching Flutter App Theme */
+  --primary-dark: #3B1E54;
+  --primary-mid: #6A4C93;
+  --primary-light: #9B7EBD;
+  --accent-purple: #8B5CF6;
+  --bg-gradient: linear-gradient(135deg, #3B1E54 0%, #6A4C93 50%, #9B7EBD 100%);
+  
+  /* Text & Functional Colors */
+  --text-primary: #2D3142;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --bg-page: #F5F6FA;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F8FAFC;
+  --border-color: #E2E8F0;
+  
+  /* Status Colors */
+  --status-success: #10B981;
+  --status-success-bg: #D1FAE5;
+  --status-warning: #F59E0B;
+  --status-warning-bg: #FEF3C7;
+  --status-danger: #EF4444;
+  --status-danger-bg: #FEE2E2;
+  --status-info: #3B82F6;
+  --status-info-bg: #DBEAFE;
+  
+  /* Shadows & Radius */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(59, 30, 84, 0.08);
+  --shadow-lg: 0 10px 25px rgba(59, 30, 84, 0.12);
+  --shadow-purple: 0 8px 20px rgba(106, 76, 147, 0.25);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* Font Family */
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Outfit', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+a {
+  color: var(--primary-mid);
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-light);
+}
+
+/* Glassmorphism Card Utility */
+.glass-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Status Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.badge-success {
+  background-color: var(--status-success-bg);
+  color: #047857;
+}
+
+.badge-warning {
+  background-color: var(--status-warning-bg);
+  color: #B45309;
+}
+
+.badge-danger {
+  background-color: var(--status-danger-bg);
+  color: #B91C1C;
+}
+
+.badge-info {
+  background-color: var(--status-info-bg);
+  color: #1D4ED8;
+}
+
+.badge-purple {
+  background-color: #F3E8FF;
+  color: var(--primary-dark);
+}
+
+/* Primary Button Styling */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary {
+  background: var(--bg-gradient);
+  color: white;
+  box-shadow: var(--shadow-purple);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(106, 76, 147, 0.35);
+}
+
+.btn-secondary {
+  background: #F1F5F9;
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: #E2E8F0;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.btn-outline:hover {
+  background: #F3E8FF;
+}
+
+.btn-danger {
+  background: var(--status-danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #DC2626;
+}
+
+/* Modal Backdrop & Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: white;
+  border-radius: var(--radius-xl);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px;
+  box-shadow: var(--shadow-lg);
+  animation: scaleUp 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
