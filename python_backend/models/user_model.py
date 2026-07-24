@@ -475,3 +475,19 @@ def get_user_password_by_email(email):
         # If a row was found, return the password string.
         # Otherwise, return None to indicate the email does not exist.
         return row['password'] if row else None
+
+# ---------------------- Get Caregiver Patient Count ----------------------
+def get_caregiver_patient_count(caregiver_id):
+    """
+    Get the total number of active patients currently assigned to a caregiver.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) FROM patient_caregiver_mapping pcm
+            JOIN users u ON pcm.patient_id = u.user_id
+            WHERE pcm.caregiver_id = %s AND u.is_active = 1
+        ''', (caregiver_id,))
+        count = cursor.fetchone()[0]
+        cursor.close()
+    return count

@@ -315,13 +315,25 @@ class _ProfilePageState extends State<ProfilePage> {
 
   /// Opens a date picker for Date of Birth.
   Future<void> _selectDate(BuildContext context) async {
+    final DateTime today = DateTime.now();
+    final DateTime maxDate = _userRole == 'patient'
+        ? DateTime(today.year - 60, today.month, today.day)
+        : DateTime(today.year - 18, today.month, today.day);
+    
+    DateTime initialPickerDate = _selectedDate ?? 
+        (_userRole == 'patient' 
+            ? DateTime(today.year - 60, today.month, today.day) 
+            : DateTime(today.year - 20, today.month, today.day));
+            
+    if (initialPickerDate.isAfter(maxDate)) {
+      initialPickerDate = maxDate;
+    }
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate:
-          _selectedDate ??
-          DateTime.now().subtract(const Duration(days: 365 * 20)),
+      initialDate: initialPickerDate,
       firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      lastDate: maxDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -750,7 +762,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             vertical: 12,
                           ),
                         ),
-                        items: ['Male', 'Female', 'Other']
+                        items: ['Male', 'Female']
                             .map(
                               (g) => DropdownMenuItem(value: g, child: Text(g)),
                             )

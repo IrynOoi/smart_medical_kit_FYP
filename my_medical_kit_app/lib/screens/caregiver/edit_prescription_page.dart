@@ -129,11 +129,12 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
 
   // Open a date picker for start or end date.
   Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final initialDate = isStart ? _startDate : (_endDate ?? _startDate);
+    final initialDate = isStart ? _startDate : (_endDate ?? _startDate.add(const Duration(days: 1)));
+    final firstDate = isStart ? DateTime(2000) : _startDate.add(const Duration(days: 1));
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate: DateTime(2000),
+      firstDate: firstDate,
       lastDate: DateTime(2101),
       builder: (context, child) {
         return Theme(
@@ -152,9 +153,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
       setState(() {
         if (isStart) {
           _startDate = picked;
-          // Ensure end date is not before start date
-          if (_endDate != null && _endDate!.isBefore(_startDate)) {
-            _endDate = _startDate;
+          // Ensure end date is strictly after start date
+          if (_endDate != null && !_endDate!.isAfter(_startDate)) {
+            _endDate = _startDate.add(const Duration(days: 1));
           }
         } else {
           _endDate = picked;
@@ -170,6 +171,16 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     if (_selectedMedicationName == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a medication')),
+      );
+      return;
+    }
+
+    if (_endDate != null && !_endDate!.isAfter(_startDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('End date must be after start date'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }

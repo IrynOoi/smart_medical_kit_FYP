@@ -644,7 +644,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   Future<void> _sendDirectCommand(String endpoint, String successMsg) async {
     final url = Uri.parse('http://$_testEspIp$endpoint');
     try {
-      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

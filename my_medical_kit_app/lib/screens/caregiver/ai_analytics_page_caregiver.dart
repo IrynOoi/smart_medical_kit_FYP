@@ -1195,18 +1195,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
           ),
           const SizedBox(height: 28),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildHeaderStat(
-                label: 'System Forecast',
-                value: '${overallScore.toStringAsFixed(2)}%',
-                subLabel: 'Expected Forget Probability',
-              ),
-              Container(
-                width: 1,
-                height: 50,
-                color: Colors.white.withValues(alpha: 0.3),
-              ),
               _buildHeaderStat(
                 label: 'Patients Analyzed',
                 value: '${_overview['total_analyzed'] ?? 0}',

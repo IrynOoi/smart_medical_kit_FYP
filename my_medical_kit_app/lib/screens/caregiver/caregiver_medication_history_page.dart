@@ -478,9 +478,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
-                                                      _formatDateTime(
+                                                      'Scheduled Time: ${_formatDateTime(
                                                         act['scheduled_time'],
-                                                      ),
+                                                      )}',
                                                       style: TextStyle(
                                                         fontSize: 13,
                                                         color: Colors
@@ -501,9 +501,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
-                                                      (isTaken && act['dispensed_time'] != null)
+                                                      'Dispensed Time: ${(isTaken && act['dispensed_time'] != null)
                                                           ? _formatDateTime(act['dispensed_time'])
-                                                          : (isTaken ? 'No dispense time' : 'Not taken'),
+                                                          : (isTaken ? 'No dispense time' : 'Not taken')}',
                                                       style: TextStyle(
                                                         fontSize: 13,
                                                         color: isTaken ? Colors.green : Colors.grey.shade600,
@@ -522,9 +522,9 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
-                                                      act['recorded_at'] != null
+                                                      'Recorded At: ${act['recorded_at'] != null
                                                           ? _formatDateTime(act['recorded_at'])
-                                                          : 'Not recorded',
+                                                          : 'Not recorded'}',
                                                       style: TextStyle(
                                                         fontSize: 13,
                                                         color: Colors.grey.shade600,

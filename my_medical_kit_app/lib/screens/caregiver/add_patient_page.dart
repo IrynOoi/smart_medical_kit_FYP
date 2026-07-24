@@ -30,11 +30,12 @@ class _AddPatientPageState extends State<AddPatientPage> {
   final List<String> _genders = ['Male', 'Female'];
 
   Future<void> _pickDate() async {
+    final maxDate = DateTime.now().subtract(const Duration(days: 365 * 60));
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().subtract(const Duration(days: 365 * 30)),
+      initialDate: maxDate,
       firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      lastDate: maxDate,
     );
     if (picked != null) {
       setState(() {

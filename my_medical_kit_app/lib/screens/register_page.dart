@@ -39,13 +39,15 @@ class _RegisterPageState extends State<RegisterPage> {
 
   /// Opens a date picker to select date of birth and formats it as YYYY-MM-DD.
   Future<void> _selectDate(BuildContext context) async {
+    final int minAge = _selectedRole == 'Patient' ? 60 : 18;
+    final DateTime today = DateTime.now();
+    final DateTime maxDate = DateTime(today.year - minAge, today.month, today.day);
+    
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().subtract(
-        const Duration(days: 365 * 20),
-      ), // roughly 20 years ago
+      initialDate: maxDate,
       firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      lastDate: maxDate,
       // Customize the picker theme to match the app's primary color
       builder: (context, child) {
         return Theme(

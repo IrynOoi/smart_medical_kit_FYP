@@ -310,7 +310,13 @@ def link_patient_route(caregiver_id):
         if not patient_id:
             return jsonify({"success": False, "message": "patient_id required"}), 400
             
-        from models.user_model import link_patient_to_caregiver
+        from models.user_model import link_patient_to_caregiver, get_caregiver_patient_count
+        
+        # Check if caregiver patient limit is reached
+        count = get_caregiver_patient_count(caregiver_id)
+        if count >= 10:
+            return jsonify({"success": False, "message": "Caregiver already has the maximum of 10 patients"}), 400
+
         link_patient_to_caregiver(caregiver_id, patient_id)
         return jsonify({"success": True, "message": "Patient linked successfully"})
     except Exception as e:

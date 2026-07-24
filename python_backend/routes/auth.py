@@ -4,7 +4,7 @@ from models.user_model import get_user_password_by_email
 from flask import Blueprint, request, jsonify
 import mysql.connector
 
-from models.user_model import get_user_by_credentials, create_new_user, get_user_id_by_email, update_user_password
+from models.user_model import get_user_by_credentials, create_new_user, get_user_id_by_email, update_user_password, get_caregiver_patient_count
 from utils.sanitizers import clean_string  # Helper to strip dangerous characters from inputs
 
 # Create Blueprint for authentication routes
@@ -77,6 +77,12 @@ def register():
         # - medical_notes: only for patients
         caregiver_id = data.get('caregiver_id') if role != 'caregiver' else None
         medical_notes = data.get('medical_notes') if role != 'caregiver' else None
+
+        # Check if caregiver patient limit is reached
+        if caregiver_id:
+            count = get_caregiver_patient_count(caregiver_id)
+            if count >= 10:
+                return jsonify({"success": False, "message": "Caregiver already has the maximum of 10 patients"}), 400
 
         # Call model to create the user; it will hash the password and insert into appropriate tables
         create_new_user(email, password, role, name, phone, address, gender, dob, caregiver_id, medical_notes)

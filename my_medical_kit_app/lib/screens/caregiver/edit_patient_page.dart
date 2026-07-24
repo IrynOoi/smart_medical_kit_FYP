@@ -73,13 +73,19 @@ class _EditPatientPageState extends State<EditPatientPage> {
 
   // Opens a date picker for the date of birth.
   Future<void> _pickDate() async {
+    final today = DateTime.now();
+    final maxDate = DateTime(today.year - 60, today.month, today.day);
+    
+    DateTime initialPickerDate = _selectedDob ?? maxDate;
+    if (initialPickerDate.isAfter(maxDate)) {
+      initialPickerDate = maxDate;
+    }
+
     final picked = await showDatePicker(
       context: context,
-      initialDate:
-          _selectedDob ??
-          DateTime.now().subtract(const Duration(days: 365 * 65)),
+      initialDate: initialPickerDate,
       firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      lastDate: maxDate,
     );
     if (picked != null) {
       setState(() {

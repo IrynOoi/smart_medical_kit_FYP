@@ -335,7 +335,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                scheduledStr,
+                                                'Scheduled Time: $scheduledStr',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: Colors.grey.shade600,
@@ -356,7 +356,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                dispensedStr,
+                                                'Dispensed Time: $dispensedStr',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: isTaken
@@ -377,7 +377,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                recordedStr,
+                                                'Recorded At: $recordedStr',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: Colors.grey.shade600,
