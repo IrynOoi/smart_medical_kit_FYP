@@ -235,7 +235,7 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
         await _fetchPatients();
         await _fetchAvailablePatients();
       } else {
-        throw Exception('Failed to link patient');
+        throw Exception('Already reach maximum number of 10  patients');
       }
     } catch (e) {
       if (mounted) {
@@ -400,9 +400,28 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                 Expanded(
                   child: SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'all', label: Text('All')),
-                      ButtonSegment(value: 'active', label: Text('Active')),
-                      ButtonSegment(value: 'inactive', label: Text('Inactive')),
+                      // REPLACE YOUR OLD BUTTON SEGMENTS WITH THESE THREE:
+                      ButtonSegment(
+                        value: 'all',
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('All'),
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: 'active',
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Active'),
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: 'inactive',
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Inactive'),
+                        ),
+                      ),
                     ],
                     selected: {_availableFilter},
                     onSelectionChanged: (Set<String> newSelection) {
@@ -693,6 +712,8 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.bold,
                                               ),
+                                              // 👈 Add this line:
+                                              softWrap: false,
                                             ),
                                           )
                                         else
@@ -715,6 +736,8 @@ class CaregiverPatientsListPageState extends State<CaregiverPatientsListPage> {
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.bold,
                                               ),
+                                              // 👈 Add this line:
+                                              softWrap: false,
                                             ),
                                           ),
                                       ],

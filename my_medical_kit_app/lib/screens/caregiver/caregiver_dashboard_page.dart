@@ -82,7 +82,9 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           if (scheduled == null) continue;
           if (scheduled.year != now.year ||
               scheduled.month != now.month ||
-              scheduled.day != now.day) continue;
+              scheduled.day != now.day) {
+            continue;
+          }
           if (log['status'] != 'TAKEN') continue;
           // Round to the scheduled minute as the key
           final key = DateTime(
@@ -107,15 +109,17 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
           // No data today: show a flat zero baseline across the day
           grouped['12:00 AM'] = 0.0;
           grouped[_formatFullTime(
-            DateTime(now.year, now.month, now.day, now.hour),
-          )] = 0.0;
+                DateTime(now.year, now.month, now.day, now.hour),
+              )] =
+              0.0;
         } else {
           // Anchor BEFORE first event: 1 hour prior (or midnight if < 1h from midnight)
           final first = sortedKeys.first;
           final anchorBefore = first.subtract(const Duration(hours: 1));
           final midnight = DateTime(now.year, now.month, now.day, 0, 0);
-          final beforePoint =
-              anchorBefore.isBefore(midnight) ? midnight : anchorBefore;
+          final beforePoint = anchorBefore.isBefore(midnight)
+              ? midnight
+              : anchorBefore;
           grouped[_formatFullTime(beforePoint)] = 0.0;
 
           // Add all real data points

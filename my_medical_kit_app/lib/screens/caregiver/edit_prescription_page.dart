@@ -29,9 +29,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
   // 🚫 Removed: inventory, threshold, device ID controllers (they are not editable here)
 
   // Dispense times as TimeOfDay objects
-  List<TimeOfDay> _selectedTimes = [];
+  final List<TimeOfDay> _selectedTimes = [];
   // Selected days of week (1=Mon, 7=Sun)
-  List<int> _selectedDays = [];
+  final List<int> _selectedDays = [];
 
   DateTime _startDate = DateTime.now(); // Start date (default today)
   DateTime? _endDate; // Optional end date
@@ -129,8 +129,12 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
 
   // Open a date picker for start or end date.
   Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final initialDate = isStart ? _startDate : (_endDate ?? _startDate.add(const Duration(days: 1)));
-    final firstDate = isStart ? DateTime(2000) : _startDate.add(const Duration(days: 1));
+    final initialDate = isStart
+        ? _startDate
+        : (_endDate ?? _startDate.add(const Duration(days: 1)));
+    final firstDate = isStart
+        ? DateTime(2000)
+        : _startDate.add(const Duration(days: 1));
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -203,8 +207,9 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
         // Exclude the current prescription itself
         if (p.prescriptionId == currentPrescriptionId) return false;
         // Only check active (non‑ended) prescriptions
-        if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
+        if (p.endDate != null && p.endDate!.isBefore(DateTime.now())) {
           return false;
+        }
         return p.medicationName == _selectedMedicationName;
       });
 

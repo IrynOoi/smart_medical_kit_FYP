@@ -43,7 +43,7 @@ class _PatientPrescriptionsPageState extends State<PatientPrescriptionsPage> {
       }
       return t.toString();
     }).toList();
-    return '${formattedTimes.join(', ')}';
+    return formattedTimes.join(', ');
   }
 
   // Helper to format a list of day numbers (1=Mon, 7=Sun) into day abbreviations.

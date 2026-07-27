@@ -1,7 +1,5 @@
 // screens/ai_prediction_patient.dart
 
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -67,9 +65,7 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
         return;
       }
 
-      final prediction = await PredictionService().getAIPrediction(
-        _patientId,
-      );
+      final prediction = await PredictionService().getAIPrediction(_patientId);
 
       setState(() {
         _prediction = prediction;
@@ -94,13 +90,13 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
     setState(() => _isLoading = true);
     try {
       final logs = await PatientService().getAdherenceLogs(_patientId);
-      
+
       // We always call the backend so it can evaluate data sufficiency
       // and delete any stale predictions from the database if logs < 3.
       final prediction = await PredictionService().recalculatePrediction(
         _patientId,
       );
-      
+
       if (prediction != null && logs.length >= 3) {
         setState(() {
           _prediction = prediction;
@@ -115,7 +111,11 @@ class _AIPredictionPatientPageState extends State<AIPredictionPatientPage>
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Insufficient data: You need at least 3 medication logs.')),
+            const SnackBar(
+              content: Text(
+                'Insufficient data: You need at least 3 medication logs.',
+              ),
+            ),
           );
         }
       }

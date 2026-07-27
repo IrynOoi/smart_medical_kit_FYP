@@ -286,9 +286,11 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
 
                     // Mark every unread notification as read
                     final futures = _reminders
-                        .map((item) => PatientService().markNotificationRead(
-                              item.notification.notificationId,
-                            ))
+                        .map(
+                          (item) => PatientService().markNotificationRead(
+                            item.notification.notificationId,
+                          ),
+                        )
                         .toList();
 
                     final results = await Future.wait(futures);
@@ -302,8 +304,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                               ? '✅ All reminders marked as read'
                               : '⚠️ Some reminders could not be marked as read',
                         ),
-                        backgroundColor:
-                            allSuccess ? Colors.teal : Colors.orange,
+                        backgroundColor: allSuccess
+                            ? Colors.teal
+                            : Colors.orange,
                       ),
                     );
 
@@ -495,8 +498,9 @@ class _SmartReminderPageState extends State<SmartReminderPage> {
                                             .markNotificationRead(
                                               notif.notificationId,
                                             );
-                                        if (mounted && success)
+                                        if (mounted && success) {
                                           _loadMedications();
+                                        }
                                       },
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor:

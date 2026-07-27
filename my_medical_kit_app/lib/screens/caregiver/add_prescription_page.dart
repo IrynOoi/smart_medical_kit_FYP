@@ -30,10 +30,10 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
   );
 
   // ---- Schedule ----
-  List<TimeOfDay> _selectedTimes = [
+  final List<TimeOfDay> _selectedTimes = [
     const TimeOfDay(hour: 8, minute: 0),
   ]; // Default one time
-  List<int> _selectedDays = []; // 1=Mon, ..., 7=Sun. Empty = everyday.
+  final List<int> _selectedDays = []; // 1=Mon, ..., 7=Sun. Empty = everyday.
 
   // ---- Duration ----
   DateTime _startDate = DateTime.now(); // Default to today
@@ -76,8 +76,12 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
 
   // Opens a date picker for the start or end date.
   Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final initialDate = isStart ? _startDate : (_endDate ?? _startDate.add(const Duration(days: 1)));
-    final firstDate = isStart ? DateTime(2000) : _startDate.add(const Duration(days: 1));
+    final initialDate = isStart
+        ? _startDate
+        : (_endDate ?? _startDate.add(const Duration(days: 1)));
+    final firstDate = isStart
+        ? DateTime(2000)
+        : _startDate.add(const Duration(days: 1));
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -159,8 +163,9 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
       );
       final hasDuplicate = existing.any((p) {
         // Only check prescriptions that haven't ended
-        if (p.endDate != null && p.endDate!.isBefore(DateTime.now()))
+        if (p.endDate != null && p.endDate!.isBefore(DateTime.now())) {
           return false;
+        }
         return p.medicationName == _selectedMedicationName;
       });
       if (hasDuplicate) {

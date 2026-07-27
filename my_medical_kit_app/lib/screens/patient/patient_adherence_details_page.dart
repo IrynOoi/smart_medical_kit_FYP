@@ -80,7 +80,9 @@ class PatientAdherenceDetailsPage extends StatelessWidget {
                         data: chartData,
                         labels: chartLabels,
                         lineColor: AppColors.primaryPurple,
-                        selectedIndex: chartData.length > 0 ? chartData.length - 1 : 0, // Highlights the last data point
+                        selectedIndex: chartData.isNotEmpty
+                            ? chartData.length - 1
+                            : 0, // Highlights the last data point
                       ),
                     ),
                   ),

@@ -169,8 +169,9 @@ class _AddPatientPageState extends State<AddPatientPage> {
                 Icons.lock_outline,
                 obscureText: true,
                 validator: (v) {
-                  if (v == null || v.isEmpty)
+                  if (v == null || v.isEmpty) {
                     return 'Please confirm your password';
+                  }
                   if (v != _passwordCtrl.text) return 'Passwords do not match';
                   return null;
                 },
