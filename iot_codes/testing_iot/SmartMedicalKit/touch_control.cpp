@@ -8,6 +8,7 @@ const unsigned long debounceDelay = 500;
 
 // ✅ Pull in external variables and functions from our main file
 extern bool isDoseWaiting; 
+extern bool isOutOfStockBeeping;
 void executeDispense(); 
 
 bool checkTouch();
@@ -20,8 +21,8 @@ void handleTouch() {
   if (checkTouch()) {
     Serial.println("👆 Touch detected!");
     
-    if (isDoseWaiting) {
-       // Only dispense if a dose is actually waiting!
+    if (isDoseWaiting || isOutOfStockBeeping) {
+       // Only dispense or trigger touch logic if a dose is actually waiting or out of stock!
        executeDispense();
     } else {
        Serial.println("No dose waiting right now.");

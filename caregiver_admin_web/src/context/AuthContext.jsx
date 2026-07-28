@@ -10,17 +10,40 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    try {
-      const savedUser = localStorage.getItem('caregiver_admin_user');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
+    const initAuth = async () => {
+      try {
+        const savedUser = localStorage.getItem('caregiver_admin_user');
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          setUser(parsed);
+
+          // Fetch caregiver profile details to get full_name and latest profile photo
+          const cid = parsed.caregiver_id || parsed.id || parsed.user_id;
+          if (cid) {
+            const res = await apiService.getCaregiverProfile(cid);
+            if (res && res.success && res.data) {
+              const merged = { ...parsed, ...res.data };
+              setUser(merged);
+              localStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse saved user credentials', e);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error('Failed to parse saved user credentials', e);
-    } finally {
-      setLoading(false);
-    }
+    };
+    initAuth();
   }, []);
+
+  const updateUser = (newUserData) => {
+    setUser((prev) => {
+      const updated = { ...(prev || {}), ...newUserData };
+      localStorage.setItem('caregiver_admin_user', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const login = async (email, password) => {
     setError(null);
@@ -29,9 +52,24 @@ export const AuthProvider = ({ children }) => {
       const response = await apiService.login(email, password);
       if (response && response.success && (response.data || response.user)) {
         const userData = response.data || response.user;
-        // Verify user role if needed (caregiver or admin)
         setUser(userData);
         localStorage.setItem('caregiver_admin_user', JSON.stringify(userData));
+
+        // Fetch complete caregiver details if available
+        const cid = userData.caregiver_id || userData.id || userData.user_id;
+        if (cid) {
+          try {
+            const profileRes = await apiService.getCaregiverProfile(cid);
+            if (profileRes && profileRes.success && profileRes.data) {
+              const merged = { ...userData, ...profileRes.data };
+              setUser(merged);
+              localStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
+            }
+          } catch (e) {
+            console.error('Error fetching initial caregiver profile:', e);
+          }
+        }
+
         setLoading(false);
         return { success: true, user: userData };
       } else {
@@ -65,6 +103,7 @@ export const AuthProvider = ({ children }) => {
         error,
         login,
         logout,
+        updateUser,
       }}
     >
       {children}
@@ -79,3 +118,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

@@ -210,14 +210,32 @@ def get_caregiver_at_risk_patients(caregiver_id):
         rows = cursor.fetchall()
         cursor.close()
 
-    # Format each row into a consistent structure
+    # Format each row into a consistent structure (only HIGH and MEDIUM risk with score > 0)
     result = []
     for row in rows:
+        # Skip new patients or patients without AI prediction records
+        if row["prediction_score"] is None or row["risk_level"] is None:
+            continue
+
+        score = float(row["prediction_score"])
+        risk_level = str(row["risk_level"]).strip().upper()
+        
+        # Patients without predictions (0% score) or LOW risk are healthy and should NOT be on the watchlist
+        if risk_level not in ["HIGH", "MEDIUM"] or score <= 0:
+            continue
+
+        patient_name = row["full_name"] or f"Patient #{row['patient_id']}"
         result.append({
             "patient_id": row["patient_id"],
-            "name": row["full_name"],
-            "risk_level": row["risk_level"] or "LOW",    # default LOW if no prediction
-            "forget_probability": float(row["prediction_score"]) if row["prediction_score"] is not None else 0.0,
+            "id": row["patient_id"],
+            "name": patient_name,
+            "fullname": patient_name,
+            "patient_name": patient_name,
+            "risk_level": risk_level,
+            "forget_probability": score,
+            "prediction_score": score,
+            "risk_score": score,
+            "prediction": score,
             "medication": row["medication"] or "No medication",
             "temporal_pattern": "Based on latest AI analysis"   # static placeholder
         })

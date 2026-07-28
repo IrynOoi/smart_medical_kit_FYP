@@ -3,6 +3,5 @@ ngrok http --domain=reluctant-scrambled-badge.ngrok-free.dev 5000
 run ngrok 
 run Arduino ide 
 run android studio ide
-
 run web app 
 npm run dev           

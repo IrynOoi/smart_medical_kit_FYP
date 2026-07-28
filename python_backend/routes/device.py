@@ -37,33 +37,70 @@ device_bp = Blueprint('device', __name__)
 
 
 # ---------------------- Control LED on Device ----------------------
+def resolve_target_device_ip(data):
+    """
+    Helper to resolve the target ESP32 IP address.
+    Priority:
+    1. Direct 'device_ip' or 'ip' in request body
+    2. Lookup by 'device_serial' or 'serial'
+    3. Lookup by 'patient_id'
+    4. Fallback to latest active device IP in DB
+    Returns IP string or None.
+    """
+    if not data:
+        return None
+    ip = data.get('device_ip') or data.get('ip')
+    if ip:
+        return ip
+    
+    serial = data.get('device_serial') or data.get('serial')
+    if serial:
+        dev = get_device_by_serial(serial)
+        if dev and dev.get('last_known_ip'):
+            return dev['last_known_ip']
+            
+    patient_id = data.get('patient_id')
+    if patient_id:
+        dev = get_device_ip_for_patient(patient_id)
+        if dev and dev.get('last_known_ip'):
+            return dev['last_known_ip']
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('SELECT last_known_ip FROM iot_device WHERE last_known_ip IS NOT NULL AND last_known_ip != "" ORDER BY last_battery_report DESC LIMIT 1')
+            row = cursor.fetchone()
+            cursor.close()
+            if row:
+                return row['last_known_ip']
+    except Exception:
+        pass
+
+    return None
+
+
+# ---------------------- Control LED on Device ----------------------
 @device_bp.route('/device/control/led', methods=['POST'])
 def control_led():
     """
-    Turn the LED on or off on the patient's associated ESP32 device.
-    Expects JSON: patient_id and action ('on'/'off').
-    Uses the device's last known IP to send the command via HTTP.
+    Turn the LED on or off on the associated ESP32 device.
+    Accepts patient_id, device_ip, or device_serial, and action ('on'/'off' case-insensitive).
     """
-    data = request.get_json()
-    patient_id = data.get('patient_id')
-    action = data.get('action')
+    data = request.get_json(silent=True) or {}
+    action = str(data.get('action', '')).lower()
 
-    # Validate input
-    if not patient_id or action not in ('on', 'off'):
-        return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
+    if action not in ('on', 'off'):
+        return jsonify({"success": False, "message": "action must be 'on' or 'off'"}), 400
 
-    # Get the device IP for this patient (from their assigned device)
-    device = get_device_ip_for_patient(patient_id)
+    device_ip = resolve_target_device_ip(data)
+    if not device_ip:
+        return jsonify({"success": False, "message": "Device IP not known or device offline"}), 404
 
-    if not device or not device['last_known_ip']:
-        return jsonify({"success": False, "message": "Device IP not known"}), 404
-
-    # Forward the command to the ESP32
-    status_code, response = _forward_to_esp(device['last_known_ip'], f"/led/{action}")
+    status_code, response = _forward_to_esp(device_ip, f"/led/{action}")
     if status_code == 200:
-        return jsonify({"success": True, "message": f"LED turned {action}"})
+        return jsonify({"success": True, "message": f"LED turned {action.upper()}"})
     else:
-        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+        return jsonify({"success": False, "message": f"ESP32 ({device_ip}) error: {response}"}), 500
 
 
 # ---------------------- Get Device IP by Device ID ----------------------
@@ -91,84 +128,91 @@ def get_device_ip(device_id):
 @device_bp.route('/device/control/buzzer', methods=['POST'])
 def control_buzzer():
     """
-    Turn the buzzer on or off on the patient's ESP32.
-    Expects JSON: patient_id and action ('on'/'off').
+    Turn the buzzer on or off on the ESP32.
+    Accepts patient_id, device_ip, or device_serial, and action ('on'/'off' case-insensitive).
     """
-    data = request.get_json()
-    patient_id = data.get('patient_id')
-    action = data.get('action')
+    data = request.get_json(silent=True) or {}
+    action = str(data.get('action', '')).lower()
 
-    if not patient_id or action not in ('on', 'off'):
-        return jsonify({"success": False, "message": "patient_id and action (on/off) required"}), 400
+    if action not in ('on', 'off'):
+        return jsonify({"success": False, "message": "action must be 'on' or 'off'"}), 400
 
-    device = get_device_ip_for_patient(patient_id)
+    device_ip = resolve_target_device_ip(data)
+    if not device_ip:
+        return jsonify({"success": False, "message": "Device IP not known or device offline"}), 404
 
-    if not device or not device['last_known_ip']:
-        return jsonify({"success": False, "message": "Device IP not known"}), 404
-
-    status_code, response = _forward_to_esp(device['last_known_ip'], f"/buzzer/{action}")
+    status_code, response = _forward_to_esp(device_ip, f"/buzzer/{action}")
     if status_code == 200:
-        return jsonify({"success": True, "message": f"Buzzer turned {action}"})
+        return jsonify({"success": True, "message": f"Buzzer turned {action.upper()}"})
     else:
-        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+        return jsonify({"success": False, "message": f"ESP32 ({device_ip}) error: {response}"}), 500
 
 
 # ---------------------- Control Display on Device ----------------------
 @device_bp.route('/device/control/display', methods=['POST'])
 def control_display():
     """
-    Send a display command to the ESP32 (e.g., show 'hello', clear screen, or 'sv' for status).
-    Expects JSON: patient_id and command ('hello', 'clear', or 'sv').
+    Send a display command or custom text message to the ESP32.
+    Accepts patient_id, device_ip, or device_serial, and command (e.g. 'hello', 'clear', 'sv', or custom text).
     """
-    data = request.get_json()
-    patient_id = data.get('patient_id')
-    command = data.get('command')
+    data = request.get_json(silent=True) or {}
+    command = str(data.get('command', '')).strip()
 
-    if not patient_id or command not in ('hello', 'clear', 'sv'):
-        return jsonify({"success": False, "message": "patient_id and command (hello/clear/sv) required"}), 400
+    if not command:
+        return jsonify({"success": False, "message": "command text required"}), 400
 
-    device = get_device_ip_for_patient(patient_id)
+    device_ip = resolve_target_device_ip(data)
+    if not device_ip:
+        return jsonify({"success": False, "message": "Device IP not known or device offline"}), 404
 
-    if not device or not device['last_known_ip']:
-        return jsonify({"success": False, "message": "Device IP not known"}), 404
+    cmd_lower = command.lower()
+    if cmd_lower in ('hello', 'clear', 'sv'):
+        endpoint = f"/display/{cmd_lower}"
+    else:
+        from urllib.parse import quote
+        endpoint = f"/display/text?msg={quote(command)}"
 
-    status_code, response = _forward_to_esp(device['last_known_ip'], f"/display/{command}")
+    status_code, response = _forward_to_esp(device_ip, endpoint)
     if status_code == 200:
         return jsonify({"success": True, "message": f"Display command '{command}' sent"})
     else:
-        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+        return jsonify({"success": False, "message": f"ESP32 ({device_ip}) error: {response}"}), 500
 
 
 # ---------------------- Control Stepper Motor on Device ----------------------
 @device_bp.route('/device/control/stepper', methods=['POST'])
 def control_stepper():
     """
-    Control a stepper motor on the ESP32 (for pill dispensing).
-    Expects JSON: patient_id, motor (1-3), action (forward/backward/90/180).
-    The motor number determines which motor slot to control.
+    Control a stepper motor on the ESP32 (for pill dispensing test).
+    Accepts patient_id, device_ip, or device_serial, motor (1-3), and action (forward/backward/360/-360/90/180).
     """
-    data = request.get_json()
-    patient_id = data.get('patient_id')
-    motor = data.get('motor')
-    action = data.get('action')
+    data = request.get_json(silent=True) or {}
+    try:
+        motor = int(data.get('motor', 1))
+    except (ValueError, TypeError):
+        motor = 1
 
-    # Validate inputs
-    if not patient_id or motor not in (1, 2, 3) or action not in ('forward', 'backward', '90', '180'):
-        return jsonify({"success": False, "message": "patient_id, motor(1-3), action(forward/backward/90/180) required"}), 400
+    action = str(data.get('action', '')).lower()
+    if action == '360':
+        action = 'forward'
+    elif action == '-360':
+        action = 'backward'
 
-    device = get_device_ip_for_patient(patient_id)
+    if motor not in (1, 2, 3) or action not in ('forward', 'backward', '90', '180'):
+        return jsonify({"success": False, "message": "motor (1-3) and action (forward/backward/90/180/360) required"}), 400
 
-    if not device or not device['last_known_ip']:
-        return jsonify({"success": False, "message": "Device IP not known"}), 404
+    device_ip = resolve_target_device_ip(data)
+    if not device_ip:
+        return jsonify({"success": False, "message": "Device IP not known or device offline"}), 404
 
-    # Build endpoint: if motor=1, use /stepper/forward; else /stepper2/forward etc.
     motor_prefix = "" if motor == 1 else str(motor)
     endpoint = f"/stepper{motor_prefix}/{action}"
-    status_code, response = _forward_to_esp(device['last_known_ip'], endpoint)
+    status_code, response = _forward_to_esp(device_ip, endpoint)
     if status_code == 200:
         return jsonify({"success": True, "message": f"Motor {motor} {action} command sent"})
     else:
-        return jsonify({"success": False, "message": f"ESP32 error: {response}"}), 500
+        return jsonify({"success": False, "message": f"ESP32 ({device_ip}) error: {response}"}), 500
+
 
 
 # ---------------------- Update Device Serial Number ----------------------
@@ -332,20 +376,43 @@ def get_pending_dose(device_serial):
 
 # ---------------------- Device Reports Successful Dispense ----------------------
 @device_bp.route('/device/dispense_success', methods=['POST'])
+@device_bp.route('/device/dispense_taken', methods=['POST'])
 def dispense_success():
     """
     Called by the device (or the system) after a dose has been successfully dispensed.
     Expects JSON: adlog_id and prescription_id.
-    Updates the adherence log to 'TAKEN' and clears reminders.
+    Updates the adherence log to 'TAKEN', decrements medication pill inventory, and clears reminders.
     """
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         adlog_id = data.get('adlog_id')
         prescription_id = data.get('prescription_id')
 
-        record_dispense_from_device(adlog_id, prescription_id)
-        return jsonify({"success": True, "message": "Dispense recorded and reminders cleared!"})
+        # If prescription_id wasn't passed directly, resolve it from adlog_id
+        if not prescription_id and adlog_id:
+            with get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute('SELECT prescription_id FROM adherence_logs WHERE adlog_id = %s', (adlog_id,))
+                row = cursor.fetchone()
+                if row:
+                    prescription_id = row['prescription_id']
+                cursor.close()
+
+        if adlog_id and prescription_id:
+            record_dispense_from_device(adlog_id, prescription_id)
+            return jsonify({"success": True, "message": "Dispense recorded, pill inventory reduced, and reminders cleared!"})
+        elif adlog_id:
+            # Fallback if no prescription_id linked
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE adherence_logs SET status = 'TAKEN', dispensed_time = CURRENT_TIMESTAMP WHERE adlog_id = %s", (adlog_id,))
+                conn.commit()
+                cursor.close()
+            return jsonify({"success": True, "message": "Adherence log updated to TAKEN."})
+        else:
+            return jsonify({"success": False, "message": "adlog_id is required"}), 400
     except Exception as e:
+        print(f"Dispense record error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

@@ -181,36 +181,37 @@ def get_ai_prediction(patient_id):
 def update_patient(patient_id):
     """
     Update patient profile fields and optionally upload a new profile photo.
-    Expects multipart/form-data with fields: full_name, phone_no, address, email,
-    gender, date_of_birth, medical_notes, and optionally profile_photo file.
+    Supports both JSON request body and multipart/form-data.
     """
     try:
-        # Extract form fields
-        full_name = request.form.get('full_name')
-        phone_no = request.form.get('phone_no')
-        address = request.form.get('address')
-        email = request.form.get('email')
-        gender = request.form.get('gender')
-        date_of_birth = request.form.get('date_of_birth')
-        medical_notes = request.form.get('medical_notes')
+        json_data = request.get_json(silent=True) or {}
+        form_data = request.form or {}
+
+        # Extract fields from JSON or Form with property aliases
+        full_name = json_data.get('full_name') or json_data.get('fullname') or json_data.get('name') or form_data.get('full_name') or form_data.get('fullname')
+        phone_no = json_data.get('phone_no') or json_data.get('phone') or form_data.get('phone_no') or form_data.get('phone')
+        address = json_data.get('address') if 'address' in json_data else form_data.get('address')
+        email = json_data.get('email') if 'email' in json_data else form_data.get('email')
+        gender = json_data.get('gender') if 'gender' in json_data else form_data.get('gender')
+        date_of_birth = json_data.get('date_of_birth') or json_data.get('dob') if 'date_of_birth' in json_data or 'dob' in json_data else form_data.get('date_of_birth')
+        medical_notes = json_data.get('medical_notes') if 'medical_notes' in json_data else form_data.get('medical_notes')
 
         photo_url = None
         # Handle file upload if present
         if 'profile_photo' in request.files:
             file = request.files['profile_photo']
             if file.filename != '':
-                # Secure the filename and prepend patient_id to avoid collisions
                 filename = secure_filename(f"patient_{patient_id}_{file.filename}")
                 filepath = os.path.join('static', 'profiles')
-                os.makedirs(filepath, exist_ok=True)  # Create directory if it doesn't exist
+                os.makedirs(filepath, exist_ok=True)
                 file.save(os.path.join(filepath, filename))
-                photo_url = f"/static/profiles/{filename}"  # URL to access the photo
+                photo_url = f"/static/profiles/{filename}"
 
-        # Call model to update patient profile (all fields are passed, including photo_url)
+        # Call model to update patient profile
         update_patient_profile(patient_id, full_name, phone_no, address, email,
                                gender, date_of_birth, medical_notes, photo_url)
             
-        return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url})
+        return jsonify({"success": True, "message": "Patient profile updated successfully", "photo_url": photo_url})
     except Exception as e:
         print(f"Update patient error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -221,19 +222,17 @@ def update_patient(patient_id):
 def delete_patient(patient_id):
     """
     Delete a patient. By default performs a soft delete (sets is_active = False).
-    If query parameter ?hard=true is provided, performs a permanent hard delete.
-    NOTE: There is a typo in the error status code (5000 instead of 500).
+    If query parameter ?hard=true is provided, performs a permanent hard delete (cascade).
     """
     try:
         hard = request.args.get('hard', 'false').lower() == 'true'
         if hard:
-            hard_delete_patient(patient_id)
+            delete_patient_cascade(patient_id)
             return jsonify({"success": True, "message": "Patient permanently deleted"})
         else:
             soft_delete_patient(patient_id)
             return jsonify({"success": True, "message": "Patient deactivated successfully"})
     except Exception as e:
         print(f"Delete patient error: {e}")
-        # TYPO: status code should be 500, not 5000
-        return jsonify({"success": False, "error": str(e)}), 5000
+        return jsonify({"success": False, "error": str(e)}), 500
 

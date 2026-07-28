@@ -198,10 +198,10 @@ def get_caregiver_chart_data(caregiver_id, period):
     """
     Return aggregated taken/missed counts for a caregiver's patients,
     grouped by period:
-      - 'Day'   : by hour of the current day (0‑23)
-      - 'Month' : by week (last 4 weeks)
-      - 'Week'  : by day of week (1‑7) for the past 7 days (default)
-    Returns a list of rows with keys: (hour|week_ago|dow), taken, missed.
+      - 'Day'   : by 3-hour time block (0-7: 12AM, 3AM, 6AM, 9AM, 12PM, 3PM, 6PM, 9PM)
+      - 'Month' : by 7-day week blocks (past 4 weeks: 1-4)
+      - 'Week'  : by day of week (1-7) for current week (Monday to today)
+    Returns a list of rows with keys: (time_block|week_ago|dow), taken, missed.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
@@ -209,7 +209,8 @@ def get_caregiver_chart_data(caregiver_id, period):
         if period == 'Day':
             cursor.execute('''
                 SELECT 
-                    EXTRACT(HOUR FROM al.scheduled_time) AS hour,
+                    DATE_FORMAT(al.scheduled_time, '%%h:%%i %%p') AS time_label,
+                    al.scheduled_time,
                     COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
                     COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                 FROM adherence_logs al
@@ -219,14 +220,14 @@ def get_caregiver_chart_data(caregiver_id, period):
                 WHERE pcm.caregiver_id = %s 
                   AND DATE(al.scheduled_time) = CURRENT_DATE 
                   AND al.status IN ('TAKEN', 'MISSED')
-                GROUP BY hour
-                ORDER BY hour
+                GROUP BY al.scheduled_time, time_label
+                ORDER BY al.scheduled_time ASC
             ''', (caregiver_id,))
             
         elif period == 'Month':
             cursor.execute('''
                 SELECT 
-                    CEIL(DATEDIFF(CURDATE(), DATE(al.scheduled_time)) / 7) AS week_ago,
+                    FLOOR(DATEDIFF(CURDATE(), DATE(al.scheduled_time)) / 7) + 1 AS week_ago,
                     COUNT(CASE WHEN al.status = 'TAKEN' THEN 1 END) AS taken,
                     COUNT(CASE WHEN al.status = 'MISSED' THEN 1 END) AS missed
                 FROM adherence_logs al
@@ -237,6 +238,7 @@ def get_caregiver_chart_data(caregiver_id, period):
                   AND al.scheduled_time >= CURRENT_DATE - INTERVAL 28 DAY
                   AND al.status IN ('TAKEN', 'MISSED')
                 GROUP BY week_ago
+                HAVING week_ago BETWEEN 1 AND 4
                 ORDER BY week_ago
             ''', (caregiver_id,))
             
@@ -251,7 +253,8 @@ def get_caregiver_chart_data(caregiver_id, period):
                 JOIN patient p ON pc.patient_id = p.patient_id
                 JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
                 WHERE pcm.caregiver_id = %s 
-                  AND al.scheduled_time >= CURRENT_DATE - INTERVAL 7 DAY
+                  AND DATE(al.scheduled_time) >= DATE_SUB(CURRENT_DATE, INTERVAL WEEKDAY(CURRENT_DATE) DAY)
+                  AND DATE(al.scheduled_time) <= CURRENT_DATE
                   AND al.status IN ('TAKEN', 'MISSED')
                 GROUP BY dow
                 ORDER BY dow

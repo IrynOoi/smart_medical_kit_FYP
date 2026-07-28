@@ -372,6 +372,82 @@ def get_caregiver_patients_list(caregiver_id, status='active'):
         cursor.execute(query, (caregiver_id,))
         patients = cursor.fetchall()
         cursor.close()
+
+    # Calculate age and add property aliases for frontend compatibility
+    import datetime as dt
+    today = dt.date.today()
+    for p in patients:
+        p['id'] = p['patient_id']
+        p['fullname'] = p['full_name']
+        p['name'] = p['full_name']
+        p['phone'] = p['phone_no']
+        p['is_my_patient'] = True
+        p['assignment_status'] = 'Assigned to Me'
+
+        # Compute age from date_of_birth if available
+        age_val = None
+        dob = p.get('date_of_birth')
+        if dob:
+            try:
+                if hasattr(dob, 'year'):
+                    age_val = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                else:
+                    dob_obj = dt.datetime.strptime(str(dob)[:10], '%Y-%m-%d').date()
+                    age_val = today.year - dob_obj.year - ((today.month, today.day) < (dob_obj.month, dob_obj.day))
+            except Exception:
+                age_val = None
+        p['age'] = age_val if age_val is not None else 'N/A'
+
+    return patients
+
+
+# ---------------------- Get Available / Unassigned Patients ----------------------
+def get_available_patients(caregiver_id, status_filter='all'):
+    """
+    Return patients who are not assigned to this caregiver.
+    Includes flags indicating whether they are unassigned or assigned to another caregiver.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        query = '''
+            SELECT 
+                u.user_id as patient_id, u.email, u.full_name, u.phone_no, u.address,
+                u.gender, u.date_of_birth, u.is_active, p.medical_notes,
+                (SELECT pcam.caregiver_id FROM patient_caregiver_mapping pcam WHERE pcam.patient_id = u.user_id LIMIT 1) as cg_id
+            FROM users u
+            JOIN patient p ON u.user_id = p.patient_id
+            WHERE u.role = 'patient' AND u.user_id NOT IN (
+                SELECT patient_id FROM patient_caregiver_mapping WHERE caregiver_id = %s
+            )
+            ORDER BY u.full_name
+        '''
+        cursor.execute(query, (caregiver_id,))
+        patients = cursor.fetchall()
+        cursor.close()
+
+    import datetime as dt
+    today = dt.date.today()
+    for p in patients:
+        p['id'] = p['patient_id']
+        p['fullname'] = p['full_name']
+        p['name'] = p['full_name']
+        p['phone'] = p['phone_no']
+        p['is_my_patient'] = False
+        p['assignment_status'] = 'Assigned to other Caregiver' if p['cg_id'] else 'Unassigned'
+
+        age_val = None
+        dob = p.get('date_of_birth')
+        if dob:
+            try:
+                if hasattr(dob, 'year'):
+                    age_val = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                else:
+                    dob_obj = dt.datetime.strptime(str(dob)[:10], '%Y-%m-%d').date()
+                    age_val = today.year - dob_obj.year - ((today.month, today.day) < (dob_obj.month, dob_obj.day))
+            except Exception:
+                age_val = None
+        p['age'] = age_val if age_val is not None else 'N/A'
+
     return patients
 
 
@@ -442,6 +518,21 @@ def soft_delete_caregiver(caregiver_id):
             SET is_active = 0, updated_at = CURRENT_TIMESTAMP 
             WHERE user_id = %s AND role = 'caregiver'
         ''', (caregiver_id,))
+        conn.commit()
+        cursor.close()
+
+
+# ---------------------- Hard Delete Caregiver Account ----------------------
+def delete_caregiver_account(caregiver_id):
+    """
+    Permanently delete a caregiver account and remove mappings.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Unlink patients mapping first
+        cursor.execute('DELETE FROM patient_caregiver_mapping WHERE caregiver_id = %s', (caregiver_id,))
+        # Delete caregiver user record
+        cursor.execute('DELETE FROM users WHERE user_id = %s AND role = %s', (caregiver_id, 'caregiver'))
         conn.commit()
         cursor.close()
 

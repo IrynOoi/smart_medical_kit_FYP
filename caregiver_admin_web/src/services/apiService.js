@@ -1,7 +1,7 @@
 // Central API Service for Caregiver & Admin Portal
 // Communicates with the Flask backend API shared with the Flutter Mobile App
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://reluctant-scrambled-badge.ngrok-free.dev';
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://reluctant-scrambled-badge.ngrok-free.dev';
 
 const getHeaders = (hasBody = true) => {
   const headers = {
@@ -66,6 +66,22 @@ export const apiService = {
     try {
       const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}`, {
         headers: getHeaders(false),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async updateCaregiverProfile(caregiverId, payload) {
+    try {
+      const isFormData = payload instanceof FormData;
+      const headers = isFormData ? { 'ngrok-skip-browser-warning': 'true' } : getHeaders(true);
+
+      const response = await fetch(`${BASE_URL}/update_caregiver/${caregiverId}`, {
+        method: 'PUT',
+        headers: headers,
+        body: isFormData ? payload : JSON.stringify(payload),
       });
       return await response.json();
     } catch (err) {
@@ -200,9 +216,23 @@ export const apiService = {
     }
   },
 
-  async deletePatient(patientId) {
+  async deactivatePatient(patientId) {
     try {
-      const response = await fetch(`${BASE_URL}/patient/${patientId}`, {
+      const response = await fetch(`${BASE_URL}/patient/${patientId}?hard=false`, {
+        method: 'DELETE',
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      console.error('Error deactivating patient:', err);
+      return false;
+    }
+  },
+
+  async deletePatient(patientId, hard = true) {
+    try {
+      const response = await fetch(`${BASE_URL}/patient/${patientId}?hard=${hard ? 'true' : 'false'}`, {
         method: 'DELETE',
         headers: getHeaders(false),
       });
@@ -211,6 +241,49 @@ export const apiService = {
     } catch (err) {
       console.error('Error deleting patient:', err);
       return false;
+    }
+  },
+
+  async unlinkPatient(caregiverId, patientId) {
+    try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/unlink_patient/${patientId}`, {
+        method: 'DELETE',
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      console.error('Error unlinking patient:', err);
+      return false;
+    }
+  },
+
+  async getAvailablePatients(caregiverId) {
+    try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/available_patients`, {
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      if (json.success) return json.data;
+      return [];
+    } catch (err) {
+      console.error('Error fetching available patients:', err);
+      return [];
+    }
+  },
+
+  async linkPatient(caregiverId, patientId) {
+    try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/link_patient`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify({ patient_id: patientId }),
+      });
+      const json = await response.json();
+      return json;
+    } catch (err) {
+      console.error('Error linking patient:', err);
+      return { success: false, error: err.message };
     }
   },
 
@@ -242,6 +315,44 @@ export const apiService = {
     } catch (err) {
       console.error('Error fetching master medications catalog:', err);
       return [];
+    }
+  },
+
+  async addMedicationCatalog(medicationData) {
+    try {
+      const response = await fetch(`${BASE_URL}/medications`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify(medicationData),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async updateMedicationCatalog(medicationId, medicationData) {
+    try {
+      const response = await fetch(`${BASE_URL}/medications/${medicationId}`, {
+        method: 'PUT',
+        headers: getHeaders(true),
+        body: JSON.stringify(medicationData),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async deleteMedicationCatalog(medicationId) {
+    try {
+      const response = await fetch(`${BASE_URL}/medications/${medicationId}`, {
+        method: 'DELETE',
+        headers: getHeaders(false),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   },
 
@@ -335,6 +446,20 @@ export const apiService = {
       if (json.success) return json.data;
       return [];
     } catch (err) {
+      return [];
+    }
+  },
+
+  async getPatientAdherenceLogs(patientId, limit = 10) {
+    try {
+      const response = await fetch(`${BASE_URL}/patient/${patientId}/adherence_logs?limit=${limit}`, {
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      if (json.success) return json.data;
+      return [];
+    } catch (err) {
+      console.error('Error fetching adherence logs:', err);
       return [];
     }
   },
@@ -502,6 +627,34 @@ export const apiService = {
       const json = await response.json();
       return json.success === true;
     } catch (err) {
+      return false;
+    }
+  },
+
+  async deactivateCaregiver(caregiverId) {
+    try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/deactivate`, {
+        method: 'PUT',
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      console.error('Error deactivating caregiver account:', err);
+      return false;
+    }
+  },
+
+  async deleteCaregiverAccount(caregiverId) {
+    try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}`, {
+        method: 'DELETE',
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      console.error('Error deleting caregiver account:', err);
       return false;
     }
   },

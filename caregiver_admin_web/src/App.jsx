@@ -7,14 +7,21 @@ import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import Prescriptions from './pages/Prescriptions';
+import Medications from './pages/Medications';
 import AIAnalytics from './pages/AIAnalytics';
 import Devices from './pages/Devices';
+import Profile from './pages/Profile';
 import './App.css';
 
 function MainApp() {
   const { isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => !prev);
+  };
 
   if (loading) {
     return (
@@ -56,23 +63,24 @@ function MainApp() {
   const tabTitles = {
     dashboard: 'Caregiver Dashboard Overview',
     patients: 'Patient Directory & Enrolment',
-    prescriptions: 'Prescription Schedule & Inventory',
+    prescriptions: 'Patient Prescriptions Schedule',
+    medications: 'Master Medication Catalog',
     ai_analytics: 'Hybrid AI Risk Analytics',
     devices: 'Smart Kit Hardware Devices',
-  };
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
+    profile: 'Caregiver Profile & Account Settings',
   };
 
   return (
-    <div className="app-container">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-      <div className="main-layout">
+    <div className={`app-container ${isCollapsed ? 'sidebar-is-collapsed' : ''}`}>
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        isCollapsed={isCollapsed}
+        toggleSidebar={toggleSidebar}
+      />
+      <div className={`main-layout ${isCollapsed ? 'collapsed' : ''}`}>
         <Header
           title={tabTitles[activeTab] || 'Caregiver Portal'}
-          onRefresh={handleRefresh}
-          isRefreshing={isRefreshing}
         />
         <main className="content-area">
           {activeTab === 'dashboard' && (
@@ -93,6 +101,12 @@ function MainApp() {
               onRefreshComplete={() => setIsRefreshing(false)}
             />
           )}
+          {activeTab === 'medications' && (
+            <Medications
+              isRefreshing={isRefreshing}
+              onRefreshComplete={() => setIsRefreshing(false)}
+            />
+          )}
           {activeTab === 'ai_analytics' && (
             <AIAnalytics
               isRefreshing={isRefreshing}
@@ -105,6 +119,7 @@ function MainApp() {
               onRefreshComplete={() => setIsRefreshing(false)}
             />
           )}
+          {activeTab === 'profile' && <Profile />}
         </main>
       </div>
     </div>

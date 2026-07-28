@@ -117,13 +117,13 @@ def get_chart_data(caregiver_id):
                     taken[4-w] = float(row['taken'])   # reverse order (most recent first)
                     missed[4-w] = float(row['missed'])
         elif period == 'Day':
-            taken = [0.0] * 24
-            missed = [0.0] * 24
+            taken = [0.0] * 8
+            missed = [0.0] * 8
             for row in rows:
-                hour = int(row['hour'])
-                if 0 <= hour < 24:
-                    taken[hour] = float(row['taken'])
-                    missed[hour] = float(row['missed'])
+                tb = int(row['time_block'])
+                if 0 <= tb < 8:
+                    taken[tb] = float(row['taken'])
+                    missed[tb] = float(row['missed'])
         # (No else needed; if unknown period, we return empty arrays)
 
         return jsonify({"success": True, "data": {"taken": taken, "missed": missed}})
@@ -190,35 +190,43 @@ def get_caregiver_profile_route(caregiver_id):
 @caregiver_bp.route('/update_caregiver/<int:caregiver_id>', methods=['PUT'])
 def update_caregiver(caregiver_id):
     """
-    Update caregiver profile fields. Supports multipart/form-data with optional profile_photo file.
+    Update caregiver profile fields. Supports JSON and multipart/form-data with optional profile_photo file.
     Fields: full_name, phone_no, address, email, gender, date_of_birth.
     """
     try:
-        # Extract form fields
-        full_name = request.form.get('full_name')
-        phone_no = request.form.get('phone_no')
-        address = request.form.get('address')
-        email = request.form.get('email')
-        gender = request.form.get('gender')
-        date_of_birth = request.form.get('date_of_birth')
+        if request.is_json or not request.form:
+            data = request.get_json() or {}
+            full_name = data.get('full_name') or data.get('fullname') or data.get('name')
+            phone_no = data.get('phone_no') or data.get('phone')
+            address = data.get('address')
+            email = data.get('email')
+            gender = data.get('gender')
+            date_of_birth = data.get('date_of_birth') or data.get('dob')
+            photo_url = data.get('profile_photo')
+        else:
+            full_name = request.form.get('full_name') or request.form.get('fullname')
+            phone_no = request.form.get('phone_no') or request.form.get('phone')
+            address = request.form.get('address')
+            email = request.form.get('email')
+            gender = request.form.get('gender')
+            date_of_birth = request.form.get('date_of_birth') or request.form.get('dob')
+            photo_url = request.form.get('profile_photo')
 
-        photo_url = None
         # Handle file upload if present
         if 'profile_photo' in request.files:
             file = request.files['profile_photo']
-            if file.filename != '':
-                # Secure filename and prepend caregiver_id
+            if file and file.filename != '':
                 filename = secure_filename(f"caregiver_{caregiver_id}_{file.filename}")
                 filepath = os.path.join('static', 'profiles')
                 os.makedirs(filepath, exist_ok=True)
                 file.save(os.path.join(filepath, filename))
-                # Build absolute URL for the photo
-                photo_url = f"{request.host_url}static/profiles/{filename}"
+                photo_url = f"/static/profiles/{filename}"
 
         # Update profile via model
         update_caregiver_profile(caregiver_id, full_name, phone_no, address, email, gender, date_of_birth, photo_url)
             
-        return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url})
+        updated_profile = get_caregiver_profile(caregiver_id)
+        return jsonify({"success": True, "message": "Profile updated successfully", "photo_url": photo_url, "data": updated_profile})
     except Exception as e:
         print(f"Update caregiver error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -329,15 +337,29 @@ def link_patient_route(caregiver_id):
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/deactivate', methods=['PUT'])
 def deactivate_caregiver(caregiver_id):
     """
-    Soft‑delete a caregiver account (set is_active = False).
+    Soft-delete a caregiver account (set is_active = False).
     """
     try:
-        # pyrefly: ignore [missing-import]
         from models.user_model import soft_delete_caregiver
         soft_delete_caregiver(caregiver_id)
         return jsonify({"success": True, "message": "Caregiver account deactivated"})
     except Exception as e:
         print(f"Deactivate caregiver error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ---------------------- Delete Caregiver Account (Hard Delete) ----------------------
+@caregiver_bp.route('/caregiver/<int:caregiver_id>', methods=['DELETE'])
+def delete_caregiver_route(caregiver_id):
+    """
+    Permanently delete caregiver account.
+    """
+    try:
+        from models.user_model import delete_caregiver_account
+        delete_caregiver_account(caregiver_id)
+        return jsonify({"success": True, "message": "Caregiver account permanently deleted"})
+    except Exception as e:
+        print(f"Delete caregiver error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

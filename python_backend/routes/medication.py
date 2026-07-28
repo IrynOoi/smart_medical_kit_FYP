@@ -181,23 +181,32 @@ def update_prescription(prescription_id):
     At least medication_name, dosage_tablet, and dispense_times are required.
     """
     try:
-        data = request.get_json()
-        medication_name = data.get('medication_name')
+        data = request.get_json() or {}
+        medication_name = data.get('medication_name') or data.get('name') or data.get('medication')
         dosage_tablet = data.get('dosage_tablet')
+        if dosage_tablet is None:
+            dosage_str = str(data.get('dosage', '1'))
+            import re
+            nums = re.findall(r"[-+]?\d*\.\d+|\d+", dosage_str)
+            dosage_tablet = float(nums[0]) if nums else 1.0
+
         dispense_times = data.get('dispense_times')
+        if not dispense_times and data.get('scheduled_time'):
+            dispense_times = [data.get('scheduled_time')]
+
         dispense_days = data.get('dispense_days')
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         current_inventory = data.get('current_inventory')
         refill_threshold = data.get('refill_threshold')
-        device_id = data.get('device_id')
+        device_id = data.get('device_id') or data.get('motor_slot')
 
         # Mandatory fields (can't be null for a valid prescription)
         if not all([medication_name, dosage_tablet, dispense_times]):
-            return jsonify({"success": False, "message": "Missing required fields"}), 400
+            return jsonify({"success": False, "message": "Missing required fields (medication_name, dosage_tablet, dispense_times)"}), 400
 
         # Check if device_id was explicitly provided (to distinguish from None)
-        check_none = 'device_id' in data
+        check_none = 'device_id' in data or 'motor_slot' in data
         success, msg = update_prescription_config(
             prescription_id, medication_name, dosage_tablet, dispense_times,
             start_date, end_date, current_inventory, refill_threshold, device_id, check_none, dispense_days

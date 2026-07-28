@@ -642,25 +642,57 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   // Direct ESP32 test methods (bypass backend)
   // ------------------------------------------------------------
   Future<void> _sendDirectCommand(String endpoint, String successMsg) async {
-    final url = Uri.parse('http://$_testEspIp$endpoint');
-    try {
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ $successMsg'),
-              backgroundColor: Colors.green,
-            ),
-          );
+    // Attempt direct LAN HTTP request with short 3-second timeout
+    if (_testEspIp.isNotEmpty) {
+      final url = Uri.parse('http://$_testEspIp$endpoint');
+      try {
+        final response = await http.get(url).timeout(const Duration(seconds: 3));
+        if (response.statusCode == 200) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ $successMsg (Direct LAN)'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+          return;
         }
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
+      } catch (e) {
+        debugPrint('Direct ESP32 IP connection failed/timed out: $e. Falling back to server proxy...');
       }
-    } catch (e) {
+    }
+
+    // Fallback: If direct LAN connection fails (e.g. phone is on 4G or different subnet),
+    // forward command through the server backend proxy!
+    if (_selectedControlPatientId != null) {
+      bool ok = false;
+      if (endpoint.contains('/led/')) {
+        ok = await DeviceService().controlLed(_selectedControlPatientId!, endpoint.contains('/on'));
+      } else if (endpoint.contains('/buzzer/')) {
+        ok = await DeviceService().controlBuzzer(_selectedControlPatientId!, endpoint.contains('/on'));
+      } else if (endpoint.contains('/display/')) {
+        final cmd = endpoint.replaceAll('/display/', '');
+        ok = await DeviceService().controlDisplay(_selectedControlPatientId!, cmd);
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(ok ? '✅ $successMsg (via Server Proxy)' : '❌ Failed: Hardware unreachable'),
+            backgroundColor: ok ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Cannot reach ESP32 at $_testEspIp and no patient selected.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

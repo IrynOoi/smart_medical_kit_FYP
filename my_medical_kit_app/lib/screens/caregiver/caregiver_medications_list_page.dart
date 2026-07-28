@@ -3,9 +3,11 @@
 // to add new medications, edit existing ones, or delete medications (if not in use). Each medication
 // entry shows inventory, device serial, and motor slot. Uses MedicationService for CRUD operations.
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 import 'package:my_medical_kit_app/services/api/medication_service.dart';
 
 class CaregiverMedicationsListPage extends StatefulWidget {
@@ -87,146 +89,171 @@ class CaregiverMedicationsListPageState
   // ------------------------------------------------------------------
   Future<void> _showAddMedicationDialog() async {
     final formKey = GlobalKey<FormState>();
-    // Controllers for each field
     final nameController = TextEditingController();
     final inventoryController = TextEditingController(text: '0');
     final thresholdController = TextEditingController(text: '10');
-    final deviceSerialController =
-        TextEditingController(); // Device serial (e.g., DISP-2)
     final motorSlotController = TextEditingController();
+
+    // Fetch registered devices for the dropdown
+    List<String> deviceSerials = [];
+    try {
+      final res = await ApiClient.get('/devices');
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body);
+        if (json['success'] == true && json['data'] != null) {
+          final list = List<Map<String, dynamic>>.from(json['data']);
+          deviceSerials = list.map((d) => d['device_serial'].toString()).toList();
+        }
+      }
+    } catch (e) {
+      print('Error fetching devices for dropdown: $e');
+    }
+
+    String? selectedDeviceSerial = deviceSerials.isNotEmpty ? deviceSerials.first : null;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Add New Medication',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.primaryPurple,
-          ),
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Medication Name
-                TextFormField(
-                  controller: nameController,
-                  decoration: _inputDecoration(
-                    'Medication Name *',
-                    Icons.medical_services,
-                  ),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Medication name is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                // Initial Inventory
-                TextFormField(
-                  controller: inventoryController,
-                  decoration: _inputDecoration(
-                    'Initial Inventory *',
-                    Icons.inventory,
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Inventory is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                // Refill Threshold
-                TextFormField(
-                  controller: thresholdController,
-                  decoration: _inputDecoration(
-                    'Refill Threshold *',
-                    Icons.warning_amber,
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Threshold is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                // Device Serial (required to assign to a device)
-                TextFormField(
-                  controller: deviceSerialController,
-                  decoration: _inputDecoration(
-                    'Device Serial (e.g., DISP-2) *',
-                    Icons.memory,
-                  ),
-                  keyboardType: TextInputType.text,
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Device Serial is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                // Motor Slot (1-3)
-                TextFormField(
-                  controller: motorSlotController,
-                  decoration: _inputDecoration(
-                    'Motor Slot (1-3) *',
-                    Icons.settings_applications,
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Motor Slot is required';
-                    }
-                    final slot = int.tryParse(v);
-                    if (slot == null || slot < 1 || slot > 3) {
-                      return 'Must be between 1 and 3';
-                    }
-                    return null;
-                  },
-                ),
-              ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Add New Medication',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryPurple,
             ),
           ),
-        ),
-        actionsPadding: const EdgeInsets.symmetric(
-          horizontal: 24,
-          vertical: 16,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context, true);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryPurple,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Medication Name
+                  TextFormField(
+                    controller: nameController,
+                    decoration: _inputDecoration(
+                      'Medication Name *',
+                      Icons.medical_services,
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Medication name is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // Initial Inventory
+                  TextFormField(
+                    controller: inventoryController,
+                    decoration: _inputDecoration(
+                      'Initial Inventory *',
+                      Icons.inventory,
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Inventory is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // Refill Threshold
+                  TextFormField(
+                    controller: thresholdController,
+                    decoration: _inputDecoration(
+                      'Refill Threshold *',
+                      Icons.warning_amber,
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Threshold is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // Device Serial Dropdown Menu
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedDeviceSerial,
+                    decoration: _inputDecoration(
+                      'Device Serial *',
+                      Icons.memory,
+                    ),
+                    items: deviceSerials.map((serial) {
+                      return DropdownMenuItem<String>(
+                        value: serial,
+                        child: Text(serial),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedDeviceSerial = val;
+                      });
+                    },
+                    validator: (v) => v == null || v.isEmpty
+                        ? 'Device serial selection is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // Motor Slot (1-3)
+                  TextFormField(
+                    controller: motorSlotController,
+                    decoration: _inputDecoration(
+                      'Motor Slot (1-3) *',
+                      Icons.settings_applications,
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Motor Slot is required';
+                      }
+                      final slot = int.tryParse(v);
+                      if (slot == null || slot < 1 || slot > 3) {
+                        return 'Must be between 1 and 3';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text('Add'),
           ),
-        ],
+          actionsPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 16,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(context, true);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
       ),
     );
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
 
-      // Build payload: includes device_serial (not device_id) – the backend resolves it.
       final payload = {
         'medication_name': nameController.text.trim(),
         'current_inventory': int.parse(inventoryController.text.trim()),
         'refill_threshold': int.parse(thresholdController.text.trim()),
-        'device_serial': deviceSerialController.text.trim(),
+        'device_serial': selectedDeviceSerial,
         'motor_slot': int.parse(motorSlotController.text.trim()),
       };
 
@@ -256,7 +283,6 @@ class CaregiverMedicationsListPageState
   // ------------------------------------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> medication) async {
     final formKey = GlobalKey<FormState>();
-    // Pre-populate controllers with existing data
     final nameController = TextEditingController(
       text: medication['medication_name'],
     );
@@ -266,114 +292,133 @@ class CaregiverMedicationsListPageState
     final thresholdController = TextEditingController(
       text: (medication['refill_threshold'] ?? 5).toString(),
     );
-    final deviceSerialController = TextEditingController(
-      text: medication['device_serial']?.toString() ?? '',
-    );
     final motorSlotController = TextEditingController(
       text: medication['motor_slot']?.toString() ?? '',
     );
 
+    // Fetch registered devices for the dropdown
+    List<String> deviceSerials = [];
+    try {
+      final res = await ApiClient.get('/devices');
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body);
+        if (json['success'] == true && json['data'] != null) {
+          final list = List<Map<String, dynamic>>.from(json['data']);
+          deviceSerials = list.map((d) => d['device_serial'].toString()).toList();
+        }
+      }
+    } catch (e) {
+      print('Error fetching devices for edit dropdown: $e');
+    }
+
+    String? selectedDeviceSerial = medication['device_serial']?.toString();
+    if (selectedDeviceSerial != null && selectedDeviceSerial.isNotEmpty && !deviceSerials.contains(selectedDeviceSerial)) {
+      deviceSerials.add(selectedDeviceSerial);
+    }
+    if ((selectedDeviceSerial == null || selectedDeviceSerial.isEmpty) && deviceSerials.isNotEmpty) {
+      selectedDeviceSerial = deviceSerials.first;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Edit Medication',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.primaryPurple,
-          ),
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1. Name Field
-                TextFormField(
-                  controller: nameController,
-                  decoration: _inputDecoration(
-                    'Medication Name *',
-                    Icons.medical_services,
-                  ),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Name is required' : null,
-                ),
-                const SizedBox(height: 16),
-                // 2. Inventory Field
-                // TextFormField(
-                //   controller: inventoryController,
-                //   decoration: _inputDecoration(
-                //     'Current Inventory *',
-                //     Icons.inventory,
-                //   ),
-                //   keyboardType: TextInputType.number,
-                //   validator: (v) => v == null || int.tryParse(v) == null
-                //       ? 'Enter a valid number'
-                //       : null,
-                // ),
-                const SizedBox(height: 16),
-                // 3. Threshold Field
-                TextFormField(
-                  controller: thresholdController,
-                  decoration: _inputDecoration(
-                    'Refill Threshold *',
-                    Icons.warning_amber,
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (v) => v == null || int.tryParse(v) == null
-                      ? 'Enter a valid number'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                // 4. Device Serial Field
-                TextFormField(
-                  controller: deviceSerialController,
-                  decoration: _inputDecoration(
-                    'Device Serial (e.g., DISP-2) *',
-                    Icons.memory,
-                  ),
-                  keyboardType: TextInputType.text,
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Device Serial is required'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                // 5. Motor Slot Field
-                TextFormField(
-                  controller: motorSlotController,
-                  decoration: _inputDecoration(
-                    'Motor Slot (1-3) *',
-                    Icons.settings_applications,
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (v) {
-                    final val = int.tryParse(v ?? '');
-                    if (val == null || val < 1 || val > 3) {
-                      return 'Enter 1, 2, or 3';
-                    }
-                    return null;
-                  },
-                ),
-              ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Edit Medication',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryPurple,
             ),
           ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 1. Name Field
+                  TextFormField(
+                    controller: nameController,
+                    decoration: _inputDecoration(
+                      'Medication Name *',
+                      Icons.medical_services,
+                    ),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Name is required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // 2. Threshold Field
+                  TextFormField(
+                    controller: thresholdController,
+                    decoration: _inputDecoration(
+                      'Refill Threshold *',
+                      Icons.warning_amber,
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => v == null || int.tryParse(v) == null
+                        ? 'Enter a valid number'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // 3. Device Serial Dropdown Field
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedDeviceSerial,
+                    decoration: _inputDecoration(
+                      'Device Serial *',
+                      Icons.memory,
+                    ),
+                    items: deviceSerials.map((serial) {
+                      return DropdownMenuItem<String>(
+                        value: serial,
+                        child: Text(serial),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedDeviceSerial = val;
+                      });
+                    },
+                    validator: (v) => v == null || v.isEmpty
+                        ? 'Device serial selection is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  // 4. Motor Slot Field
+                  TextFormField(
+                    controller: motorSlotController,
+                    decoration: _inputDecoration(
+                      'Motor Slot (1-3) *',
+                      Icons.settings_applications,
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final val = int.tryParse(v ?? '');
+                      if (val == null || val < 1 || val > 3) {
+                        return 'Enter 1, 2, or 3';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(context, true);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context, true);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
 
@@ -385,7 +430,7 @@ class CaregiverMedicationsListPageState
               'medication_name': nameController.text.trim(),
               'current_inventory': int.parse(inventoryController.text),
               'refill_threshold': int.parse(thresholdController.text),
-              'device_serial': deviceSerialController.text.trim(),
+              'device_serial': selectedDeviceSerial,
               'motor_slot': int.parse(motorSlotController.text),
             });
 

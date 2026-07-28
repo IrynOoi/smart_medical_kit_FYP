@@ -8,6 +8,7 @@
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/api_client.dart';
 
@@ -66,20 +67,6 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   // ------------------------------------------------------------------
   Future<void> _showAddDeviceDialog() async {
     final serialController = TextEditingController();
-
-    // Auto-prepend 'DISP-' for pure numbers (e.g., user types "3", it becomes "DISP-3")
-    serialController.addListener(() {
-      final text = serialController.text;
-      if (text.isNotEmpty && RegExp(r'^\d+$').hasMatch(text)) {
-        if (!text.startsWith('DISP-')) {
-          serialController.value = TextEditingValue(
-            text: 'DISP-$text',
-            selection: TextSelection.collapsed(offset: ('DISP-$text').length),
-          );
-        }
-      }
-    });
-
     final formKey = GlobalKey<FormState>();
 
     final confirmed = await showDialog<bool>(
@@ -98,14 +85,16 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Register a new hardware kit. You can assign it to a patient later in the Medications or Prescription pages.',
+                'Enter the numeric device serial ID (e.g., enter 1 for DISP-1).',
                 style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: serialController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
-                  labelText: 'Device Serial (e.g. DISP-1)',
+                  labelText: 'Device Serial Number (e.g. 1)',
                   prefixIcon: const Icon(
                     Icons.router,
                     color: AppColors.primaryPurple,
@@ -115,7 +104,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                   ),
                 ),
                 validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Serial is required' : null,
+                    v == null || v.trim().isEmpty ? 'Serial number is required' : null,
               ),
             ],
           ),
@@ -143,10 +132,13 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
+        final numInput = serialController.text.trim();
+        final fullSerial = numInput.startsWith('DISP-') ? numInput : 'DISP-$numInput';
+
         // Send a POST request to register the device with an initial battery level of 100.
         final response = await ApiClient.post(
           '/iot_device',
-          body: {'device_serial': serialController.text.trim(), 'battery': 100},
+          body: {'device_serial': fullSerial, 'battery': 100},
         );
 
         final json = jsonDecode(response.body);
@@ -171,7 +163,9 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   // Edit device serial ONLY (no other fields editable here)
   // ------------------------------------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> device) async {
-    final controller = TextEditingController(text: device['device_serial']);
+    final existingSerial = device['device_serial']?.toString() ?? '';
+    final digitsOnly = existingSerial.replaceAll(RegExp(r'[^0-9]'), '');
+    final controller = TextEditingController(text: digitsOnly.isNotEmpty ? digitsOnly : existingSerial);
     final formKey = GlobalKey<FormState>();
 
     final confirmed = await showDialog<bool>(
@@ -182,8 +176,10 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
           key: formKey,
           child: TextFormField(
             controller: controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: InputDecoration(
-              labelText: 'Device Serial',
+              labelText: 'Device Serial Number (e.g. 1)',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -211,10 +207,13 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     if (confirmed == true && formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
+        final numInput = controller.text.trim();
+        final fullSerial = numInput.startsWith('DISP-') ? numInput : 'DISP-$numInput';
+
         // Send a PUT request to update only the device serial.
         final response = await ApiClient.put(
           '/iot_device/${device['device_id']}',
-          body: {'device_serial': controller.text.trim()},
+          body: {'device_serial': fullSerial},
         );
 
         final json = jsonDecode(response.body);
