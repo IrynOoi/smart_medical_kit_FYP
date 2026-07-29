@@ -78,6 +78,20 @@ def register():
         caregiver_id = data.get('caregiver_id') if role != 'caregiver' else None
         medical_notes = data.get('medical_notes') if role != 'caregiver' else None
 
+        # For caregiver registration, enforce 18+ years age restriction
+        if role == 'caregiver':
+            if not dob:
+                return jsonify({"success": False, "message": "Date of birth is required for caregiver registration"}), 400
+            try:
+                from datetime import datetime, date
+                dob_obj = datetime.strptime(str(dob)[:10], '%Y-%m-%d').date()
+                today = date.today()
+                age = today.year - dob_obj.year - ((today.month, today.day) < (dob_obj.month, dob_obj.day))
+                if age < 18:
+                    return jsonify({"success": False, "message": "Caregiver must be at least 18 years old"}), 400
+            except ValueError:
+                return jsonify({"success": False, "message": "Invalid date of birth format"}), 400
+
         # Check if caregiver patient limit is reached
         if caregiver_id:
             count = get_caregiver_patient_count(caregiver_id)

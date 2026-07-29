@@ -111,6 +111,7 @@ def get_caregiver_notifications(caregiver_id, limit=50):
     """
     Fetch the most recent notifications for a caregiver.
     First syncs stock notifications to ensure they are up-to-date.
+    Deduplicates repeated/historical alerts (e.g. Out of stock / Low stock) so each unique alert appears only once.
     Returns a list of dicts.
     """
     sync_caregiver_stock_notifications(caregiver_id)   # Refresh stock alerts before reading
@@ -129,10 +130,22 @@ def get_caregiver_notifications(caregiver_id, limit=50):
             WHERE recipient_id = %s
             ORDER BY created_at DESC
             LIMIT %s
-        ''', (caregiver_id, limit))
-        notifications = cursor.fetchall()
+        ''', (caregiver_id, limit * 2))
+        raw_notifications = cursor.fetchall()
         cursor.close()
-    return notifications
+
+    # Deduplicate: keep only the newest single alert per unique (title, message)
+    seen = set()
+    deduped = []
+    for n in raw_notifications:
+        # Create key based on title and message (case insensitive)
+        key = (n.get('title', '').strip().lower(), n.get('message', '').strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(n)
+
+    return deduped[:limit]
 
 
 # ---------------------- Helper: Aggregate Stock Alerts by Medication ----------------------

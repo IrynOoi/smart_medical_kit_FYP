@@ -3,6 +3,46 @@
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://reluctant-scrambled-badge.ngrok-free.dev';
 
+export const extractProfileFilename = (photoPath) => {
+  if (!photoPath || typeof photoPath !== 'string') return null;
+  if (photoPath.includes('/static/profiles/')) {
+    return photoPath.split('/static/profiles/')[1];
+  }
+  return photoPath.split('/').pop();
+};
+
+export const getPhotoUrl = (photoPath) => {
+  if (!photoPath) return null;
+  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) return photoPath;
+  let cleanPath = photoPath;
+  if (cleanPath.includes('/static/profiles/')) {
+    const filename = cleanPath.split('/static/profiles/')[1];
+    cleanPath = `/static/profiles/${filename}`;
+  }
+  const base = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const path = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+  return `${base}${path}`;
+};
+
+export const handleImageError = (e, photoPath) => {
+  const filename = extractProfileFilename(photoPath);
+  if (filename && !e.target.dataset.triedLocal5000) {
+    e.target.dataset.triedLocal5000 = 'true';
+    e.target.src = `http://localhost:5000/static/profiles/${filename}`;
+    return;
+  }
+  if (filename && !e.target.dataset.triedLocal127) {
+    e.target.dataset.triedLocal127 = 'true';
+    e.target.src = `http://127.0.0.1:5000/static/profiles/${filename}`;
+    return;
+  }
+  // Hide img element and show fallback sibling avatar circle
+  e.target.style.display = 'none';
+  if (e.target.nextSibling) {
+    e.target.nextSibling.style.display = 'flex';
+  }
+};
+
 const getHeaders = (hasBody = true) => {
   const headers = {
     'ngrok-skip-browser-warning': 'true',
@@ -396,12 +436,12 @@ export const apiService = {
     }
   },
 
-  async restockMedication(prescriptionId, quantity) {
+  async restockMedication(prescriptionId, quantity, setInventory = true) {
     try {
       const response = await fetch(`${BASE_URL}/restock_medication`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ prescription_id: prescriptionId, quantity }),
+        body: JSON.stringify({ prescription_id: prescriptionId, quantity, set_inventory: setInventory }),
       });
       const json = await response.json();
       return json.success === true;
@@ -536,10 +576,11 @@ export const apiService = {
 
   async controlLed(patientId, turnOn) {
     try {
+      const isActionOn = (turnOn === true || turnOn === 'ON' || turnOn === 'on');
       const response = await fetch(`${BASE_URL}/device/control/led`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ patient_id: patientId, action: turnOn ? 'on' : 'off' }),
+        body: JSON.stringify({ patient_id: patientId, action: isActionOn ? 'on' : 'off' }),
       });
       const json = await response.json();
       return json.success === true;
@@ -550,10 +591,11 @@ export const apiService = {
 
   async controlBuzzer(patientId, turnOn) {
     try {
+      const isActionOn = (turnOn === true || turnOn === 'ON' || turnOn === 'on');
       const response = await fetch(`${BASE_URL}/device/control/buzzer`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ patient_id: patientId, action: turnOn ? 'on' : 'off' }),
+        body: JSON.stringify({ patient_id: patientId, action: isActionOn ? 'on' : 'off' }),
       });
       const json = await response.json();
       return json.success === true;
@@ -655,6 +697,48 @@ export const apiService = {
       return json.success === true;
     } catch (err) {
       console.error('Error deleting caregiver account:', err);
+      return false;
+    }
+  },
+
+  // 🔔 NOTIFICATIONS
+  async getCaregiverNotifications(caregiverId) {
+    try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/notifications`, {
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      if (json.success) return json.data;
+      return [];
+    } catch (err) {
+      console.error('Error fetching caregiver notifications:', err);
+      return [];
+    }
+  },
+
+  async markNotificationRead(notifId) {
+    try {
+      const response = await fetch(`${BASE_URL}/notification/${notifId}/read`, {
+        method: 'PUT',
+        headers: getHeaders(true),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+      return false;
+    }
+  },
+
+  async markAllCaregiverNotificationsRead(caregiverId) {
+    try {
+      const notifs = await this.getCaregiverNotifications(caregiverId);
+      if (Array.isArray(notifs)) {
+        const unread = notifs.filter(n => !n.is_read && n.id);
+        await Promise.all(unread.map(n => this.markNotificationRead(n.id)));
+      }
+      return true;
+    } catch (err) {
       return false;
     }
   },

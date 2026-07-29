@@ -23,7 +23,7 @@ import {
   Link,
   Unlink,
 } from 'lucide-react';
-import { apiService } from '../services/apiService';
+import { apiService, BASE_URL, getPhotoUrl, handleImageError } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
 // Helper to compute age from date string or object
@@ -88,8 +88,8 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
   const [formLoading, setFormLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  const fetchAllPatientData = async () => {
-    setLoading(true);
+  const fetchAllPatientData = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [myPats, availPats] = await Promise.all([
         apiService.getCaregiverPatients(caregiverId, 'all'),
@@ -104,17 +104,21 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     } catch (err) {
       console.error('Error fetching patients:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
       if (onRefreshComplete) onRefreshComplete();
     }
   };
 
   useEffect(() => {
-    fetchAllPatientData();
+    fetchAllPatientData(true);
+    const interval = setInterval(() => {
+      fetchAllPatientData(false); // Silent background auto-reload without spinner
+    }, 15000);
+    return () => clearInterval(interval);
   }, [caregiverId]);
 
   useEffect(() => {
-    if (isRefreshing) fetchAllPatientData();
+    if (isRefreshing) fetchAllPatientData(true);
   }, [isRefreshing]);
 
   // View patient details
@@ -481,6 +485,23 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
 
                   {/* Patient Name & Avatar */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                    {getPhotoUrl(patient.profile_photo) ? (
+                      <img
+                        src={getPhotoUrl(patient.profile_photo)}
+                        alt={name}
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          border: isMyPatient ? '2px solid #6A4C93' : '2px solid #3B82F6',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        }}
+                        onError={(e) => handleImageError(e, patient.profile_photo)}
+                      />
+                    ) : null}
+
                     <div style={{
                       width: '48px',
                       height: '48px',
@@ -489,7 +510,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                         ? 'linear-gradient(135deg, #3B1E54 0%, #6A4C93 100%)'
                         : 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)',
                       color: 'white',
-                      display: 'flex',
+                      display: getPhotoUrl(patient.profile_photo) ? 'none' : 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontWeight: '700',

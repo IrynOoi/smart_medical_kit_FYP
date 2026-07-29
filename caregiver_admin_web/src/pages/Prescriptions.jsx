@@ -108,8 +108,8 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
   const [formLoading, setFormLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [patientsData, catalogData] = await Promise.all([
         apiService.getCaregiverPatients(caregiverId),
@@ -128,37 +128,45 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     } catch (err) {
       console.error('Error loading prescriptions data:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
-  const fetchPrescriptions = async (pid) => {
+  const fetchPrescriptions = async (pid, showSpinner = true) => {
     if (!pid) return;
-    setLoadingPrescriptions(true);
+    if (showSpinner) setLoadingPrescriptions(true);
     try {
       const list = await apiService.getPatientMedications(pid);
       setPrescriptions(list || []);
     } catch (err) {
       setPrescriptions([]);
     } finally {
-      setLoadingPrescriptions(false);
+      if (showSpinner) setLoadingPrescriptions(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, [caregiverId]);
 
   useEffect(() => {
     if (selectedPatientId) {
-      fetchPrescriptions(selectedPatientId);
+      fetchPrescriptions(selectedPatientId, true);
     }
   }, [selectedPatientId]);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      loadData(false);
+      if (selectedPatientId) fetchPrescriptions(selectedPatientId, false);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [caregiverId, selectedPatientId]);
+
+  useEffect(() => {
     if (isRefreshing) {
-      loadData();
-      if (selectedPatientId) fetchPrescriptions(selectedPatientId);
+      loadData(true);
+      if (selectedPatientId) fetchPrescriptions(selectedPatientId, true);
       if (onRefreshComplete) onRefreshComplete();
     }
   }, [isRefreshing]);

@@ -46,8 +46,8 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
   // Prediction Complete Result Modal State
   const [predictionResult, setPredictionResult] = useState(null);
 
-  const fetchAIOverview = async () => {
-    setLoading(true);
+  const fetchAIOverview = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [overviewData, patientsData, riskData] = await Promise.all([
         apiService.getAnalyticsOverview(caregiverId),
@@ -79,17 +79,23 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     } catch (err) {
       console.error('Error fetching AI analytics:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
       if (onRefreshComplete) onRefreshComplete();
     }
   };
 
   useEffect(() => {
-    if (caregiverId) fetchAIOverview();
+    if (caregiverId) {
+      fetchAIOverview(true);
+      const interval = setInterval(() => {
+        fetchAIOverview(false); // Silent background auto-reload without spinner
+      }, 15000);
+      return () => clearInterval(interval);
+    }
   }, [caregiverId]);
 
   useEffect(() => {
-    if (isRefreshing) fetchAIOverview();
+    if (isRefreshing) fetchAIOverview(true);
   }, [isRefreshing]);
 
   // Run Batch AI Model
@@ -279,7 +285,6 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
             <div>
               <div className="metric-title">Total Patients Analyzed</div>
               <div className="metric-value">{overview.total_analyzed || patients.length || 0}</div>
-              <span className="badge badge-info">100% Coverage</span>
             </div>
             <div className="metric-icon-box" style={{ background: '#DBEAFE', color: '#3B82F6' }}>
               <Activity size={26} />

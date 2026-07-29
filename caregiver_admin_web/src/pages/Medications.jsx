@@ -45,8 +45,8 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
   const [formLoading, setFormLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  const fetchMedications = async () => {
-    setLoading(true);
+  const fetchMedications = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [medsData, devData] = await Promise.all([
         apiService.getMedicationsCatalog(),
@@ -60,17 +60,21 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     } catch (err) {
       console.error('Error fetching medication catalog:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
       if (onRefreshComplete) onRefreshComplete();
     }
   };
 
   useEffect(() => {
-    fetchMedications();
+    fetchMedications(true);
+    const interval = setInterval(() => {
+      fetchMedications(false); // Silent background auto-reload without spinner
+    }, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (isRefreshing) fetchMedications();
+    if (isRefreshing) fetchMedications(true);
   }, [isRefreshing]);
 
   // Open Add Modal

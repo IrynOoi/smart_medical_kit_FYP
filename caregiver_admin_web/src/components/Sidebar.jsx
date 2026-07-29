@@ -1,5 +1,5 @@
 /* Sidebar.jsx */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -13,11 +13,34 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { BASE_URL } from '../services/apiService';
+import { apiService, BASE_URL, getPhotoUrl, handleImageError } from '../services/apiService';
 import logoSvg from '../assets/medical-smart-kit-logo (1).svg';
 
 export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSidebar }) {
-  const { user, logout } = useAuth();
+  const { user, caregiverId, logout } = useAuth();
+  const [profilePhoto, setProfilePhoto] = useState(user?.profile_photo || null);
+
+  useEffect(() => {
+    if (user?.profile_photo) {
+      setProfilePhoto(user.profile_photo);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (caregiverId) {
+        try {
+          const res = await apiService.getCaregiverProfile(caregiverId);
+          if (res && res.success && res.data && res.data.profile_photo) {
+            setProfilePhoto(res.data.profile_photo);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+    fetchProfile();
+  }, [caregiverId]);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,21 +57,8 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
   const caregiverRole = user?.role || 'Caregiver';
   const avatarInitial = caregiverName ? caregiverName.charAt(0).toUpperCase() : 'C';
 
-  // Helper to format profile photo URL if available
-  const getPhotoUrl = (photoPath) => {
-    if (!photoPath) return null;
-    if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) return photoPath;
-    let cleanPath = photoPath;
-    if (cleanPath.includes('/static/profiles/')) {
-      const filename = cleanPath.split('/static/profiles/')[1];
-      cleanPath = `/static/profiles/${filename}`;
-    }
-    const base = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
-    const path = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
-    return `${base}${path}`;
-  };
-
-  const photoUrl = getPhotoUrl(user?.profile_photo);
+  const rawPhotoPath = profilePhoto || user?.profile_photo;
+  const photoUrl = getPhotoUrl(rawPhotoPath);
 
   return (
     <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
@@ -121,10 +131,7 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
                 border: '2px solid rgba(255, 255, 255, 0.4)',
                 flexShrink: 0,
               }}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-              }}
+              onError={(e) => handleImageError(e, rawPhotoPath)}
             />
           ) : null}
           <div 

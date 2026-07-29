@@ -70,13 +70,16 @@ def get_all_recent_logs(caregiver_id, limit):
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
             SELECT al.adlog_id, u.full_name AS patient_name,
-                   m.medication_name, al.scheduled_time, al.dispensed_time, al.recorded_at, al.status
+                   m.medication_name, al.scheduled_time, al.dispensed_time, al.recorded_at, al.status,
+                   COALESCE(d.device_serial, CONCAT('DISP-', COALESCE(al.device_id, m.device_id, 1))) AS device_serial,
+                   COALESCE(al.device_id, m.device_id) AS device_id
             FROM adherence_logs al
             JOIN prescription_config pc ON al.prescription_id = pc.prescription_id
             JOIN medications m ON pc.medication_id = m.medication_id
             JOIN patient p ON pc.patient_id = p.patient_id
             JOIN users u ON p.patient_id = u.user_id
             JOIN patient_caregiver_mapping pcm ON p.patient_id = pcm.patient_id
+            LEFT JOIN iot_device d ON (al.device_id = d.device_id OR m.device_id = d.device_id)
             WHERE pcm.caregiver_id = %s
             ORDER BY al.scheduled_time DESC
             LIMIT %s

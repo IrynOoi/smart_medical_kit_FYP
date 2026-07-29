@@ -6,6 +6,7 @@
 #include <WebServer.h>
 
 extern WebServer server; // Reference the server from your main file
+extern bool isOutOfStockBeeping;
 
 void setupBuzzer();
 void handleBuzzerOn();

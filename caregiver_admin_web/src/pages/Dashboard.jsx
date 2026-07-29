@@ -59,8 +59,8 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
   const [atRiskPatients, setAtRiskPatients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
+  const fetchDashboardData = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [overviewRes, chartRes, logsRes, riskRes] = await Promise.all([
         apiService.getCaregiverOverview(caregiverId),
@@ -76,18 +76,22 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     } catch (err) {
       console.error('Error loading dashboard data:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
       if (onRefreshComplete) onRefreshComplete();
     }
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(true);
+    const interval = setInterval(() => {
+      fetchDashboardData(false); // Silent background auto-reload without spinner
+    }, 10000);
+    return () => clearInterval(interval);
   }, [caregiverId, period]);
 
   useEffect(() => {
     if (isRefreshing) {
-      fetchDashboardData();
+      fetchDashboardData(true);
     }
   }, [isRefreshing]);
 
@@ -369,8 +373,8 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
                       <td style={{ color: '#64748B', fontSize: '0.85rem' }}>
                         {log.timestamp || log.scheduled_time || 'Just now'}
                       </td>
-                      <td style={{ fontFamily: 'monospace', color: '#6A4C93' }}>
-                        {log.device_serial || `KIT-${log.device_id || '01'}`}
+                      <td style={{ fontFamily: 'monospace', color: '#6A4C93', fontWeight: '600' }}>
+                        {log.device_serial || (log.device_id ? `DISP-${log.device_id}` : 'DISP-1')}
                       </td>
                     </tr>
                   ))

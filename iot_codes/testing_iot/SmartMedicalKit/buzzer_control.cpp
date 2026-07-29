@@ -27,10 +27,9 @@ void triggerBuzzerHardware(bool turnOn) {
 
 void handleBuzzerOff() {
   Serial.println("Buzzer turned OFF (Active-High Trigger inactive)");
-  // Pull LOW to cut the signal to the 'S' pin and turn it off
+  isOutOfStockBeeping = false;
   digitalWrite(buzzerPin, LOW); 
   
-  // 修复了这里的拼写错误：把 }rver 改回 server
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", "BUZZER IS OFF");
 }

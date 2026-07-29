@@ -1,9 +1,11 @@
 // Login.jsx
 import React, { useState } from 'react';
 import {
-  Mail, Lock, LogIn, AlertCircle, Sparkles, Eye, EyeOff, X
+  Mail, Lock, LogIn, AlertCircle, Sparkles, Eye, EyeOff, X,
+  User, Phone, Calendar, MapPin, CheckCircle2, UserPlus
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/apiService';
 import logoPng from '../assets/medical-smart-kit-logo.png';
 
 export default function Login() {
@@ -21,6 +23,106 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState({ type: '', text: '' });
+
+  // Caregiver Registration modal state
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
+  const [regPhone, setRegPhone] = useState('');
+  const [regGender, setRegGender] = useState('Male');
+  const [regDob, setRegDob] = useState('');
+  const [regAddress, setRegAddress] = useState('');
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState('');
+
+  const get18YearsAgoDate = () => {
+    const today = new Date();
+    const maxYear = today.getFullYear() - 18;
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${maxYear}-${month}-${day}`;
+  };
+
+  const calculateAge = (dobString) => {
+    if (!dobString) return 0;
+    const birthDate = new Date(dobString);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setRegError('');
+    setRegSuccess('');
+
+    if (!regName || !regEmail || !regPassword || !regConfirmPassword || !regPhone || !regDob || !regAddress) {
+      setRegError('Please fill in all required fields.');
+      return;
+    }
+
+    if (regPassword.length < 6) {
+      setRegError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setRegError('Passwords do not match.');
+      return;
+    }
+
+    const age = calculateAge(regDob);
+    if (age < 18) {
+      setRegError('Caregiver must be at least 18 years old to create an account.');
+      return;
+    }
+
+    setRegLoading(true);
+    try {
+      const res = await apiService.register({
+        role: 'caregiver',
+        email: regEmail,
+        password: regPassword,
+        fullname: regName,
+        gender: regGender,
+        phone_no: regPhone,
+        date_of_birth: regDob,
+        address: regAddress,
+      });
+
+      if (res.success) {
+        setRegSuccess('Caregiver account created successfully! You can now log in.');
+        setEmail(regEmail);
+        setTimeout(() => {
+          setShowRegisterModal(false);
+          setRegSuccess('');
+          setRegName('');
+          setRegEmail('');
+          setRegPassword('');
+          setRegConfirmPassword('');
+          setRegPhone('');
+          setRegGender('Male');
+          setRegDob('');
+          setRegAddress('');
+        }, 2000);
+      } else {
+        setRegError(res.error || res.message || 'Failed to create caregiver account.');
+      }
+    } catch (err) {
+      setRegError('Network error. Please try again.');
+    } finally {
+      setRegLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -195,7 +297,7 @@ export default function Login() {
         </form>
 
         {/* Forgot Password Link */}
-        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+        <div style={{ marginTop: '16px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '16px' }}>
           <button
             type="button"
             onClick={() => setShowForgotModal(true)}
@@ -209,6 +311,30 @@ export default function Login() {
             }}
           >
             Forgot Password?
+          </button>
+        </div>
+
+        {/* Create Caregiver Account Link */}
+        <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', textAlign: 'center' }}>
+          <span style={{ fontSize: '0.85rem', color: '#64748B' }}>New Caregiver? </span>
+          <button
+            type="button"
+            onClick={() => {
+              setRegError('');
+              setRegSuccess('');
+              setShowRegisterModal(true);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6A4C93',
+              fontWeight: '700',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+            }}
+          >
+            Create Caregiver Account
           </button>
         </div>
 
@@ -338,6 +464,255 @@ export default function Login() {
                 style={{ width: '100%', padding: '12px', marginTop: '8px' }}
               >
                 {resetLoading ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Caregiver Account Modal */}
+      {showRegisterModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+          onClick={() => {
+            if (!regLoading && !regSuccess) setShowRegisterModal(false);
+          }}
+        >
+          <div
+            className="login-card"
+            style={{
+              maxWidth: '520px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              position: 'relative',
+              margin: 'auto',
+              padding: '28px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowRegisterModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#6B7280',
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <h3 style={{ marginBottom: '4px', color: '#2D3142', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <UserPlus size={22} color="#6A4C93" />
+              Create Caregiver Account
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: '#6B7280', marginBottom: '20px' }}>
+              Register as a caregiver to manage patient hardware dispensers & medication schedules. Must be at least 18 years old.
+            </p>
+
+            {regError && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', background: '#FEE2E2', color: '#B91C1C', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} />
+                <span>{regError}</span>
+              </div>
+            )}
+
+            {regSuccess && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', background: '#D1FAE5', color: '#065F46', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={16} />
+                <span>{regSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterSubmit}>
+              <div className="form-group">
+                <label>Full Name *</label>
+                <div className="form-input-wrapper">
+                  <User className="form-input-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="e.g. Sarah Jenkins"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Email Address *</label>
+                <div className="form-input-wrapper">
+                  <Mail className="form-input-icon" size={18} />
+                  <input
+                    type="email"
+                    placeholder="caregiver@example.com"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label>Password *</label>
+                  <div className="form-input-wrapper" style={{ position: 'relative' }}>
+                    <Lock className="form-input-icon" size={18} />
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      placeholder="Min 6 chars"
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6B7280',
+                        padding: '4px',
+                      }}
+                    >
+                      {showRegPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Confirm Password *</label>
+                  <div className="form-input-wrapper" style={{ position: 'relative' }}>
+                    <Lock className="form-input-icon" size={18} />
+                    <input
+                      type={showRegConfirmPassword ? 'text' : 'password'}
+                      placeholder="Re-enter password"
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      required
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6B7280',
+                        padding: '4px',
+                      }}
+                    >
+                      {showRegConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label>Phone Number *</label>
+                  <div className="form-input-wrapper">
+                    <Phone className="form-input-icon" size={18} />
+                    <input
+                      type="tel"
+                      placeholder="e.g. +60 12-345 6789"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Gender *</label>
+                  <select
+                    value={regGender}
+                    onChange={(e) => setRegGender(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      borderRadius: '10px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '0.9rem',
+                      background: '#F8FAFC'
+                    }}
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Date of Birth *</span>
+                  <span style={{ fontSize: '0.72rem', color: '#6A4C93', fontWeight: '700' }}>Must be 18+ years old</span>
+                </label>
+                <div className="form-input-wrapper">
+                  <Calendar className="form-input-icon" size={18} />
+                  <input
+                    type="date"
+                    max={get18YearsAgoDate()}
+                    value={regDob}
+                    onChange={(e) => setRegDob(e.target.value)}
+                    required
+                  />
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                  Restricted to 18 years and above (birth year {new Date().getFullYear() - 18} or earlier).
+                </span>
+              </div>
+
+              <div className="form-group">
+                <label>Address *</label>
+                <div className="form-input-wrapper">
+                  <MapPin className="form-input-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Enter street / city address"
+                    value={regAddress}
+                    onChange={(e) => setRegAddress(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={regLoading}
+                style={{ width: '100%', padding: '12px', marginTop: '12px', fontSize: '0.95rem' }}
+              >
+                {regLoading ? 'Registering Account...' : 'Register Caregiver Account'}
               </button>
             </form>
           </div>

@@ -19,7 +19,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { apiService, BASE_URL } from '../services/apiService';
+import { apiService, BASE_URL, getPhotoUrl, handleImageError } from '../services/apiService';
 
 export default function Profile() {
   const { user, caregiverId, logout, updateUser } = useAuth();
@@ -46,8 +46,8 @@ export default function Profile() {
   const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState('');
 
-  const fetchProfileDetails = async () => {
-    setLoading(true);
+  const fetchProfileDetails = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       if (caregiverId) {
         const res = await apiService.getCaregiverProfile(caregiverId);
@@ -63,12 +63,16 @@ export default function Profile() {
     } catch (err) {
       console.error('Error fetching caregiver profile:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProfileDetails();
+    fetchProfileDetails(true);
+    const interval = setInterval(() => {
+      fetchProfileDetails(false); // Silent background auto-reload without spinner
+    }, 15000);
+    return () => clearInterval(interval);
   }, [caregiverId]);
 
   const profile = profileData || user || {};
@@ -151,6 +155,27 @@ export default function Profile() {
         setErrorMsg('Caregiver ID missing. Cannot update profile.');
         setActionLoading(false);
         return;
+      }
+
+      if (!editForm.full_name || !editForm.email || !editForm.phone_no || !editForm.gender || !editForm.date_of_birth || !editForm.address) {
+        setErrorMsg('All profile fields are compulsory and must be filled in.');
+        setActionLoading(false);
+        return;
+      }
+
+      if (editForm.date_of_birth) {
+        const birthDate = new Date(editForm.date_of_birth);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        if (age < 18) {
+          setErrorMsg('Caregiver must be at least 18 years old.');
+          setActionLoading(false);
+          return;
+        }
       }
 
       let res;
@@ -241,7 +266,7 @@ export default function Profile() {
 
       {/* Main content */}
       <div style={{ opacity: loading ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-        
+
         {/* Profile Banner Card (Inspired by Mobile App Design) */}
         <div
           style={{
@@ -255,7 +280,7 @@ export default function Profile() {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            
+
             {/* Circular Profile Avatar */}
             <div style={{ position: 'relative', width: '104px', height: '104px', marginBottom: '16px' }}>
               {currentPhotoUrl ? (
@@ -503,7 +528,7 @@ export default function Profile() {
         {showEditModal && (
           <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px', width: '92%' }}>
-              
+
               {/* Modal Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '14px', borderBottom: '1px solid #F1F5F9' }}>
                 <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#2D3142', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -534,7 +559,7 @@ export default function Profile() {
               )}
 
               <form onSubmit={handleSaveProfile}>
-                
+
                 {/* Photo Upload Section (Custom UI Box) */}
                 <div style={{ padding: '18px', background: '#F8FAFC', borderRadius: '16px', border: '1.5px solid #E2E8F0', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
                   <div style={{ position: 'relative', width: '76px', height: '76px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#E2E8F0', border: '3px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
@@ -618,42 +643,48 @@ export default function Profile() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="form-group">
-                    <label>Mobile Number</label>
+                    <label>Mobile Number *</label>
                     <input
                       type="text"
                       className="form-control"
                       value={editForm.phone_no}
                       onChange={(e) => setEditForm({ ...editForm, phone_no: e.target.value })}
                       placeholder="+60197775462"
+                      required
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Gender</label>
+                    <label>Gender *</label>
                     <select
                       className="form-control"
                       value={editForm.gender}
                       onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+                      required
                     >
                       <option value="Female">Female</option>
                       <option value="Male">Male</option>
-                      <option value="Other">Other</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="form-group">
-                  <label>Date of Birth</label>
+                  <label>Date of Birth * (Must be 18+ years old)</label>
                   <input
                     type="date"
                     className="form-control"
+                    max={(() => {
+                      const today = new Date();
+                      return `${today.getFullYear() - 18}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                    })()}
                     value={editForm.date_of_birth}
                     onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
+                    required
                   />
                 </div>
 
                 <div className="form-group">
-                  <label>Address</label>
+                  <label>Address *</label>
                   <textarea
                     className="form-control"
                     rows="3"
@@ -661,6 +692,7 @@ export default function Profile() {
                     onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                     placeholder="Enter your address..."
                     style={{ resize: 'vertical' }}
+                    required
                   ></textarea>
                 </div>
 

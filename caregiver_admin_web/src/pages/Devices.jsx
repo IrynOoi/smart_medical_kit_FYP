@@ -17,6 +17,7 @@ import {
   Pill,
   RotateCw,
   PackageCheck,
+  Edit,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
@@ -37,20 +38,24 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
   // Add Device Modal State
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newSerial, setNewSerial] = useState('ESP32-KIT-99');
-  const [newIp, setNewIp] = useState('192.168.1.150');
+  const [newSerial, setNewSerial] = useState(''); // Initial empty numeric input
+
+  // Edit Device Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editDeviceId, setEditDeviceId] = useState(null);
+  const [editSerial, setEditSerial] = useState('');
 
   // Refill Stock Modal State
   const [restockModal, setRestockModal] = useState(null); // { prescriptionId, medicationName, slot, currentInventory }
-  const [restockQty, setRestockQty] = useState(20);
+  const [restockQty, setRestockQty] = useState('');
   const [restockLoading, setRestockLoading] = useState(false);
 
   const addLog = (msg) => {
     setControlLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 15)]);
   };
 
-  const fetchDevicesAndPatients = async () => {
-    setLoading(true);
+  const fetchDevicesAndPatients = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [devList, patList] = await Promise.all([
         apiService.getDevices(),
@@ -67,7 +72,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     } catch (err) {
       console.error('Error loading devices data:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
       if (onRefreshComplete) onRefreshComplete();
     }
   };
@@ -83,8 +88,13 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   };
 
   useEffect(() => {
-    fetchDevicesAndPatients();
-  }, [caregiverId]);
+    fetchDevicesAndPatients(true);
+    const interval = setInterval(() => {
+      fetchDevicesAndPatients(false); // Silent background auto-reload without spinner
+      if (targetPatientId) fetchTargetPrescriptions(targetPatientId);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [caregiverId, targetPatientId]);
 
   useEffect(() => {
     if (targetPatientId) {
@@ -94,7 +104,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
   useEffect(() => {
     if (isRefreshing) {
-      fetchDevicesAndPatients();
+      fetchDevicesAndPatients(true);
       if (targetPatientId) fetchTargetPrescriptions(targetPatientId);
     }
   }, [isRefreshing]);
@@ -102,7 +112,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   // LED Command
   const handleLedToggle = async (state) => {
     addLog(`Sending LED command (${state ? 'ON' : 'OFF'}) for Patient ID #${targetPatientId}...`);
-    const ok = await apiService.controlLed(targetPatientId, state ? 'ON' : 'OFF');
+    const ok = await apiService.controlLed(targetPatientId, state);
     if (ok) {
       addLog(`SUCCESS: LED indicator turned ${state ? 'ON' : 'OFF'}.`);
     } else {
@@ -113,7 +123,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   // Buzzer Command
   const handleBuzzerToggle = async (state) => {
     addLog(`Sending Buzzer command (${state ? 'ON' : 'OFF'}) for Patient ID #${targetPatientId}...`);
-    const ok = await apiService.controlBuzzer(targetPatientId, state ? 'ON' : 'OFF');
+    const ok = await apiService.controlBuzzer(targetPatientId, state);
     if (ok) {
       addLog(`SUCCESS: Audio Buzzer alarm ${state ? 'activated' : 'silenced'}.`);
     } else {
@@ -152,18 +162,26 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     e.preventDefault();
     if (!restockModal) return;
 
+    const qty = parseInt(restockQty, 10);
+    if (isNaN(qty) || qty < 0) {
+      alert('Please enter a valid numeric inventory stock number.');
+      return;
+    }
+
     setRestockLoading(true);
     try {
-      const success = await apiService.restockMedication(restockModal.prescriptionId, restockQty);
+      const success = await apiService.restockMedication(restockModal.prescriptionId, qty, true);
       if (success) {
-        addLog(`SUCCESS: Refilled ${restockQty} pills into Slot #${restockModal.slot} (${restockModal.medicationName}).`);
+        addLog(`SUCCESS: Updated inventory stock to ${qty} pills for Slot #${restockModal.slot} (${restockModal.medicationName}).`);
         setRestockModal(null);
+        setRestockQty('');
         fetchTargetPrescriptions(targetPatientId);
       } else {
-        alert('Failed to refill stock. Please check backend connection.');
+        alert('Failed to update stock. Please check backend connection.');
       }
     } catch (err) {
-      alert('An error occurred while restocking medication.');
+      console.error(err);
+      alert('Error updating stock.');
     } finally {
       setRestockLoading(false);
     }
@@ -172,12 +190,46 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   // Add Device
   const handleAddDeviceSubmit = async (e) => {
     e.preventDefault();
-    const ok = await apiService.addDevice(newSerial, newIp, 100);
+    const cleanNum = newSerial.replace(/[^0-9]/g, '');
+    if (!cleanNum) {
+      alert('Please enter a valid numeric device serial number.');
+      return;
+    }
+    const fullSerial = `DISP-${cleanNum}`;
+    const ok = await apiService.addDevice(fullSerial, '', 100);
     if (ok) {
       setShowAddModal(false);
+      setNewSerial('');
       fetchDevicesAndPatients();
     } else {
       alert('Failed to add device.');
+    }
+  };
+
+  // Edit Device
+  const handleOpenEditModal = (device) => {
+    setEditDeviceId(device.id || device.device_id);
+    const existingNum = (device.device_serial || '').replace(/[^0-9]/g, '');
+    setEditSerial(existingNum);
+    setShowEditModal(true);
+  };
+
+  const handleEditDeviceSubmit = async (e) => {
+    e.preventDefault();
+    const cleanNum = editSerial.replace(/[^0-9]/g, '');
+    if (!cleanNum) {
+      alert('Please enter a valid numeric device serial number.');
+      return;
+    }
+    const fullSerial = `DISP-${cleanNum}`;
+    const ok = await apiService.updateDevice(editDeviceId, fullSerial);
+    if (ok) {
+      setShowEditModal(false);
+      setEditDeviceId(null);
+      setEditSerial('');
+      fetchDevicesAndPatients();
+    } else {
+      alert('Failed to update device serial.');
     }
   };
 
@@ -217,43 +269,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
           </div>
         </div>
 
-        {/* Target Patient Selector Banner */}
-        <div className="glass-card" style={{ padding: '16px 24px', marginBottom: '24px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <label style={{ fontSize: '0.9rem', fontWeight: '700', color: '#2D3142' }}>
-              Select Hardware Dispenser Target Patient:
-            </label>
-            <select
-              value={targetPatientId}
-              onChange={(e) => setTargetPatientId(e.target.value)}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '10px',
-                border: '1px solid #CBD5E1',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                outline: 'none',
-                background: '#F8FAFC',
-                minWidth: '220px',
-              }}
-            >
-              {patients.map((p) => {
-                const id = p.patient_id || p.id;
-                const name = p.fullname || p.full_name || p.name || `Patient #${id}`;
-                return (
-                  <option key={id} value={id}>
-                    {name} (ID #{id})
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          <span className="badge badge-purple" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
-            Connected Dispenser Target: ID #{targetPatientId || 'N/A'}
-          </span>
-        </div>
-
         {/* Refill Pill Inventory Stock Section */}
         <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', background: 'white' }}>
           <div className="card-header">
@@ -276,25 +291,51 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
               {targetPrescriptions.map((pres) => {
-                const stock = pres.current_inventory ?? pres.inventory ?? 20;
+                const stock = pres.current_inventory ?? pres.inventory ?? 0;
                 const threshold = pres.refill_threshold ?? 5;
-                const isLow = stock <= threshold;
+                const isOutOfStock = stock <= 0;
+                const isLow = stock > 0 && stock <= threshold;
+
+                const statusBg = isOutOfStock ? '#FEF2F2' : isLow ? '#FFFBEB' : '#F8FAFC';
+                const statusBorder = isOutOfStock ? '#FCA5A5' : isLow ? '#FDE68A' : '#E2E8F0';
+                const iconBg = isOutOfStock ? '#EF4444' : isLow ? '#F59E0B' : '#6A4C93';
+                const textCol = isOutOfStock ? '#DC2626' : isLow ? '#B45309' : '#10B981';
 
                 return (
                   <div
                     key={pres.id || pres.prescription_id}
                     style={{
-                      border: '1px solid #E2E8F0',
+                      border: `1px solid ${statusBorder}`,
                       borderRadius: '14px',
                       padding: '18px',
-                      background: isLow ? '#FFFBEB' : '#F8FAFC',
+                      background: statusBg,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
                       position: 'relative',
                     }}
                   >
-                    {isLow && (
+                    {isOutOfStock && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        background: '#FEE2E2',
+                        color: '#991B1B',
+                        borderRadius: '10px',
+                        fontSize: '0.72rem',
+                        fontWeight: '700'
+                      }}>
+                        <AlertCircle size={13} />
+                        Out of Stock
+                      </div>
+                    )}
+
+                    {!isOutOfStock && isLow && (
                       <div style={{
                         position: 'absolute',
                         top: '10px',
@@ -320,7 +361,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                           width: '38px',
                           height: '38px',
                           borderRadius: '10px',
-                          background: isLow ? '#F59E0B' : '#6A4C93',
+                          background: iconBg,
                           color: 'white',
                           display: 'flex',
                           alignItems: 'center',
@@ -343,13 +384,15 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                       <div style={{ marginBottom: '14px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
                           <span style={{ color: '#64748B' }}>Pill Count:</span>
-                          <strong style={{ color: isLow ? '#B45309' : '#10B981' }}>{stock} pills remaining</strong>
+                          <strong style={{ color: textCol }}>
+                            {isOutOfStock ? '0 pills (Out of Stock)' : `${stock} pills remaining`}
+                          </strong>
                         </div>
                         <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
                           <div style={{
-                            width: `${Math.min((stock / 30) * 100, 100)}%`,
+                            width: isOutOfStock ? '0%' : `${Math.min((stock / 30) * 100, 100)}%`,
                             height: '100%',
-                            background: isLow ? '#F59E0B' : '#10B981',
+                            background: iconBg,
                             borderRadius: '4px',
                             transition: 'width 0.3s ease'
                           }} />
@@ -359,12 +402,15 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
                     <button
                       className="btn btn-outline"
-                      onClick={() => setRestockModal({
-                        prescriptionId: pres.id || pres.prescription_id,
-                        medicationName: pres.medication_name || pres.name || 'Medication',
-                        slot: pres.motor_slot || 1,
-                        currentInventory: stock,
-                      })}
+                      onClick={() => {
+                        setRestockQty(String(stock ?? 0));
+                        setRestockModal({
+                          prescriptionId: pres.id || pres.prescription_id,
+                          medicationName: pres.medication_name || pres.name || 'Medication',
+                          slot: pres.motor_slot || 1,
+                          currentInventory: stock,
+                        });
+                      }}
                       style={{ width: '100%', padding: '8px', fontSize: '0.82rem', background: 'white' }}
                     >
                       <RotateCw size={15} />
@@ -446,6 +492,26 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                           <span>{batt}%</span>
                         </div>
                         <span className="badge badge-success">ONLINE</span>
+                        <button
+                          className="btn btn-outline"
+                          title="Edit Device Serial Number"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditModal(device);
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '0.78rem',
+                            background: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <Edit size={14} />
+                          <span>Edit</span>
+                        </button>
                       </div>
                     </div>
                   );
@@ -527,37 +593,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                 ))}
               </div>
 
-              {/* OLED Display Command */}
-              <form onSubmit={handleDisplaySend} style={{ padding: '14px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontWeight: '600', fontSize: '0.88rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Monitor size={18} color="#3B82F6" />
-                  OLED Screen Message Command
-                </div>
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
-                  <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'white' }} onClick={(e) => handleDisplaySend(e, 'hello')}>
-                    Hello World
-                  </button>
-                  <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'white' }} onClick={(e) => handleDisplaySend(e, 'sv')}>
-                    Supervisor
-                  </button>
-                  <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'white' }} onClick={(e) => handleDisplaySend(e, 'clear')}>
-                    Clear Screen
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    value={displayMsg}
-                    onChange={(e) => setDisplayMsg(e.target.value)}
-                    placeholder="Enter screen message..."
-                    style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
-                  <button type="submit" className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-                    Send
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
 
             {/* Diagnostic Log Output */}
             <div style={{ background: '#1E293B', color: '#38BDF8', padding: '12px', borderRadius: '10px', fontFamily: 'monospace', fontSize: '0.75rem', height: '140px', overflowY: 'auto' }}>
@@ -592,16 +628,22 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
               <form onSubmit={handleRestockSubmit}>
                 <div className="form-group">
-                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Add Pills Quantity</label>
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>
+                    Edit Total Inventory Stock Count *
+                  </label>
                   <input
-                    type="number"
-                    min="1"
-                    max="100"
+                    type="text"
+                    pattern="[0-9]*"
+                    inputMode="numeric"
                     value={restockQty}
-                    onChange={(e) => setRestockQty(parseInt(e.target.value) || 1)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    onChange={(e) => setRestockQty(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Enter stock count number"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.95rem' }}
                     required
                   />
+                  <span style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                    Directly edit current inventory stock number (numeric input only).
+                  </span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
@@ -630,33 +672,115 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
               <form onSubmit={handleAddDeviceSubmit}>
                 <div className="form-group">
-                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Device Serial Number</label>
-                  <input
-                    type="text"
-                    value={newSerial}
-                    onChange={(e) => setNewSerial(e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                    required
-                  />
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569', marginBottom: '6px', display: 'block' }}>
+                    Device Serial Number (Number Only)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{
+                      padding: '10px 14px',
+                      background: '#F1F5F9',
+                      border: '1px solid #CBD5E1',
+                      borderRight: 'none',
+                      borderRadius: '8px 0 0 8px',
+                      fontWeight: '700',
+                      color: '#475569',
+                      fontSize: '0.9rem'
+                    }}>
+                      DISP-
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={newSerial}
+                      onChange={(e) => setNewSerial(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="e.g. 1"
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        borderRadius: '0 8px 8px 0',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '0.9rem'
+                      }}
+                      required
+                    />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', display: 'block' }}>
+                    Enter number only. Final serial will be saved as: <strong>DISP-{newSerial || '...'}</strong>
+                  </span>
                 </div>
 
-                <div className="form-group">
-                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Initial IP Address</label>
-                  <input
-                    type="text"
-                    value={newIp}
-                    onChange={(e) => setNewIp(e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)} style={{ flex: 1 }}>
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
                     Register Device
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Device Modal */}
+        {showEditModal && (
+          <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Edit size={18} color="#6A4C93" />
+                  Edit Device Serial Number
+                </h3>
+                <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleEditDeviceSubmit}>
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569', marginBottom: '6px', display: 'block' }}>
+                    Device Serial Number (Number Only)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{
+                      padding: '10px 14px',
+                      background: '#F1F5F9',
+                      border: '1px solid #CBD5E1',
+                      borderRight: 'none',
+                      borderRadius: '8px 0 0 8px',
+                      fontWeight: '700',
+                      color: '#475569',
+                      fontSize: '0.9rem'
+                    }}>
+                      DISP-
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editSerial}
+                      onChange={(e) => setEditSerial(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="e.g. 1"
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        borderRadius: '0 8px 8px 0',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '0.9rem'
+                      }}
+                      required
+                    />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', display: 'block' }}>
+                    Enter number only. Saved format will be: <strong>DISP-{editSerial || '...'}</strong>
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)} style={{ flex: 1 }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                    Save Changes
                   </button>
                 </div>
               </form>
