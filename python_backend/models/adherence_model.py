@@ -61,14 +61,15 @@ def get_patient_adherence_logs(patient_id, limit):
 # ----------------------------------------------------------------------
 # Get recent adherence logs for all patients of a caregiver
 # ----------------------------------------------------------------------
-def get_all_recent_logs(caregiver_id, limit):
+def get_all_recent_logs(caregiver_id, limit=None):
     """
     Fetch the most recent adherence logs (with patient name and medication name)
     for all patients under a caregiver. Used for caregiver dashboard activity feed.
+    If limit is None or <= 0, fetches all logs.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('''
+        query = '''
             SELECT al.adlog_id, u.full_name AS patient_name,
                    m.medication_name, al.scheduled_time, al.dispensed_time, al.recorded_at, al.status,
                    COALESCE(d.device_serial, CONCAT('DISP-', COALESCE(al.device_id, m.device_id, 1))) AS device_serial,
@@ -82,11 +83,17 @@ def get_all_recent_logs(caregiver_id, limit):
             LEFT JOIN iot_device d ON (al.device_id = d.device_id OR m.device_id = d.device_id)
             WHERE pcm.caregiver_id = %s
             ORDER BY al.scheduled_time DESC
-            LIMIT %s
-        ''', (caregiver_id, limit))
+        '''
+        params = [caregiver_id]
+        if limit is not None and int(limit) > 0:
+            query += ' LIMIT %s'
+            params.append(int(limit))
+
+        cursor.execute(query, tuple(params))
         logs = cursor.fetchall()
         cursor.close()
     return logs
+
 
 
 # ----------------------------------------------------------------------

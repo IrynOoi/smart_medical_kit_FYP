@@ -65,7 +65,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
       const [overviewRes, chartRes, logsRes, riskRes] = await Promise.all([
         apiService.getCaregiverOverview(caregiverId),
         apiService.getChartData(caregiverId, period),
-        apiService.getAllRecentLogs(caregiverId, 10),
+        apiService.getAllRecentLogs(caregiverId),
         apiService.getAtRiskPatients(caregiverId),
       ]);
 
@@ -328,12 +328,17 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
               <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Activity size={20} color="#6A4C93" />
                 Live Adherence Activity Feed
+                {recentLogs.length > 0 && (
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, background: '#F3E8FF', color: '#6A4C93', padding: '2px 8px', borderRadius: '12px', marginLeft: '6px' }}>
+                    {recentLogs.length} {recentLogs.length === 1 ? 'log' : 'logs'}
+                  </span>
+                )}
               </h3>
-              <p style={{ fontSize: '0.8rem', color: '#6B7280' }}>Real-time logs from smart medical kit dispensers</p>
+              <p style={{ fontSize: '0.8rem', color: '#6B7280' }}>Real-time logs from smart medical kit dispensers for all patients under your care</p>
             </div>
           </div>
 
-          <div className="table-container">
+          <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <table className="custom-table">
               <thead>
                 <tr>

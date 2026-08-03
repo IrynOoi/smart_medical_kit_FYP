@@ -27,11 +27,12 @@ caregiver_bp = Blueprint('caregiver', __name__)
 @caregiver_bp.route('/caregiver/<int:caregiver_id>/all_recent_logs', methods=['GET'])
 def get_all_recent_logs_route(caregiver_id):
     """
-    Retrieve the most recent adherence logs from all patients under this caregiver.
-    Optional query param: limit (default 20).
+    Retrieve adherence logs from all patients under this caregiver.
+    Optional query param: limit (if omitted or 0, returns all logs).
     """
     try:
-        limit = request.args.get('limit', default=20, type=int)
+        limit_arg = request.args.get('limit', default=None)
+        limit = int(limit_arg) if limit_arg is not None and str(limit_arg).isdigit() and int(limit_arg) > 0 else None
         logs = get_all_recent_logs(caregiver_id, limit)
         return jsonify({"success": True, "data": logs})
     except Exception as e:

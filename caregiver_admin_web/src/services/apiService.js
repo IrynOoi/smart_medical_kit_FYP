@@ -171,9 +171,12 @@ export const apiService = {
     }
   },
 
-  async getAllRecentLogs(caregiverId, limit = 20) {
+  async getAllRecentLogs(caregiverId, limit = null) {
     try {
-      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/all_recent_logs?limit=${limit}`, {
+      const url = limit
+        ? `${BASE_URL}/caregiver/${caregiverId}/all_recent_logs?limit=${limit}`
+        : `${BASE_URL}/caregiver/${caregiverId}/all_recent_logs`;
+      const response = await fetch(url, {
         headers: getHeaders(false),
       });
       const json = await response.json();

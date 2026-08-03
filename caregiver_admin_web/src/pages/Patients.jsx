@@ -389,7 +389,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   fontWeight: '700',
                   border: 'none',
                   borderRadius: '9px',
-                  background: filterCategory === 'available' ? '#3B82F6' : 'transparent',
+                  background: filterCategory === 'available' ? '#6A4C93' : 'transparent',
                   color: filterCategory === 'available' ? 'white' : '#64748B',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
@@ -405,7 +405,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   fontWeight: '700',
                   border: 'none',
                   borderRadius: '9px',
-                  background: filterCategory === 'all' ? '#2D3142' : 'transparent',
+                  background: filterCategory === 'all' ? '#6A4C93' : 'transparent',
                   color: filterCategory === 'all' ? 'white' : '#64748B',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
@@ -436,505 +436,505 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
             </p>
           </div>
         ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-          {filteredPatients.map((patient) => {
-            const name = patient.fullname || patient.full_name || patient.name || 'Patient Name';
-            const pId = patient.id || patient.patient_id;
-            const ageDisplay = patient.age && patient.age !== 'N/A'
-              ? patient.age
-              : calculateAge(patient.date_of_birth);
-            const phoneDisplay = patient.phone || patient.phone_no;
-            const isActive = patient.is_active !== false && patient.is_active !== 0;
-            const isMyPatient = patient.is_my_patient === true;
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+            {filteredPatients.map((patient) => {
+              const name = patient.fullname || patient.full_name || patient.name || 'Patient Name';
+              const pId = patient.id || patient.patient_id;
+              const ageDisplay = patient.age && patient.age !== 'N/A'
+                ? patient.age
+                : calculateAge(patient.date_of_birth);
+              const phoneDisplay = patient.phone || patient.phone_no;
+              const isActive = patient.is_active !== false && patient.is_active !== 0;
+              const isMyPatient = patient.is_my_patient === true;
 
-            return (
-              <div
-                key={pId}
-                className="glass-card"
-                style={{
-                  padding: '20px',
-                  background: 'white',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  opacity: isActive ? 1 : 0.65,
-                  borderLeft: isMyPatient
-                    ? '4px solid #6A4C93'
-                    : '4px solid #3B82F6',
-                }}
-              >
-                <div>
-                  {/* Top Header Row with Status Badges */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              return (
+                <div
+                  key={pId}
+                  className="glass-card"
+                  style={{
+                    padding: '20px',
+                    background: 'white',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    opacity: isActive ? 1 : 0.65,
+                    borderLeft: isMyPatient
+                      ? '4px solid #6A4C93'
+                      : '4px solid #3B82F6',
+                  }}
+                >
+                  <div>
+                    {/* Top Header Row with Status Badges */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      {isMyPatient ? (
+                        <span className="badge badge-purple" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldCheck size={13} />
+                          Assigned to My Care
+                        </span>
+                      ) : (
+                        <span className="badge badge-info" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px', background: '#DBEAFE', color: '#1D4ED8' }}>
+                          <UserPlus size={13} />
+                          {patient.assignment_status || 'Unassigned / Available'}
+                        </span>
+                      )}
+
+                      {!isActive && (
+                        <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>Inactive</span>
+                      )}
+                    </div>
+
+                    {/* Patient Name & Avatar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                      {getPhotoUrl(patient.profile_photo) ? (
+                        <img
+                          src={getPhotoUrl(patient.profile_photo)}
+                          alt={name}
+                          style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: isMyPatient ? '2px solid #6A4C93' : '2px solid #3B82F6',
+                            flexShrink: 0,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          }}
+                          onError={(e) => handleImageError(e, patient.profile_photo)}
+                        />
+                      ) : null}
+
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: isMyPatient
+                          ? 'linear-gradient(135deg, #3B1E54 0%, #6A4C93 100%)'
+                          : 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)',
+                        color: 'white',
+                        display: getPhotoUrl(patient.profile_photo) ? 'none' : 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '700',
+                        fontSize: '1.2rem',
+                        flexShrink: 0,
+                      }}>
+                        {name.charAt(0).toUpperCase()}
+                      </div>
+
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <h3 style={{ fontSize: '1.05rem', color: '#2D3142', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {name}
+                        </h3>
+                        <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                          ID: #{pId} • Age: {ageDisplay}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Contact Info */}
+                    <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+                      {patient.email && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Mail size={14} color={isMyPatient ? '#6A4C93' : '#3B82F6'} />
+                          <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{patient.email}</span>
+                        </div>
+                      )}
+                      {phoneDisplay && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Phone size={14} color={isMyPatient ? '#6A4C93' : '#3B82F6'} />
+                          <span>{phoneDisplay}</span>
+                        </div>
+                      )}
+                      {patient.address && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <MapPin size={14} color={isMyPatient ? '#6A4C93' : '#3B82F6'} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{patient.address}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Action Buttons */}
+                  <div style={{ display: 'flex', gap: '8px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-outline"
+                      style={{ flex: 1, padding: '7px 10px', fontSize: '0.8rem' }}
+                      onClick={() => handleViewPatient(patient)}
+                    >
+                      <Eye size={15} />
+                      <span>View</span>
+                    </button>
+
+                    <button
+                      className="btn"
+                      style={{ padding: '7px 12px', fontSize: '0.8rem', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1' }}
+                      onClick={() => handleOpenEdit(patient)}
+                      title="Edit Patient Details"
+                    >
+                      <Edit size={15} />
+                      <span>Edit</span>
+                    </button>
+
+                    {/* Caregiver Assignment Action: Link or Unlink */}
                     {isMyPatient ? (
-                      <span className="badge badge-purple" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ShieldCheck size={13} />
-                        Assigned to My Care
-                      </span>
+                      <button
+                        className="btn"
+                        style={{ padding: '7px 10px', background: '#FEF3C7', color: '#D97706', border: '1px solid #FCD34D' }}
+                        onClick={() => handleUnlinkPatient(patient)}
+                        title="Unlink from My Care List"
+                      >
+                        <Unlink size={15} />
+                      </button>
                     ) : (
-                      <span className="badge badge-info" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px', background: '#DBEAFE', color: '#1D4ED8' }}>
-                        <UserPlus size={13} />
-                        {patient.assignment_status || 'Unassigned / Available'}
-                      </span>
+                      <button
+                        className="btn"
+                        style={{ padding: '7px 12px', background: '#6A4C93', color: 'white', border: 'none', fontSize: '0.78rem', fontWeight: '600' }}
+                        onClick={() => handleLinkPatient(patient)}
+                        title="Link Patient to My Care List"
+                        disabled={formLoading}
+                      >
+                        <UserCheck size={15} />
+                        <span>Link to Care</span>
+                      </button>
                     )}
 
-                    {!isActive && (
-                      <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>Inactive</span>
+                    {/* Account Lifecycle Actions */}
+                    <button
+                      className="btn"
+                      style={{ padding: '7px 10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0' }}
+                      onClick={() => handleDeactivatePatient(patient)}
+                      title="Deactivate Patient Account"
+                    >
+                      <UserX size={15} />
+                    </button>
+
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '7px 10px', color: '#EF4444', background: '#FEE2E2', border: '1px solid #FCA5A5' }}
+                      onClick={() => handleDeletePatientPermanent(patient)}
+                      title="Delete Account Permanently"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* View Patient Details Modal */}
+        {selectedPatient && (
+          <div className="modal-overlay" onClick={() => setSelectedPatient(null)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #E2E8F0' }}>
+                <h3 style={{ fontSize: '1.2rem', color: '#2D3142' }}>Patient Profile & Details</h3>
+                <button
+                  onClick={() => setSelectedPatient(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: selectedPatient.is_my_patient ? '#6A4C93' : '#3B82F6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', fontWeight: '700', flexShrink: 0 }}>
+                  {(selectedPatient.fullname || selectedPatient.full_name || selectedPatient.name || 'P').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h4 style={{ fontSize: '1.2rem', color: '#2D3142', fontWeight: '700' }}>
+                      {selectedPatient.fullname || selectedPatient.full_name || selectedPatient.name}
+                    </h4>
+                    {selectedPatient.is_my_patient ? (
+                      <span className="badge badge-purple" style={{ fontSize: '0.7rem' }}>Under My Care</span>
+                    ) : (
+                      <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>{selectedPatient.assignment_status || 'Available'}</span>
                     )}
                   </div>
+                  <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '2px' }}>
+                    Patient ID: #{selectedPatient.id || selectedPatient.patient_id} • Age: {selectedPatient.age && selectedPatient.age !== 'N/A' ? selectedPatient.age : calculateAge(selectedPatient.date_of_birth)}
+                  </div>
+                </div>
+              </div>
 
-                  {/* Patient Name & Avatar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-                    {getPhotoUrl(patient.profile_photo) ? (
-                      <img
-                        src={getPhotoUrl(patient.profile_photo)}
-                        alt={name}
-                        style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                          border: isMyPatient ? '2px solid #6A4C93' : '2px solid #3B82F6',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                        }}
-                        onError={(e) => handleImageError(e, patient.profile_photo)}
-                      />
-                    ) : null}
+              {/* Profile Field Details Grid */}
+              <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Email:</span>
+                  <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.email || 'N/A'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Phone:</span>
+                  <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.phone || selectedPatient.phone_no || 'N/A'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Gender:</span>
+                  <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.gender || 'N/A'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Date of Birth:</span>
+                  <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.date_of_birth || 'N/A'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B', fontWeight: '600' }}>Address:</span>
+                  <span style={{ color: '#2D3142', fontWeight: '600', maxWidth: '240px', textAlign: 'right' }}>{selectedPatient.address || 'N/A'}</span>
+                </div>
+                {selectedPatient.medical_notes && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                    <span style={{ color: '#64748B', fontWeight: '600' }}>Medical Notes:</span>
+                    <span style={{ color: '#2D3142', fontStyle: 'italic' }}>{selectedPatient.medical_notes}</span>
+                  </div>
+                )}
+              </div>
 
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      background: isMyPatient
-                        ? 'linear-gradient(135deg, #3B1E54 0%, #6A4C93 100%)'
-                        : 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%)',
-                      color: 'white',
-                      display: getPhotoUrl(patient.profile_photo) ? 'none' : 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: '700',
-                      fontSize: '1.2rem',
-                      flexShrink: 0,
-                    }}>
-                      {name.charAt(0).toUpperCase()}
-                    </div>
+              <h4 style={{ fontSize: '1rem', color: '#3B1E54', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Pill size={18} />
+                Prescribed Medications ({patientMedications.length})
+              </h4>
 
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <h3 style={{ fontSize: '1.05rem', color: '#2D3142', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {name}
-                      </h3>
+              {patientMedications.length === 0 ? (
+                <p style={{ color: '#94A3B8', fontSize: '0.88rem', fontStyle: 'italic', marginBottom: '20px' }}>
+                  No active prescriptions assigned to this patient.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {patientMedications.map((med, i) => (
+                    <div key={med.id || i} style={{ padding: '12px', background: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontWeight: '600', color: '#2D3142' }}>{med.medication_name || med.name}</div>
                       <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
-                        ID: #{pId} • Age: {ageDisplay}
+                        Dosage: {med.dosage || '1 pill'} • Schedule: {med.scheduled_time || med.frequency || 'Daily'} • Motor Slot: #{med.motor_slot || 1}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Contact Info */}
-                  <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                    {patient.email && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Mail size={14} color={isMyPatient ? '#6A4C93' : '#3B82F6'} />
-                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{patient.email}</span>
-                      </div>
-                    )}
-                    {phoneDisplay && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Phone size={14} color={isMyPatient ? '#6A4C93' : '#3B82F6'} />
-                        <span>{phoneDisplay}</span>
-                      </div>
-                    )}
-                    {patient.address && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <MapPin size={14} color={isMyPatient ? '#6A4C93' : '#3B82F6'} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{patient.address}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Card Action Buttons */}
-                <div style={{ display: 'flex', gap: '8px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', flexWrap: 'wrap' }}>
-                  <button
-                    className="btn btn-outline"
-                    style={{ flex: 1, padding: '7px 10px', fontSize: '0.8rem' }}
-                    onClick={() => handleViewPatient(patient)}
-                  >
-                    <Eye size={15} />
-                    <span>View</span>
-                  </button>
-
-                  <button
-                    className="btn"
-                    style={{ padding: '7px 12px', fontSize: '0.8rem', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1' }}
-                    onClick={() => handleOpenEdit(patient)}
-                    title="Edit Patient Details"
-                  >
-                    <Edit size={15} />
-                    <span>Edit</span>
-                  </button>
-
-                  {/* Caregiver Assignment Action: Link or Unlink */}
-                  {isMyPatient ? (
-                    <button
-                      className="btn"
-                      style={{ padding: '7px 10px', background: '#FEF3C7', color: '#D97706', border: '1px solid #FCD34D' }}
-                      onClick={() => handleUnlinkPatient(patient)}
-                      title="Unlink from My Care List"
-                    >
-                      <Unlink size={15} />
-                    </button>
-                  ) : (
-                    <button
-                      className="btn"
-                      style={{ padding: '7px 12px', background: '#6A4C93', color: 'white', border: 'none', fontSize: '0.78rem', fontWeight: '600' }}
-                      onClick={() => handleLinkPatient(patient)}
-                      title="Link Patient to My Care List"
-                      disabled={formLoading}
-                    >
-                      <UserCheck size={15} />
-                      <span>Link to Care</span>
-                    </button>
-                  )}
-
-                  {/* Account Lifecycle Actions */}
-                  <button
-                    className="btn"
-                    style={{ padding: '7px 10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0' }}
-                    onClick={() => handleDeactivatePatient(patient)}
-                    title="Deactivate Patient Account"
-                  >
-                    <UserX size={15} />
-                  </button>
-
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: '7px 10px', color: '#EF4444', background: '#FEE2E2', border: '1px solid #FCA5A5' }}
-                    onClick={() => handleDeletePatientPermanent(patient)}
-                    title="Delete Account Permanently"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* View Patient Details Modal */}
-      {selectedPatient && (
-        <div className="modal-overlay" onClick={() => setSelectedPatient(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #E2E8F0' }}>
-              <h3 style={{ fontSize: '1.2rem', color: '#2D3142' }}>Patient Profile & Details</h3>
-              <button
-                onClick={() => setSelectedPatient(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px' }}>
-              <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: selectedPatient.is_my_patient ? '#6A4C93' : '#3B82F6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', fontWeight: '700', flexShrink: 0 }}>
-                {(selectedPatient.fullname || selectedPatient.full_name || selectedPatient.name || 'P').charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h4 style={{ fontSize: '1.2rem', color: '#2D3142', fontWeight: '700' }}>
-                    {selectedPatient.fullname || selectedPatient.full_name || selectedPatient.name}
-                  </h4>
-                  {selectedPatient.is_my_patient ? (
-                    <span className="badge badge-purple" style={{ fontSize: '0.7rem' }}>Under My Care</span>
-                  ) : (
-                    <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>{selectedPatient.assignment_status || 'Available'}</span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '2px' }}>
-                  Patient ID: #{selectedPatient.id || selectedPatient.patient_id} • Age: {selectedPatient.age && selectedPatient.age !== 'N/A' ? selectedPatient.age : calculateAge(selectedPatient.date_of_birth)}
-                </div>
-              </div>
-            </div>
-
-            {/* Profile Field Details Grid */}
-            <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B', fontWeight: '600' }}>Email:</span>
-                <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.email || 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B', fontWeight: '600' }}>Phone:</span>
-                <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.phone || selectedPatient.phone_no || 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B', fontWeight: '600' }}>Gender:</span>
-                <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.gender || 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B', fontWeight: '600' }}>Date of Birth:</span>
-                <span style={{ color: '#2D3142', fontWeight: '600' }}>{selectedPatient.date_of_birth || 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B', fontWeight: '600' }}>Address:</span>
-                <span style={{ color: '#2D3142', fontWeight: '600', maxWidth: '240px', textAlign: 'right' }}>{selectedPatient.address || 'N/A'}</span>
-              </div>
-              {selectedPatient.medical_notes && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
-                  <span style={{ color: '#64748B', fontWeight: '600' }}>Medical Notes:</span>
-                  <span style={{ color: '#2D3142', fontStyle: 'italic' }}>{selectedPatient.medical_notes}</span>
+                  ))}
                 </div>
               )}
-            </div>
 
-            <h4 style={{ fontSize: '1rem', color: '#3B1E54', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Pill size={18} />
-              Prescribed Medications ({patientMedications.length})
-            </h4>
-
-            {patientMedications.length === 0 ? (
-              <p style={{ color: '#94A3B8', fontSize: '0.88rem', fontStyle: 'italic', marginBottom: '20px' }}>
-                No active prescriptions assigned to this patient.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '200px', overflowY: 'auto' }}>
-                {patientMedications.map((med, i) => (
-                  <div key={med.id || i} style={{ padding: '12px', background: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontWeight: '600', color: '#2D3142' }}>{med.medication_name || med.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
-                      Dosage: {med.dosage || '1 pill'} • Schedule: {med.scheduled_time || med.frequency || 'Daily'} • Motor Slot: #{med.motor_slot || 1}
-                    </div>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    const p = selectedPatient;
+                    setSelectedPatient(null);
+                    handleOpenEdit(p);
+                  }}
+                  style={{ flex: 1, background: '#F3E8FF', color: '#6A4C93', border: '1px solid #D8B4FE', fontWeight: '600' }}
+                >
+                  <Edit size={16} />
+                  <span>Edit Profile</span>
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedPatient(null)}
+                  style={{ flex: 1 }}
+                >
+                  Close Profile
+                </button>
               </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-              <button
-                className="btn"
-                onClick={() => {
-                  const p = selectedPatient;
-                  setSelectedPatient(null);
-                  handleOpenEdit(p);
-                }}
-                style={{ flex: 1, background: '#F3E8FF', color: '#6A4C93', border: '1px solid #D8B4FE', fontWeight: '600' }}
-              >
-                <Edit size={16} />
-                <span>Edit Profile</span>
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setSelectedPatient(null)}
-                style={{ flex: 1 }}
-              >
-                Close Profile
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Edit Patient Details Modal */}
-      {editingPatient && (
-        <div className="modal-overlay" onClick={() => setEditingPatient(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #E2E8F0' }}>
-              <h3 style={{ fontSize: '1.2rem', color: '#2D3142', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Edit size={20} color="#6A4C93" />
-                Edit Patient Profile
-              </h3>
-              <button onClick={() => setEditingPatient(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {formError && (
-              <div style={{ padding: '10px', background: '#FEE2E2', color: '#B91C1C', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px' }}>
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleEditPatientSubmit}>
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.full_name}
-                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                />
+        {/* Edit Patient Details Modal */}
+        {editingPatient && (
+          <div className="modal-overlay" onClick={() => setEditingPatient(null)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #E2E8F0' }}>
+                <h3 style={{ fontSize: '1.2rem', color: '#2D3142', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Edit size={20} color="#6A4C93" />
+                  Edit Patient Profile
+                </h3>
+                <button onClick={() => setEditingPatient(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                  <X size={20} />
+                </button>
               </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                />
-              </div>
+              {formError && (
+                <div style={{ padding: '10px', background: '#FEE2E2', color: '#B91C1C', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px' }}>
+                  {formError}
+                </div>
+              )}
 
-              <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Phone Number</label>
+              <form onSubmit={handleEditPatientSubmit}>
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Full Name</label>
                   <input
                     type="text"
-                    placeholder="+60..."
-                    value={editForm.phone_no}
-                    onChange={(e) => setEditForm({ ...editForm, phone_no: e.target.value })}
+                    required
+                    value={editForm.full_name}
+                    onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
                   />
                 </div>
-                <div>
-                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Gender</label>
-                  <select
-                    value={editForm.gender}
-                    onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white' }}
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
+
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Date of Birth</label>
-                <input
-                  type="date"
-                  value={editForm.date_of_birth}
-                  onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                  max={maxDate}   // <-- add this
-                />
-              </div>
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Phone Number</label>
+                    <input
+                      type="text"
+                      placeholder="+60..."
+                      value={editForm.phone_no}
+                      onChange={(e) => setEditForm({ ...editForm, phone_no: e.target.value })}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Gender</label>
+                    <select
+                      value={editForm.gender}
+                      onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white' }}
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Address</label>
-                <input
-                  type="text"
-                  placeholder="Resident address..."
-                  value={editForm.address}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Medical Notes / Care Instructions</label>
-                <textarea
-                  rows="3"
-                  placeholder="Allergies, chronic conditions..."
-                  value={editForm.medical_notes}
-                  onChange={(e) => setEditForm({ ...editForm, medical_notes: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setEditingPatient(null)} style={{ flex: 1 }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={formLoading} style={{ flex: 1 }}>
-                  {formLoading ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add New Patient Modal */}
-      {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #E2E8F0' }}>
-              <h3 style={{ fontSize: '1.2rem', color: '#2D3142' }}>Enroll New Patient</h3>
-              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {formError && (
-              <div style={{ padding: '10px', background: '#FEE2E2', color: '#B91C1C', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px' }}>
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleAddPatientSubmit}>
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. John Smith"
-                  value={newPatient.fullname}
-                  onChange={(e) => setNewPatient({ ...newPatient, fullname: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Email Address</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="patient@example.com"
-                  value={newPatient.email}
-                  onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                />
-              </div>
-
-              <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
+                <div className="form-group">
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Date of Birth</label>
                   <input
                     type="date"
-                    value={newPatient.date_of_birth}
-                    onChange={(e) => setNewPatient({ ...newPatient, date_of_birth: e.target.value })}
+                    value={editForm.date_of_birth}
+                    onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    max={maxDate}   // <-- add this
                   />
                 </div>
-                <div>
-                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Phone Number</label>
+
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Address</label>
                   <input
                     type="text"
-                    placeholder="+60..."
-                    value={newPatient.phone}
-                    onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                    placeholder="Resident address..."
+                    value={editForm.address}
+                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
                   />
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Address</label>
-                <input
-                  type="text"
-                  placeholder="Resident address..."
-                  value={newPatient.address}
-                  onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                />
-              </div>
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Medical Notes / Care Instructions</label>
+                  <textarea
+                    rows="3"
+                    placeholder="Allergies, chronic conditions..."
+                    value={editForm.medical_notes}
+                    onChange={(e) => setEditForm({ ...editForm, medical_notes: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
+                  />
+                </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)} style={{ flex: 1 }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={formLoading} style={{ flex: 1 }}>
-                  {formLoading ? 'Enrolling...' : 'Enroll Patient'}
-                </button>
-              </div>
-            </form>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingPatient(null)} style={{ flex: 1 }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={formLoading} style={{ flex: 1 }}>
+                    {formLoading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Add New Patient Modal */}
+        {showAddModal && (
+          <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #E2E8F0' }}>
+                <h3 style={{ fontSize: '1.2rem', color: '#2D3142' }}>Enroll New Patient</h3>
+                <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              {formError && (
+                <div style={{ padding: '10px', background: '#FEE2E2', color: '#B91C1C', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px' }}>
+                  {formError}
+                </div>
+              )}
+
+              <form onSubmit={handleAddPatientSubmit}>
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Smith"
+                    value={newPatient.fullname}
+                    onChange={(e) => setNewPatient({ ...newPatient, fullname: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="patient@example.com"
+                    value={newPatient.email}
+                    onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Date of Birth</label>
+                    <input
+                      type="date"
+                      value={newPatient.date_of_birth}
+                      onChange={(e) => setNewPatient({ ...newPatient, date_of_birth: e.target.value })}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Phone Number</label>
+                    <input
+                      type="text"
+                      placeholder="+60..."
+                      value={newPatient.phone}
+                      onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Address</label>
+                  <input
+                    type="text"
+                    placeholder="Resident address..."
+                    value={newPatient.address}
+                    onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)} style={{ flex: 1 }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={formLoading} style={{ flex: 1 }}>
+                    {formLoading ? 'Enrolling...' : 'Enroll Patient'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
