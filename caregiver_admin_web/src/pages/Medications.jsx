@@ -267,7 +267,9 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
               const slot = med.motor_slot || 1;
               const stock = med.current_inventory ?? 0;
               const threshold = med.refill_threshold ?? 10;
-              const isLow = stock <= threshold;
+
+              const isEmpty = stock === 0;
+              const isLow = stock <= threshold && stock > 0;
 
               return (
                 <div
@@ -279,7 +281,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    borderLeft: `4px solid ${isLow ? '#F59E0B' : '#6A4C93'}`,
+                    borderLeft: `4px solid ${isEmpty ? '#EF4444' : isLow ? '#F59E0B' : '#6A4C93'}`,
                   }}
                 >
                   <div>
@@ -288,7 +290,11 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                         width: '48px',
                         height: '48px',
                         borderRadius: '12px',
-                        background: isLow ? 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)' : 'linear-gradient(135deg, #3B1E54 0%, #6A4C93 100%)',
+                        background: isEmpty
+                          ? 'linear-gradient(135deg, #991B1B 0%, #EF4444 100%)'
+                          : isLow
+                            ? 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)'
+                            : 'linear-gradient(135deg, #3B1E54 0%, #6A4C93 100%)',
                         color: 'white',
                         display: 'flex',
                         alignItems: 'center',
@@ -311,7 +317,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                     <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#64748B' }}>Current Inventory:</span>
-                        <strong style={{ color: isLow ? '#B45309' : '#10B981' }}>{stock} pills</strong>
+                        <strong style={{ color: isEmpty ? '#DC2626' : isLow ? '#B45309' : '#10B981' }}>{stock} pills</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#64748B' }}>Refill Threshold:</span>

@@ -86,6 +86,45 @@ export const apiService = {
     }
   },
 
+  async sendForgotPasswordOTP(email) {
+    try {
+      const response = await fetch(`${BASE_URL}/forgot_password`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify({ email }),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async verifyOTP(email, otp) {
+    try {
+      const response = await fetch(`${BASE_URL}/verify_otp`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify({ email, otp }),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async verifyOTPAndResetPassword(email, otp, newPassword) {
+    try {
+      const response = await fetch(`${BASE_URL}/verify_otp_and_reset`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify({ email, otp, new_password: newPassword }),
+      });
+      return await response.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
   async resetPassword(email, newPassword) {
     try {
       const response = await fetch(`${BASE_URL}/reset_password`, {

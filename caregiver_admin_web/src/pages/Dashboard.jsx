@@ -143,6 +143,10 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     scales: {
       y: {
         beginAtZero: true,
+        ticks: {
+          precision: 0,
+          stepSize: 1,
+        },
         grid: { color: '#E2E8F0' },
       },
       x: {

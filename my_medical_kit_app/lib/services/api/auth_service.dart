@@ -57,13 +57,53 @@ class AuthService {
   }
 
   // ---------------------- Password Reset ----------------------
-  /// Request to reset the password for a user by email.
-  ///
-  /// Parameters:
-  ///   - email: the email address of the account
-  ///   - newPassword: the desired new password (plain text)
-  ///
-  /// Returns a Map with 'success' and either a success message or 'error'.
+  /// Send 6-digit OTP to user's email via Mailtrap
+  Future<Map<String, dynamic>> sendForgotPasswordOTP(String email) async {
+    try {
+      final response = await ApiClient.post(
+        '/forgot_password',
+        body: {'email': email},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint("❌ [API] Send OTP error: $e");
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Verify 6-digit OTP code entered by user
+  Future<Map<String, dynamic>> verifyOTP(String email, String otp) async {
+    try {
+      final response = await ApiClient.post(
+        '/verify_otp',
+        body: {'email': email, 'otp': otp},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint("❌ [API] Verify OTP error: $e");
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Verify OTP and Reset password
+  Future<Map<String, dynamic>> verifyOTPAndResetPassword(
+    String email,
+    String otp,
+    String newPassword,
+  ) async {
+    try {
+      final response = await ApiClient.post(
+        '/verify_otp_and_reset',
+        body: {'email': email, 'otp': otp, 'new_password': newPassword},
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint("❌ [API] Verify OTP & Reset error: $e");
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Legacy direct reset
   Future<Map<String, dynamic>> resetPassword(
     String email,
     String newPassword,

@@ -18,9 +18,13 @@ export default function Login() {
 
   // Forgot Password modal state
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1: Send OTP, 2: Enter OTP, 3: New Password
   const [resetEmail, setResetEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState({ type: '', text: '' });
 
@@ -141,10 +145,58 @@ export default function Login() {
     setLoading(false);
   };
 
+  const handleSendOTP = async (e) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      setResetMessage({ type: 'error', text: 'Please enter your email address.' });
+      return;
+    }
+
+    setResetLoading(true);
+    setResetMessage({ type: '', text: '' });
+
+    try {
+      const result = await apiService.sendForgotPasswordOTP(resetEmail);
+      if (result.success) {
+        setResetStep(2); // Navigate to Step 2: OTP Verification Interface
+        setResetMessage({ type: 'success', text: 'OTP code has been sent! Check your email / Mailtrap inbox.' });
+      } else {
+        setResetMessage({ type: 'error', text: result.message || result.error || 'Email not found.' });
+      }
+    } catch (err) {
+      setResetMessage({ type: 'error', text: 'Network error. Please try again.' });
+    }
+    setResetLoading(false);
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    if (!otpCode) {
+      setResetMessage({ type: 'error', text: 'Please enter the 6-digit OTP code.' });
+      return;
+    }
+
+    setResetLoading(true);
+    setResetMessage({ type: '', text: '' });
+
+    try {
+      const result = await apiService.verifyOTP(resetEmail, otpCode);
+      if (result.success) {
+        setResetStep(3); // Navigate to Step 3: Reset Password Interface
+        setResetMessage({ type: 'success', text: 'OTP verified! You can now set your new password.' });
+      } else {
+        setResetMessage({ type: 'error', text: result.message || result.error || 'Invalid or expired OTP code.' });
+      }
+    } catch (err) {
+      setResetMessage({ type: 'error', text: 'Network error. Please try again.' });
+    }
+    setResetLoading(false);
+  };
+
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (!resetEmail || !newPassword || !confirmPassword) {
-      setResetMessage({ type: 'error', text: 'All fields are required.' });
+    if (!newPassword || !confirmPassword) {
+      setResetMessage({ type: 'error', text: 'Please enter and confirm your new password.' });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -160,19 +212,20 @@ export default function Login() {
     setResetMessage({ type: '', text: '' });
 
     try {
-      const result = await apiService.resetPassword(resetEmail, newPassword);
+      const result = await apiService.verifyOTPAndResetPassword(resetEmail, otpCode, newPassword);
       if (result.success) {
-        setResetMessage({ type: 'success', text: 'Password reset successfully! You can now log in.' });
-        // Optionally close modal after a delay
+        setResetMessage({ type: 'success', text: 'Password updated successfully! Redirecting to login...' });
         setTimeout(() => {
           setShowForgotModal(false);
+          setResetStep(1);
           setResetEmail('');
+          setOtpCode('');
           setNewPassword('');
           setConfirmPassword('');
           setResetMessage({ type: '', text: '' });
         }, 2000);
       } else {
-        setResetMessage({ type: 'error', text: result.error || 'Failed to reset password.' });
+        setResetMessage({ type: 'error', text: result.message || result.error || 'Failed to update password.' });
       }
     } catch (err) {
       setResetMessage({ type: 'error', text: 'Network error. Please try again.' });
@@ -393,9 +446,15 @@ export default function Login() {
               <X size={20} />
             </button>
 
-            <h3 style={{ marginBottom: '8px', color: '#2D3142' }}>Reset Password</h3>
+            <h3 style={{ marginBottom: '8px', color: '#2D3142' }}>
+              {resetStep === 1 && 'Reset Password'}
+              {resetStep === 2 && 'Verify OTP Code'}
+              {resetStep === 3 && 'Create New Password'}
+            </h3>
             <p style={{ fontSize: '0.85rem', color: '#6B7280', marginBottom: '20px' }}>
-              Enter your email and a new password.
+              {resetStep === 1 && 'Enter your registered email address to receive a 6-digit OTP code.'}
+              {resetStep === 2 && 'Enter the 6-digit OTP code sent to your Mailtrap inbox.'}
+              {resetStep === 3 && 'OTP code verified! Set your new password below.'}
             </p>
 
             {resetMessage.text && (
@@ -413,59 +472,181 @@ export default function Login() {
               </div>
             )}
 
-            <form onSubmit={handleResetPassword}>
-              <div className="form-group">
-                <label>Email</label>
-                <div className="form-input-wrapper">
-                  <Mail className="form-input-icon" size={18} />
-                  <input
-                    type="email"
-                    placeholder="caregiver@example.com"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    required
-                  />
+            {/* STEP 1: Enter Email */}
+            {resetStep === 1 && (
+              <form onSubmit={handleSendOTP}>
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <div className="form-input-wrapper">
+                    <Mail className="form-input-icon" size={18} />
+                    <input
+                      type="email"
+                      placeholder="caregiver@example.com"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label>New Password</label>
-                <div className="form-input-wrapper">
-                  <Lock className="form-input-icon" size={18} />
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    minLength={6}
-                  />
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={resetLoading}
+                  style={{ width: '100%', padding: '12px', marginTop: '8px' }}
+                >
+                  {resetLoading ? 'Sending OTP Code...' : 'Send OTP Code'}
+                </button>
+              </form>
+            )}
+
+            {/* STEP 2: Verify OTP Interface */}
+            {resetStep === 2 && (
+              <form onSubmit={handleVerifyOTP}>
+                <div className="form-group">
+                  <label>Email</label>
+                  <div className="form-input-wrapper">
+                    <Mail className="form-input-icon" size={18} />
+                    <input
+                      type="email"
+                      value={resetEmail}
+                      disabled
+                      style={{ background: '#F3F4F6', cursor: 'not-allowed' }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label>Confirm Password</label>
-                <div className="form-input-wrapper">
-                  <Lock className="form-input-icon" size={18} />
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
+                <div className="form-group">
+                  <label>6-Digit OTP Code</label>
+                  <div className="form-input-wrapper">
+                    <Lock className="form-input-icon" size={18} />
+                    <input
+                      type="text"
+                      placeholder="e.g. 123456"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={resetLoading}
-                style={{ width: '100%', padding: '12px', marginTop: '8px' }}
-              >
-                {resetLoading ? 'Resetting...' : 'Reset Password'}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={resetLoading}
+                  style={{ width: '100%', padding: '12px', marginTop: '8px' }}
+                >
+                  {resetLoading ? 'Verifying OTP...' : 'Verify OTP Code'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetStep(1);
+                    setResetMessage({ type: '', text: '' });
+                  }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    color: '#6A4C93',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    marginTop: '12px',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Change email address or resend OTP
+                </button>
+              </form>
+            )}
+
+            {/* STEP 3: Reset Password Interface */}
+            {resetStep === 3 && (
+              <form onSubmit={handleResetPassword}>
+                <div className="form-group">
+                  <label>New Password</label>
+                  <div className="form-input-wrapper" style={{ position: 'relative' }}>
+                    <Lock className="form-input-icon" size={18} />
+                    <input
+                      type={showResetNewPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6B7280',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                      }}
+                    >
+                      {showResetNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Confirm Password</label>
+                  <div className="form-input-wrapper" style={{ position: 'relative' }}>
+                    <Lock className="form-input-icon" size={18} />
+                    <input
+                      type={showResetConfirmPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6B7280',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                      }}
+                    >
+                      {showResetConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={resetLoading}
+                  style={{ width: '100%', padding: '12px', marginTop: '8px' }}
+                >
+                  {resetLoading ? 'Updating Password...' : 'Update Password'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}

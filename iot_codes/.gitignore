@@ -1,0 +1,16 @@
+# Sensitive hardware secrets
+secrets.h
+secrets.cpp
+**/secrets.h
+**/secrets.cpp
+!.example
+
+# Build & Compilation outputs
+build/
+.pio/
+.vscode/
+.idea/
+*.elf
+*.bin
+*.hex
+*.DS_Store

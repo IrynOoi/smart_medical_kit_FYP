@@ -5,6 +5,7 @@ import 'package:my_medical_kit_app/theme/colors.dart';
 import 'package:my_medical_kit_app/services/api/patient_service.dart';
 import 'package:my_medical_kit_app/services/api/caregiver_service.dart';
 import 'package:my_medical_kit_app/services/api/prediction_service.dart';
+import 'package:my_medical_kit_app/services/api/api_client.dart';
 import 'package:intl/intl.dart';
 
 class AiAnalyticsPage extends StatefulWidget {
@@ -1004,6 +1005,41 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
     );
   }
 
+  Widget _buildPatientAvatar(Map<String, dynamic> patient, {double radius = 24}) {
+    final photoUrl = patient['profile_photo'];
+    final String fullName = patient['full_name'] ?? '?';
+    final String initial = fullName.isNotEmpty ? fullName[0].toUpperCase() : '?';
+
+    if (photoUrl != null && photoUrl.toString().trim().isNotEmpty) {
+      final String rawUrl = photoUrl.toString().trim();
+      final String imageUrl = rawUrl.startsWith('http')
+          ? rawUrl
+          : '${ApiClient.baseUrl}${rawUrl.startsWith('/') ? '' : '/'}$rawUrl';
+
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.15),
+        backgroundImage: NetworkImage(imageUrl),
+        onBackgroundImageError: (_, __) {
+          debugPrint('Failed to load patient avatar image: $imageUrl');
+        },
+      );
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.15),
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: AppColors.primaryPurple,
+          fontWeight: FontWeight.bold,
+          fontSize: radius * 0.75,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPatientCard(Map<String, dynamic> patient, bool isPredicting) {
     final int pid = patient['patient_id'];
     final AIPrediction? pred = _patientPredictions[pid];
@@ -1034,20 +1070,7 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                // Neutral purple background for the avatar instead of the risk color
-                backgroundColor: AppColors.primaryPurple.withValues(
-                  alpha: 0.15,
-                ),
-                child: Text(
-                  patient['full_name']?[0]?.toUpperCase() ?? '?',
-                  style: const TextStyle(
-                    color: AppColors.primaryPurple,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              _buildPatientAvatar(patient, radius: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
