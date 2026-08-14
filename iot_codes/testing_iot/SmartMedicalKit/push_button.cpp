@@ -112,7 +112,7 @@ void powerOffESP32() {
     Serial.println("🔋 ESP32 Powering OFF...");
     
     // 显示关机消息
-    updateDisplayState("Goodbye", "");
+    updateDisplayState("Sleeping mode...", "");
     delay(500);
     
     // 关闭LED

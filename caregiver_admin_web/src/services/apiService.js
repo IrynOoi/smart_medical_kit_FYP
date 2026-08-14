@@ -1,7 +1,7 @@
 // Central API Service for Caregiver & Admin Portal
 // Communicates with the Flask backend API shared with the Flutter Mobile App
 
-export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://reluctant-scrambled-badge.ngrok-free.dev';
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://preschool-quality-papaya.ngrok-free.dev';
 
 export const extractProfileFilename = (photoPath) => {
   if (!photoPath || typeof photoPath !== 'string') return null;

@@ -14,7 +14,7 @@ import 'package:flutter/foundation.dart';
 class ApiService {
   // The backend base URL (currently using ngrok for development)
   static const String baseUrl =
-      'https://reluctant-scrambled-badge.ngrok-free.dev';
+      'https://preschool-quality-papaya.ngrok-free.dev';
 
   // ==========================================
   // 🔐 AUTHENTICATION ENDPOINTS

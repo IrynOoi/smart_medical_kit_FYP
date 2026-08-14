@@ -22,6 +22,7 @@
 #include "buzzer_control.h"         // Buzzer on/off functions
 #include "display_control.h"        // OLED display functions
 #include "secrets.h"                // WiFi SSID + password (not in repo)
+#include "push_button.h"
 
 // ──────────────────────────────────────────────────────────────
 // Global objects
@@ -29,7 +30,7 @@
 Preferences prefs;  // For saving server URL across reboots
 
 // ── Server & device configuration ────────────────────────────
-String serverBase = "https://reluctant-scrambled-badge.ngrok-free.dev"; 
+String serverBase = "https://preschool-quality-papaya.ngrok-free.dev"; 
 // Default ngrok URL (can be changed at runtime via /config/seturl)
 
 const String deviceSerial = "DISP-1";  // Unique device ID – must match backend
@@ -360,6 +361,7 @@ void setup() {
   setupBuzzer();     // from buzzer_control.h
   setupDisplay();    // from display_control.h
   setupTouch();      // defined below (or in another file)
+  setupPushButton(); 
 
   // ── Connect to WiFi ─────────────────────────────────────────
   connectToWiFi();
@@ -463,6 +465,7 @@ void setup() {
 // ──────────────────────────────────────────────────────────────
 void loop() {
   handleTouch();      // Check if the physical button was pressed
+  handlePushButton();  // ⬅️ 添加这一行
   server.handleClient(); // Process incoming HTTP requests
 
   // 1. WiFi watchdog – reconnect if disconnected
