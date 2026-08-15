@@ -36,46 +36,52 @@ void sendPowerStatusToServer(bool isAwake) {
         return;
     }
     
-    HTTPClient http;
     String url = serverBase + "/device/heartbeat";
-    
-    WiFiClientSecure secureClient;
-    secureClient.setInsecure();
     
     Serial.print("📡 Sending power status to server: ");
     Serial.println(isAwake ? "AWAKE" : "SLEEPING");
     Serial.print("   URL: ");
     Serial.println(url);
     
-    if (http.begin(secureClient, url)) {
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("ngrok-skip-browser-warning", "true");
-        http.setConnectTimeout(5000);
-        http.setTimeout(5000);
+    String deviceIP = WiFi.localIP().toString();
+    long rssi = WiFi.RSSI();
+    String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
+                         "\",\"battery\":100,\"rssi\":" + String(rssi) + 
+                         ",\"ip\":\"" + deviceIP + 
+                         "\",\"is_awake\":" + String(isAwake ? "true" : "false") + "}";
+    
+    Serial.print("   Payload: ");
+    Serial.println(jsonPayload);
+    
+    // Retry up to 3 times to ensure server receives the status before sleep
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        HTTPClient http;
+        WiFiClientSecure secureClient;
+        secureClient.setInsecure();
         
-        String deviceIP = WiFi.localIP().toString();
-        long rssi = WiFi.RSSI();
-        String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
-                             "\",\"battery\":100,\"rssi\":" + String(rssi) + 
-                             ",\"ip\":\"" + deviceIP + 
-                             "\",\"is_awake\":" + String(isAwake ? "true" : "false") + "}";
-        
-        Serial.print("   Payload: ");
-        Serial.println(jsonPayload);
-        
-        int httpCode = http.POST(jsonPayload);
-        if (httpCode == 200) {
-            Serial.println("✅ Power status sent successfully");
+        if (http.begin(secureClient, url)) {
+            http.addHeader("Content-Type", "application/json");
+            http.addHeader("ngrok-skip-browser-warning", "true");
+            http.addHeader("Connection", "close");
+            http.setConnectTimeout(10000);
+            http.setTimeout(10000);
+            http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+            
+            int httpCode = http.POST(jsonPayload);
+            if (httpCode > 0) {
+                Serial.printf("✅ Power status sent successfully (Code: %d)\n", httpCode);
+                http.end();
+                secureClient.stop();
+                return;
+            } else {
+                Serial.printf("❌ Attempt %d failed: %s (Code: %d)\n", attempt, http.errorToString(httpCode).c_str(), httpCode);
+            }
+            http.end();
+            secureClient.stop();
         } else {
-            Serial.print("❌ Failed to send power status. Code: ");
-            Serial.println(httpCode);
-            String response = http.getString();
-            Serial.print("   Response: ");
-            Serial.println(response);
+            Serial.printf("❌ Attempt %d: http.begin() failed for power status\n", attempt);
         }
-        http.end();
-    } else {
-        Serial.println("❌ http.begin() failed for power status");
+        delay(500);
     }
 }
 
@@ -93,8 +99,6 @@ void setupPushButton() {
     if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT0) {
         Serial.println("🔘 Woke up from deep sleep by button press");
         esp32Powered = true;
-        // Send power status to server
-        sendPowerStatusToServer(true);
         updateDisplayState("MedSmart System", "Ready!");
     }
     
