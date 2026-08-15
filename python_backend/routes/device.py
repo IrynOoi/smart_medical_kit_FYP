@@ -419,22 +419,14 @@ def dispense_success():
 # ---------------------- Device Heartbeat (Keep-Alive) ----------------------
 
 @device_bp.route('/device/heartbeat', methods=['POST'])
-
 def device_heartbeat():
-    """
-    Endpoint for the ESP32 to report its status periodically.
-    Expects JSON: device_serial (required), battery (optional), rssi (optional),
-    and IP address (optional; fallback to request.remote_addr).
-    Updates the device's last heartbeat timestamp, battery level, and IP.
-    """
     try:
         data = request.get_json(silent=True) or {}
         device_serial = data.get('device_serial')
         battery = data.get('battery', 100)
         wifi_rssi = data.get('rssi')
+        is_awake = data.get('is_awake', True)  # Default to True if not provided
 
-        # Prefer the ESP32's reported IP (since request.remote_addr might be a proxy IP).
-        # The ESP32 can send its own IP in the payload.
         device_ip = (
             data.get('ip')
             or data.get('device_ip')
@@ -445,7 +437,9 @@ def device_heartbeat():
         if not device_serial:
             return jsonify({"success": False, "message": "device_serial required"}), 400
 
-        success, message = record_device_heartbeat(device_serial, battery, device_ip, wifi_rssi)
+        success, message = record_device_heartbeat(
+            device_serial, battery, device_ip, wifi_rssi, is_awake
+        )
         if not success:
             return jsonify({"success": False, "message": message}), 404
 
@@ -453,7 +447,6 @@ def device_heartbeat():
     except Exception as e:
         print(f"Heartbeat error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 # ---------------------- Test Endpoint for Device (Buzzer) ----------------------
 @device_bp.route('/test_device/<int:user_id>', methods=['POST'])
@@ -616,6 +609,60 @@ def get_prescription_for_device_patient_route(device_id, patient_id):
     try:
         result = get_prescription_for_device_patient_model(device_id, patient_id)
         return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ---------------------- Control ESP32 Power (Sleep/Wake) ----------------------
+@device_bp.route('/device/control/power', methods=['POST'])
+def control_power():
+    """
+    Control ESP32 power state (sleep or wake).
+    Accepts patient_id, device_ip, or device_serial, and action ('sleep'/'wake').
+    """
+    data = request.get_json(silent=True) or {}
+    action = str(data.get('action', '')).lower()
+
+    if action not in ('sleep', 'wake'):
+        return jsonify({"success": False, "message": "action must be 'sleep' or 'wake'"}), 400
+
+    device_ip = resolve_target_device_ip(data)
+    if not device_ip:
+        return jsonify({"success": False, "message": "Device IP not known or device offline"}), 404
+
+    # Map action to ESP32 endpoint
+    endpoint = "/power/sleep" if action == 'sleep' else "/power/wake"
+    status_code, response = _forward_to_esp(device_ip, endpoint)
+    
+    if status_code == 200:
+        return jsonify({"success": True, "message": f"Power {action.upper()} command sent"})
+    else:
+        return jsonify({"success": False, "message": f"ESP32 ({device_ip}) error: {response}"}), 500
+
+
+@device_bp.route('/device/<int:device_id>/power_status', methods=['GET'])
+def get_power_status(device_id):
+    """
+    Get the current power status of the ESP32 device.
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('''
+                SELECT is_awake, last_power_status_update 
+                FROM iot_device 
+                WHERE device_id = %s
+            ''', (device_id,))
+            row = cursor.fetchone()
+            cursor.close()
+        
+        if row:
+            return jsonify({
+                "success": True, 
+                "is_awake": bool(row['is_awake']) if row['is_awake'] is not None else True,
+                "last_update": row['last_power_status_update'].isoformat() if row['last_power_status_update'] else None
+            })
+        else:
+            return jsonify({"success": False, "error": "Device not found"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

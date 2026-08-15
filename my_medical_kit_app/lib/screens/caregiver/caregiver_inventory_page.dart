@@ -198,36 +198,32 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
       _selectedDeviceDetail = {};
     });
 
-    // Fetch device details
-    final device = await DeviceService().getDevice(deviceId);
+    // Fetch device details with power status
+    final device = await DeviceService().getDeviceStatus(deviceId);
     if (device != null && device.isNotEmpty) {
       setState(() {
         _selectedDeviceDetail = device;
-        // 关键点：动态更新输入框为数据库里的 IP
         if (device['last_known_ip'] != null) {
           _testEspIp = device['last_known_ip'];
-          _espIpController.text = _testEspIp; // This updates the UI box
+          _espIpController.text = _testEspIp;
         }
       });
     }
+
     await _loadDeviceInventory(deviceId);
 
-    // Find patient assigned to this device (for control commands)
+    // Find patient assigned to this device
     final patientId = await DeviceService().getPatientIdFromDevice(deviceId);
     if (patientId != null) {
       setState(() {
         _selectedControlPatientId = patientId;
       });
-      // Also fetch device status card for that patient (caregiver view)
       await _fetchDeviceForPatient(patientId);
     } else {
-      // No patient assigned – cannot control
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              '⚠️ No patient assigned to this device. Control disabled.',
-            ),
+            content: Text('⚠️ No patient assigned to this device.'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -646,7 +642,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     if (_testEspIp.isNotEmpty) {
       final url = Uri.parse('http://$_testEspIp$endpoint');
       try {
-        final response = await http.get(url).timeout(const Duration(seconds: 3));
+        final response = await http
+            .get(url)
+            .timeout(const Duration(seconds: 3));
         if (response.statusCode == 200) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -660,7 +658,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           return;
         }
       } catch (e) {
-        debugPrint('Direct ESP32 IP connection failed/timed out: $e. Falling back to server proxy...');
+        debugPrint(
+          'Direct ESP32 IP connection failed/timed out: $e. Falling back to server proxy...',
+        );
       }
     }
 
@@ -669,18 +669,31 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     if (_selectedControlPatientId != null) {
       bool ok = false;
       if (endpoint.contains('/led/')) {
-        ok = await DeviceService().controlLed(_selectedControlPatientId!, endpoint.contains('/on'));
+        ok = await DeviceService().controlLed(
+          _selectedControlPatientId!,
+          endpoint.contains('/on'),
+        );
       } else if (endpoint.contains('/buzzer/')) {
-        ok = await DeviceService().controlBuzzer(_selectedControlPatientId!, endpoint.contains('/on'));
+        ok = await DeviceService().controlBuzzer(
+          _selectedControlPatientId!,
+          endpoint.contains('/on'),
+        );
       } else if (endpoint.contains('/display/')) {
         final cmd = endpoint.replaceAll('/display/', '');
-        ok = await DeviceService().controlDisplay(_selectedControlPatientId!, cmd);
+        ok = await DeviceService().controlDisplay(
+          _selectedControlPatientId!,
+          cmd,
+        );
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ok ? '✅ $successMsg (via Server Proxy)' : '❌ Failed: Hardware unreachable'),
+            content: Text(
+              ok
+                  ? '✅ $successMsg (via Server Proxy)'
+                  : '❌ Failed: Hardware unreachable',
+            ),
             backgroundColor: ok ? Colors.green : Colors.red,
             duration: const Duration(seconds: 2),
           ),
@@ -690,7 +703,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Cannot reach ESP32 at $_testEspIp and no patient selected.'),
+            content: Text(
+              '❌ Cannot reach ESP32 at $_testEspIp and no patient selected.',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -786,6 +801,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               // if (widget.role == 'patient') _buildPatientControls(),
               const SizedBox(height: 24),
               _buildDirectTestSection(),
+              const SizedBox(height: 24),
+              _buildPowerControlSection(),
               const SizedBox(height: 24),
               if (_selectedDeviceId != null) _buildInventorySummary(),
               if (_selectedDeviceId != null) const SizedBox(height: 16),
@@ -1723,6 +1740,183 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     );
   }
 
+  Widget _buildPowerControlSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.power_settings_new, color: Colors.red),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'ESP32 Power Control',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                  // Power status indicator
+                  _buildPowerStatusIndicator(),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedControlPatientId == null
+                          ? null
+                          : () => _controlPower('wake'),
+                      icon: const Icon(Icons.power, size: 18),
+                      label: const Text('WAKE UP'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedControlPatientId == null
+                          ? null
+                          : () => _controlPower('sleep'),
+                      icon: const Icon(Icons.power_off, size: 18),
+                      label: const Text('SLEEP'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPowerStatusIndicator() {
+    final rawAwake = _selectedDeviceDetail['is_awake'];
+    final bool isAwake = rawAwake == true || rawAwake == 1 || rawAwake == null;
+    final color = isAwake ? Colors.green : Colors.red;
+    final statusText = isAwake ? 'Awake' : 'Sleeping';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(isAwake ? Icons.power : Icons.power_off, color: color, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            statusText,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _controlPower(String action) async {
+    if (_selectedControlPatientId == null) return;
+
+    // Show loading
+    setState(() => _isRefreshing = true);
+
+    final success = await DeviceService().controlPower(
+      _selectedControlPatientId!,
+      action,
+    );
+
+    setState(() => _isRefreshing = false);
+
+    if (success) {
+      // Update the device status after power change
+      await _refreshDeviceStatus();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == 'wake'
+                ? '✅ Device waking up...'
+                : '✅ Device going to sleep...',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to send power command'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _refreshDeviceStatus() async {
+    if (_selectedDeviceId == null) return;
+
+    try {
+      final status = await DeviceService().getDeviceStatus(_selectedDeviceId!);
+      if (status != null) {
+        setState(() {
+          _selectedDeviceDetail = status;
+          // Update the IP if it changed
+          if (status['last_known_ip'] != null) {
+            _testEspIp = status['last_known_ip'];
+            _espIpController.text = _testEspIp;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error refreshing device status: $e');
+    }
+  }
+
   Widget _buildDirectMotorButton(String label, String endpoint) {
     return ElevatedButton(
       onPressed: () => _sendDirectCommand(endpoint, label),
@@ -1939,17 +2133,21 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 ),
                 const SizedBox(height: 8),
                 ...prescriptions.map(
-                  (p) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Expanded(flex: 2, child: Text(p['patient_name'])),
+                  (p) {
+                    final currentInv = (p['current_inventory'] as num?)?.toInt() ?? 0;
+                    final threshold = (p['refill_threshold'] as num?)?.toInt() ?? 0;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Expanded(flex: 2, child: Text(p['patient_name'] ?? 'Unknown')),
 
-                        if (p['current_inventory'] <= p['refill_threshold'])
-                          Icon(Icons.warning, color: Colors.orange, size: 16),
-                      ],
-                    ),
-                  ),
+                          if (currentInv <= threshold)
+                            const Icon(Icons.warning, color: Colors.orange, size: 16),
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 const Divider(height: 24),
                 const Text(

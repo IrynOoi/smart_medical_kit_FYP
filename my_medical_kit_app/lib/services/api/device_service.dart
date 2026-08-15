@@ -259,4 +259,57 @@ class DeviceService {
       return false;
     }
   }
+
+  // ---------------------- Control ESP32 Power (Sleep/Wake) ----------------------
+  /// Send power command to the device (sleep or wake).
+  /// Returns true on success.
+  Future<bool> controlPower(int patientId, String action) async {
+    try {
+      final response = await ApiClient.post(
+        '/device/control/power',
+        body: {'patient_id': patientId, 'action': action},
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get the current power status of a device.
+  /// Returns a Map with is_awake and last_update, or null on error.
+  Future<Map<String, dynamic>?> getPowerStatus(int deviceId) async {
+    try {
+      final response = await ApiClient.get('/device/$deviceId/power_status');
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success']) {
+          return jsonResponse;
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get device status including power state
+  Future<Map<String, dynamic>?> getDeviceStatus(int deviceId) async {
+    try {
+      final device = await getDevice(deviceId);
+      if (device != null) {
+        final powerStatus = await getPowerStatus(deviceId);
+        final rawAwake = powerStatus?['is_awake'];
+        final bool isAwake = rawAwake == true || rawAwake == 1 || rawAwake == null;
+        return {
+          ...device,
+          'is_awake': isAwake,
+          'last_power_update': powerStatus?['last_update'],
+        };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }

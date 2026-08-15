@@ -343,7 +343,8 @@ void executeDispense() {
 // ──────────────────────────────────────────────────────────────
 // Arduino setup() – runs once on power‑up
 // ──────────────────────────────────────────────────────────────
-void setup() {
+void setup() 
+{
   Serial.begin(115200);
 
   // ── Load saved server URL from flash (persistent across reboots) ──
@@ -455,9 +456,55 @@ void setup() {
     server.send(200, "application/json", json);
   });
 
+  // ── Power status endpoint ──
+server.on("/power/status", []() {
+  String status = isESP32Powered() ? "on" : "sleeping";
+  String json = "{\"power_state\":\"" + status + "\"}";
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", json);
+});
+
+// ── Power on endpoint ──
+server.on("/power/on", []() {
+  powerOnESP32();
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "text/plain", "Power ON");
+});
+
+// ── Power off endpoint ──
+server.on("/power/off", []() {
+  // Note: This will trigger deep sleep, response may not reach client
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "text/plain", "Powering OFF...");
+  delay(100);
+  powerOffESP32();
+});
+
   // ── Start the HTTP server ──
   server.begin();
+
+  // ── Power control endpoints ──
+server.on("/power/sleep", HTTP_GET, []() {
+  Serial.println("📴 Received sleep command from server");
+  server.send(200, "text/plain", "Going to sleep...");
+  // Small delay to send response before sleeping
+  delay(500);
+  powerOffESP32();
+});
+
+server.on("/power/wake", HTTP_GET, []() {
+  Serial.println("📴 Received wake command from server");
+  server.send(200, "text/plain", "Waking up...");
+  powerOnESP32();
+});
+
+server.on("/power/status", HTTP_GET, []() {
+  String json = "{\"is_awake\":" + String(isESP32Powered() ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+});
   Serial.println("🚀 HTTP server started");
+
+
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -533,7 +580,12 @@ void loop() {
 
         String deviceIP = WiFi.localIP().toString();
         long rssi = WiFi.RSSI(); 
-        String jsonPayload = "{\"device_serial\":\"" + deviceSerial + "\",\"battery\":100,\"rssi\":" + String(rssi) + ",\"ip\":\"" + deviceIP + "\"}";
+        // In the heartbeat section of SmartMedicalKit.ino, add power status
+// In the heartbeat section, modify the jsonPayload
+String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
+                     "\",\"battery\":100,\"rssi\":" + String(rssi) + 
+                     ",\"ip\":\"" + deviceIP + 
+                     "\",\"is_awake\":" + String(isESP32Powered() ? "true" : "false") + "}";
         
         int httpCode = http.POST(jsonPayload);
         if (httpCode > 0) {

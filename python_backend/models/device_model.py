@@ -181,28 +181,26 @@ def delete_device(device_id):
 
 
 # ---------------------- Record Device Heartbeat (Keep-Alive) ----------------------
-def record_device_heartbeat(device_serial, battery_level, ip_address, wifi_rssi=None):
+def record_device_heartbeat(device_serial, battery_level, ip_address, wifi_rssi=None, is_awake=True):
     """
     Update device status upon receiving a heartbeat from the ESP32.
-    Updates battery level, timestamp, IP, and Wi‑Fi RSSI (if provided).
-    Returns (success, message).
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        # Verify the device exists
         cursor.execute('SELECT device_id FROM iot_device WHERE device_serial = %s', (device_serial,))
         device = cursor.fetchone()
 
         if device:
-            # Update all relevant fields
             cursor.execute('''
                 UPDATE iot_device 
                 SET last_reported_battery = %s, 
                     last_battery_report = %s,
                     last_known_ip = %s,
-                    wifi_rssi = %s
+                    wifi_rssi = %s,
+                    is_awake = %s,
+                    last_power_status_update = %s
                 WHERE device_serial = %s
-            ''', (battery_level, datetime.now(), ip_address, wifi_rssi, device_serial))
+            ''', (battery_level, datetime.now(), ip_address, wifi_rssi, is_awake, datetime.now(), device_serial))
             conn.commit()
             cursor.close()
             return True, "Heartbeat logged"
@@ -264,6 +262,41 @@ def get_device_ip_for_patient(patient_id):
         cursor.close()
     return device
 
+# Add these functions to device_model.py
+
+def update_power_status(device_serial, is_awake):
+    """
+    Update the power status of a device (awake/sleeping).
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE iot_device 
+            SET is_awake = %s, last_power_status_update = %s
+            WHERE device_serial = %s
+        ''', (is_awake, datetime.now(), device_serial))
+        conn.commit()
+        affected = cursor.rowcount
+        cursor.close()
+    return affected > 0
+
+
+def get_device_power_status(device_id):
+    """
+    Get the current power status of a device.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT is_awake, last_power_status_update 
+            FROM iot_device 
+            WHERE device_id = %s
+        ''', (device_id,))
+        row = cursor.fetchone()
+        cursor.close()
+    return row
+
+
 
 # ---------------------- Record a Successful Dispense from Device ----------------------
 def record_dispense_from_device(adlog_id, prescription_id):
@@ -316,3 +349,4 @@ def record_dispense_from_device(adlog_id, prescription_id):
     if patient_id:
         sync_patient_caregiver_stock_notifications(patient_id)
     return True, "Success"
+
