@@ -686,9 +686,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     final batteryLevel = _deviceData['battery_level'];
     final isLowBattery = batteryLevel != null && batteryLevel < 20;
     final deviceName = _deviceData['device_serial'] ?? 'Not Connected';
-    final isOnline = _isDeviceOnlineFromTimestamp(
-      _deviceData['last_active_timestamp'],
-    );
+    final rawAwake = _deviceData['is_awake'];
+    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
+    final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(_deviceData['last_active_timestamp']);
+    final isOnline = rawAwakeBool && hasHeartbeat;
 
     return Container(
       width: double.infinity,
@@ -802,9 +803,11 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
             children: [
               _buildDeviceStatCard(
                 'Battery',
-                batteryLevel != null ? '$batteryLevel%' : 'N/A',
-                Icons.battery_charging_full_rounded,
-                isLowBattery ? Colors.redAccent : Colors.greenAccent,
+                isOnline && batteryLevel != null ? '$batteryLevel%' : '--',
+                Icons.battery_std_rounded,
+                isOnline
+                    ? (isLowBattery ? Colors.redAccent : Colors.greenAccent)
+                    : Colors.grey.shade400,
               ),
               _buildDeviceStatCard(
                 'Status',

@@ -809,10 +809,15 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               const SizedBox(height: 24),
               // if (widget.role == 'patient') _buildPatientControls(),
               const SizedBox(height: 24),
-              _buildDirectTestSection(),
-              const SizedBox(height: 24),
-              _buildPowerControlSection(),
-              const SizedBox(height: 24),
+
+              // ✅ Only show Direct Hardware Test section when a device is selected
+              if (_selectedDeviceId != null) ...[
+                _buildDirectTestSection(),
+                const SizedBox(height: 24),
+              ],
+
+              // _buildPowerControlSection(),
+              // const SizedBox(height: 24),
               if (_selectedDeviceId != null) _buildInventorySummary(),
               if (_selectedDeviceId != null) const SizedBox(height: 16),
               if (_selectedDeviceId != null) _buildInventorySection(),
@@ -889,9 +894,12 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     final batteryLevel = displayDevice['battery_level'];
     final isLowBattery = batteryLevel != null && batteryLevel < 20;
     final deviceName = displayDevice['device_serial'] ?? 'Not Connected';
-    final isOnline = _isDeviceOnlineFromTimestamp(
+    final rawAwake = displayDevice['is_awake'] ?? _selectedDeviceDetail['is_awake'];
+    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
+    final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(
       displayDevice['last_active_timestamp'],
     );
+    final isOnline = rawAwakeBool && hasHeartbeat;
 
     return Container(
       width: double.infinity,
@@ -1003,9 +1011,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             children: [
               _buildDeviceStatCard(
                 'Battery',
-                batteryLevel != null ? '$batteryLevel%' : 'N/A',
-                Icons.battery_charging_full_rounded,
-                isLowBattery ? Colors.redAccent : Colors.greenAccent,
+                isOnline && batteryLevel != null ? '$batteryLevel%' : '--',
+                Icons.battery_std_rounded,
+                isOnline
+                    ? (isLowBattery ? Colors.redAccent : Colors.greenAccent)
+                    : Colors.grey.shade400,
               ),
               _buildDeviceStatCard(
                 'Status',
@@ -1502,6 +1512,57 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ===== POWER CONTROL SECTION (MOVED TO TOP) =====
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.power_settings_new, color: Colors.red),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'ESP32 Power Control',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                  // Power status indicator
+                  _buildPowerStatusIndicator(),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedControlPatientId == null
+                          ? null
+                          : () => _controlPower('sleep'),
+                      icon: const Icon(Icons.power_off, size: 18),
+                      label: const Text('SLEEP'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // ===== ORIGINAL DIRECT HARDWARE TEST CONTENT =====
             // Header with IP editor
             Padding(
               padding: const EdgeInsets.all(16),
@@ -1519,15 +1580,6 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       ),
                     ),
                   ),
-
-                  // IconButton(
-                  //   icon: const Icon(
-                  //     Icons.wifi_find,
-                  //     color: AppColors.primaryPurple,
-                  //   ),
-                  //   onPressed: _scanForDevice,
-                  //   tooltip: 'Scan Network',
-                  // ),
                   SizedBox(
                     width: 140,
                     child: TextFormField(
@@ -1556,10 +1608,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          // 修改后（调用 DeviceService）
                           onPressed: () async {
                             if (_selectedControlPatientId == null) return;
-                            // 调用你已经写好的 Service 方法
                             final success = await DeviceService().controlLed(
                               _selectedControlPatientId!,
                               true,
@@ -1793,23 +1843,23 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _selectedControlPatientId == null
-                          ? null
-                          : () => _controlPower('wake'),
-                      icon: const Icon(Icons.power, size: 18),
-                      label: const Text('WAKE UP'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Expanded(
+                  //   child: ElevatedButton.icon(
+                  //     onPressed: _selectedControlPatientId == null
+                  //         ? null
+                  //         : () => _controlPower('wake'),
+                  //     icon: const Icon(Icons.power, size: 18),
+                  //     label: const Text('WAKE UP'),
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: Colors.green,
+                  //       foregroundColor: Colors.white,
+                  //       padding: const EdgeInsets.symmetric(vertical: 12),
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(12),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
@@ -1838,10 +1888,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   }
 
   Widget _buildPowerStatusIndicator() {
-    // Get is_awake from device detail, default to true if not set
     final rawAwake = _selectedDeviceDetail['is_awake'];
-    // Handle both bool and int values from API
-    final bool isAwake = rawAwake == true || rawAwake == 1 || rawAwake == null;
+    final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(
+      _selectedDeviceDetail['last_active_timestamp'],
+    );
+    final bool isAwake = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0 && hasHeartbeat;
     final color = isAwake ? Colors.green : Colors.red;
     final statusText = isAwake ? 'Awake' : 'Sleeping';
 
@@ -1958,14 +2009,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   void _startStatusPolling() {
     _statusPollTimer?.cancel();
-    _statusPollTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (timer) {
-        if (_selectedDeviceId != null && mounted) {
-          _refreshDeviceStatus();
-        }
-      },
-    );
+    _statusPollTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_selectedDeviceId != null && mounted) {
+        _refreshDeviceStatus();
+      }
+    });
   }
 
   Widget _buildDirectMotorButton(String label, String endpoint) {

@@ -26,6 +26,13 @@ def get_device_by_id(device_id):
         ''', (device_id,))
         device = cursor.fetchone()
         cursor.close()
+    if device:
+        if isinstance(device.get('last_active_timestamp'), datetime):
+            device['last_active_timestamp'] = device['last_active_timestamp'].isoformat()
+        if isinstance(device.get('last_power_status_update'), datetime):
+            device['last_power_status_update'] = device['last_power_status_update'].isoformat()
+        raw_awake = device.get('is_awake')
+        device['is_awake'] = False if (raw_awake is False or raw_awake == 0) else True
     return device
 
 
@@ -40,6 +47,13 @@ def get_device_by_serial(device_serial):
         cursor.execute('SELECT * FROM iot_device WHERE device_serial = %s', (device_serial,))
         device = cursor.fetchone()
         cursor.close()
+    if device:
+        if isinstance(device.get('last_battery_report'), datetime):
+            device['last_active_timestamp'] = device['last_battery_report'].isoformat()
+        if isinstance(device.get('last_power_status_update'), datetime):
+            device['last_power_status_update'] = device['last_power_status_update'].isoformat()
+        raw_awake = device.get('is_awake')
+        device['is_awake'] = False if (raw_awake is False or raw_awake == 0) else True
     return device
 
 
@@ -54,7 +68,8 @@ def get_all_devices():
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
             SELECT device_id, device_serial, last_reported_battery AS battery_level,
-                   last_battery_report AS last_active_timestamp, last_known_ip
+                   last_battery_report AS last_active_timestamp, last_known_ip,
+                   COALESCE(is_awake, TRUE) AS is_awake, last_power_status_update
             FROM iot_device
             ORDER BY device_id
         ''')
@@ -65,6 +80,10 @@ def get_all_devices():
     for device in devices:
         if isinstance(device.get('last_active_timestamp'), datetime):
             device['last_active_timestamp'] = device['last_active_timestamp'].isoformat()
+        if isinstance(device.get('last_power_status_update'), datetime):
+            device['last_power_status_update'] = device['last_power_status_update'].isoformat()
+        raw_awake = device.get('is_awake')
+        device['is_awake'] = False if (raw_awake is False or raw_awake == 0) else True
     return devices
 
 

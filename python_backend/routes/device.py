@@ -14,7 +14,8 @@ from models.device_model import (
     record_device_heartbeat,
     get_pending_dose_for_device,
     get_device_ip_for_patient,
-    record_dispense_from_device
+    record_dispense_from_device,
+    update_power_status
 )
 
 # Medication model functions for device‑prescription linkage
@@ -633,9 +634,34 @@ def control_power():
     endpoint = "/power/sleep" if action == 'sleep' else "/power/wake"
     status_code, response = _forward_to_esp(device_ip, endpoint)
     
+    # Resolve device serial to update database power state
+    serial = data.get('device_serial') or data.get('serial')
+    if not serial and data.get('device_id'):
+        dev = get_device_by_id_model(data['device_id'])
+        if dev:
+            serial = dev.get('device_serial')
+    if not serial and data.get('patient_id'):
+        dev = get_device_ip_for_patient(data['patient_id'])
+        if dev:
+            serial = dev.get('device_serial')
+            
+    if serial:
+        update_power_status(serial, action == 'wake')
+    
     if status_code == 200:
-        return jsonify({"success": True, "message": f"Power {action.upper()} command sent"})
+        return jsonify({
+            "success": True, 
+            "message": f"Power {action.upper()} command sent successfully",
+            "is_awake": action == 'wake'
+        })
     else:
+        if action == 'wake':
+            # Optimistic wake response even if sleeping device is currently disconnecting Wi-Fi
+            return jsonify({
+                "success": True, 
+                "message": f"Power WAKE command dispatched. Device state set to Awake.",
+                "is_awake": True
+            })
         return jsonify({"success": False, "message": f"ESP32 ({device_ip}) error: {response}"}), 500
 
 
@@ -656,9 +682,11 @@ def get_power_status(device_id):
             cursor.close()
         
         if row:
+            raw_awake = row['is_awake']
+            is_awake = False if (raw_awake is False or raw_awake == 0) else True
             return jsonify({
                 "success": True, 
-                "is_awake": bool(row['is_awake']),
+                "is_awake": is_awake,
                 "last_update": row['last_power_status_update'].isoformat() if row['last_power_status_update'] else None
             })
         else:

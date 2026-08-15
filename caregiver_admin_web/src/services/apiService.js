@@ -438,6 +438,29 @@ export const apiService = {
     }
   },
 
+  async restockMedication(prescriptionIdOrMedicationId, quantity, setInventory = false, isMedicationId = false) {
+    try {
+      const body = {
+        quantity: Number(quantity),
+        set_inventory: setInventory,
+      };
+      if (isMedicationId) {
+        body.medication_id = prescriptionIdOrMedicationId;
+      } else {
+        body.prescription_id = prescriptionIdOrMedicationId;
+      }
+      const response = await fetch(`${BASE_URL}/restock_medication`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify(body),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      return false;
+    }
+  },
+
   async addPrescription(prescriptionData) {
     try {
       const response = await fetch(`${BASE_URL}/add_prescription`, {
@@ -616,13 +639,91 @@ export const apiService = {
     }
   },
 
-  async controlLed(patientId, turnOn) {
+  async getPowerStatus(deviceId) {
+    try {
+      const response = await fetch(`${BASE_URL}/device/${deviceId}/power_status`, {
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      if (json.success) return json;
+      return null;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  async getDeviceStatus(deviceId) {
+    try {
+      const device = await this.getDevice(deviceId);
+      if (device) {
+        const powerStatus = await this.getPowerStatus(deviceId);
+        const rawAwake = powerStatus ? powerStatus.is_awake : device.is_awake;
+        const isAwake = rawAwake === true || rawAwake === 1 || rawAwake === null || rawAwake === undefined;
+        return {
+          ...device,
+          is_awake: isAwake,
+          last_power_update: powerStatus ? powerStatus.last_update : device.last_power_status_update,
+        };
+      }
+      return null;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  async getDevicePrescriptions(deviceId) {
+    try {
+      const response = await fetch(`${BASE_URL}/device/${deviceId}/prescriptions`, {
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      if (json.success) return json.data;
+      return [];
+    } catch (err) {
+      return [];
+    }
+  },
+
+  async getPatientByDevice(deviceId) {
+    try {
+      const response = await fetch(`${BASE_URL}/device/${deviceId}/patient`, {
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      if (json.success) return json.data;
+      return null;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  async controlPower(target, action) {
+    try {
+      const payload = typeof target === 'object' ? { ...target } : typeof target === 'number' ? { patient_id: target } : { device_serial: target };
+      payload.action = action; // 'sleep' or 'wake'
+
+      const response = await fetch(`${BASE_URL}/device/control/power`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify(payload),
+      });
+      const json = await response.json();
+      return json.success === true;
+    } catch (err) {
+      return false;
+    }
+  },
+
+  async controlLed(target, turnOn) {
     try {
       const isActionOn = (turnOn === true || turnOn === 'ON' || turnOn === 'on');
+      const payload = typeof target === 'object' ? { ...target } : typeof target === 'number' ? { patient_id: target } : { device_serial: target };
+      payload.action = isActionOn ? 'on' : 'off';
+
       const response = await fetch(`${BASE_URL}/device/control/led`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ patient_id: patientId, action: isActionOn ? 'on' : 'off' }),
+        body: JSON.stringify(payload),
       });
       const json = await response.json();
       return json.success === true;
@@ -631,13 +732,16 @@ export const apiService = {
     }
   },
 
-  async controlBuzzer(patientId, turnOn) {
+  async controlBuzzer(target, turnOn) {
     try {
       const isActionOn = (turnOn === true || turnOn === 'ON' || turnOn === 'on');
+      const payload = typeof target === 'object' ? { ...target } : typeof target === 'number' ? { patient_id: target } : { device_serial: target };
+      payload.action = isActionOn ? 'on' : 'off';
+
       const response = await fetch(`${BASE_URL}/device/control/buzzer`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ patient_id: patientId, action: isActionOn ? 'on' : 'off' }),
+        body: JSON.stringify(payload),
       });
       const json = await response.json();
       return json.success === true;
@@ -646,12 +750,15 @@ export const apiService = {
     }
   },
 
-  async controlDisplay(patientId, command) {
+  async controlDisplay(target, command) {
     try {
+      const payload = typeof target === 'object' ? { ...target } : typeof target === 'number' ? { patient_id: target } : { device_serial: target };
+      payload.command = command;
+
       const response = await fetch(`${BASE_URL}/device/control/display`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ patient_id: patientId, command }),
+        body: JSON.stringify(payload),
       });
       const json = await response.json();
       return json.success === true;
@@ -660,12 +767,16 @@ export const apiService = {
     }
   },
 
-  async controlStepper(patientId, motor, action) {
+  async controlStepper(target, motor, action) {
     try {
+      const payload = typeof target === 'object' ? { ...target } : typeof target === 'number' ? { patient_id: target } : { device_serial: target };
+      payload.motor = motor;
+      payload.action = action;
+
       const response = await fetch(`${BASE_URL}/device/control/stepper`, {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ patient_id: patientId, motor, action }),
+        body: JSON.stringify(payload),
       });
       const json = await response.json();
       return json.success === true;
