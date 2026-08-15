@@ -648,7 +648,7 @@ def get_power_status(device_id):
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute('''
-                SELECT is_awake, last_power_status_update 
+                SELECT COALESCE(is_awake, TRUE) as is_awake, last_power_status_update 
                 FROM iot_device 
                 WHERE device_id = %s
             ''', (device_id,))
@@ -658,14 +658,13 @@ def get_power_status(device_id):
         if row:
             return jsonify({
                 "success": True, 
-                "is_awake": bool(row['is_awake']) if row['is_awake'] is not None else True,
+                "is_awake": bool(row['is_awake']),
                 "last_update": row['last_power_status_update'].isoformat() if row['last_power_status_update'] else None
             })
         else:
             return jsonify({"success": False, "error": "Device not found"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 # ---------------------- Mark Pending Dose as Missed (Device Timeout) ----------------------
 @device_bp.route('/device/dispense_missed', methods=['POST'])

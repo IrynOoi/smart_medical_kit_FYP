@@ -5,11 +5,11 @@ from datetime import datetime
 from models.notification_model import sync_patient_caregiver_stock_notifications
 
 
-# ---------------------- Get Device by ID ----------------------
+# Update get_device_by_id function
 def get_device_by_id(device_id):
     """
     Retrieve a single device record by its internal device_id.
-    Returns a dict with device_id, serial, battery_level, last_active_timestamp, and last_known_ip.
+    Returns a dict with device_id, serial, battery_level, last_active_timestamp, last_known_ip, and is_awake.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
@@ -18,7 +18,9 @@ def get_device_by_id(device_id):
                    device_serial, 
                    last_reported_battery AS battery_level, 
                    last_battery_report AS last_active_timestamp, 
-                   last_known_ip
+                   last_known_ip,
+                   COALESCE(is_awake, TRUE) AS is_awake,
+                   last_power_status_update
             FROM iot_device 
             WHERE device_id = %s
         ''', (device_id,))

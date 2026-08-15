@@ -1,6 +1,4 @@
-// ──────────────────────────────────────────────────────────────
 // push_button.h – Push button control for ESP32 power on/off
-// ──────────────────────────────────────────────────────────────
 
 #ifndef PUSH_BUTTON_H
 #define PUSH_BUTTON_H
@@ -27,5 +25,8 @@ void powerOnESP32();
 void powerOffESP32();
 bool isESP32Powered();
 void checkButtonState();
+
+// New function for sending power status to server
+void sendPowerStatusToServer(bool isAwake);
 
 #endif // PUSH_BUTTON_H

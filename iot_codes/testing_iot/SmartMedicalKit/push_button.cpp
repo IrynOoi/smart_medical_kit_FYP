@@ -1,10 +1,17 @@
-// ──────────────────────────────────────────────────────────────
 // push_button.cpp – Push button implementation for ESP32 power control
-// ──────────────────────────────────────────────────────────────
 
 #include "push_button.h"
 #include "esp_sleep.h"
 #include "display_control.h"
+
+// Include WiFi and HTTP libraries
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+
+// Forward declarations for external variables
+extern String serverBase;
+extern const String deviceSerial;
 
 // Button state variables
 static volatile bool buttonState = BUTTON_RELEASED;
@@ -20,29 +27,84 @@ static bool esp32Powered = true;
 #define LOCAL_LED_PIN 18
 
 // ──────────────────────────────────────────────────────────────
+// Send power status to server via heartbeat
+// ──────────────────────────────────────────────────────────────
+void sendPowerStatusToServer(bool isAwake) {
+    // Check if WiFi is connected
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("⚠️ WiFi not connected, cannot send power status");
+        return;
+    }
+    
+    HTTPClient http;
+    String url = serverBase + "/device/heartbeat";
+    
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+    
+    Serial.print("📡 Sending power status to server: ");
+    Serial.println(isAwake ? "AWAKE" : "SLEEPING");
+    Serial.print("   URL: ");
+    Serial.println(url);
+    
+    if (http.begin(secureClient, url)) {
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("ngrok-skip-browser-warning", "true");
+        http.setConnectTimeout(5000);
+        http.setTimeout(5000);
+        
+        String deviceIP = WiFi.localIP().toString();
+        long rssi = WiFi.RSSI();
+        String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
+                             "\",\"battery\":100,\"rssi\":" + String(rssi) + 
+                             ",\"ip\":\"" + deviceIP + 
+                             "\",\"is_awake\":" + String(isAwake ? "true" : "false") + "}";
+        
+        Serial.print("   Payload: ");
+        Serial.println(jsonPayload);
+        
+        int httpCode = http.POST(jsonPayload);
+        if (httpCode == 200) {
+            Serial.println("✅ Power status sent successfully");
+        } else {
+            Serial.print("❌ Failed to send power status. Code: ");
+            Serial.println(httpCode);
+            String response = http.getString();
+            Serial.print("   Response: ");
+            Serial.println(response);
+        }
+        http.end();
+    } else {
+        Serial.println("❌ http.begin() failed for power status");
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
 // Setup push button with interrupt
 // ──────────────────────────────────────────────────────────────
 void setupPushButton() {
-    // 使用 INPUT 模式（按钮已有外部上拉）
+    // Use INPUT mode (button has external pull-up)
     pinMode(PUSH_BUTTON_PIN, INPUT);
     pinMode(LOCAL_LED_PIN, OUTPUT);
     digitalWrite(LOCAL_LED_PIN, LOW);
     
-    // 检查是否从深度睡眠唤醒
+    // Check if waking from deep sleep
     esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
     if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT0) {
         Serial.println("🔘 Woke up from deep sleep by button press");
         esp32Powered = true;
+        // Send power status to server
+        sendPowerStatusToServer(true);
         updateDisplayState("MedSmart System", "Ready!");
     }
     
-    // 使用 FALLING 中断（按钮按下时从 HIGH 到 LOW）
-attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_PIN), pushButtonISR, RISING);
+    // Use RISING interrupt (button press goes from LOW to HIGH)
+    attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_PIN), pushButtonISR, RISING);
     
     Serial.println("✅ Push button initialized on D2");
     Serial.println("   Press once: Toggle ESP32 ON/OFF");
     
-    // 打印当前按钮状态
+    // Print current button state
     int initialState = digitalRead(PUSH_BUTTON_PIN);
     Serial.print("   Current button state: ");
     Serial.println(initialState == BUTTON_PRESSED ? "PRESSED" : "RELEASED");
@@ -61,7 +123,7 @@ void IRAM_ATTR pushButtonISR() {
 void handlePushButton() {
     static bool firstRun = true;
     
-    // 首次运行跳过
+    // Skip first run
     if (firstRun) {
         firstRun = false;
         return;
@@ -100,6 +162,10 @@ void togglePower() {
 void powerOnESP32() {
     esp32Powered = true;
     Serial.println("🔋 ESP32 Powered ON");
+    
+    // Send status to server that we're awake
+    sendPowerStatusToServer(true);
+    
     updateDisplayState("MedSmart System", "Ready!");
     digitalWrite(LOCAL_LED_PIN, LOW);
 }
@@ -111,16 +177,20 @@ void powerOffESP32() {
     esp32Powered = false;
     Serial.println("🔋 ESP32 Powering OFF...");
     
-    // 显示关机消息
+    // Send final status to server BEFORE sleeping
+    sendPowerStatusToServer(false);
+    delay(500);
+    
+    // Display sleep message
     updateDisplayState("Sleeping mode...", "");
     delay(500);
     
-    // 关闭LED
+    // Turn off LED
     digitalWrite(LOCAL_LED_PIN, LOW);
     pinMode(LOCAL_LED_PIN, INPUT);
     
-    // 配置唤醒引脚 - 按下时 LOW 唤醒
-esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, HIGH);
+    // Configure wake-up pin - wake on HIGH (button pressed)
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_2, HIGH);
     
     Serial.println("💤 Entering deep sleep...");
     delay(100);
@@ -143,19 +213,19 @@ bool isButtonPressed() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// 轮询检测（修正版）- 添加首次运行跳过
+// Polling detection (corrected version) - skip first run
 // ──────────────────────────────────────────────────────────────
 void checkButtonState() {
     static unsigned long lastCheckTime = 0;
     static bool previousState = BUTTON_RELEASED;
-    static bool firstRun = true;  // 首次运行标志
+    static bool firstRun = true;
     
     if (millis() - lastCheckTime < 50) return;
     lastCheckTime = millis();
     
     int currentState = digitalRead(PUSH_BUTTON_PIN);
     
-    // 首次运行：只记录状态，不执行任何操作
+    // First run: only record state, don't execute any action
     if (firstRun) {
         firstRun = false;
         previousState = currentState;
@@ -164,7 +234,7 @@ void checkButtonState() {
         return;
     }
     
-    // 只有从 RELEASED → PRESSED 才触发（上升沿检测）
+    // Only trigger from RELEASED → PRESSED (rising edge detection)
     if (currentState == BUTTON_PRESSED && previousState == BUTTON_RELEASED) {
         Serial.println("🔘 Button pressed (checkButtonState)");
         delay(50);

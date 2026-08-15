@@ -1,4 +1,5 @@
 // lib/screens/caregiver_inventory_page.dart
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -53,13 +54,21 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   String _testEspIp = "";
   int _selectedTestMotor = 1;
   final TextEditingController _espIpController = TextEditingController();
-
+  Timer? _statusPollTimer;
   @override
   void initState() {
     super.initState();
     _loadData();
     _loadDevices();
     _espIpController.text = _testEspIp;
+    _startStatusPolling();
+  }
+
+  @override
+  void dispose() {
+    _statusPollTimer?.cancel();
+    _espIpController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDevices() async {
@@ -1829,7 +1838,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   }
 
   Widget _buildPowerStatusIndicator() {
+    // Get is_awake from device detail, default to true if not set
     final rawAwake = _selectedDeviceDetail['is_awake'];
+    // Handle both bool and int values from API
     final bool isAwake = rawAwake == true || rawAwake == 1 || rawAwake == null;
     final color = isAwake ? Colors.green : Colors.red;
     final statusText = isAwake ? 'Awake' : 'Sleeping';
@@ -1844,7 +1855,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(isAwake ? Icons.power : Icons.power_off, color: color, size: 16),
+          Icon(
+            isAwake ? Icons.power_settings_new : Icons.power_off,
+            color: color,
+            size: 16,
+          ),
           const SizedBox(width: 6),
           Text(
             statusText,
@@ -1865,6 +1880,13 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     // Show loading
     setState(() => _isRefreshing = true);
 
+    // For WAKE command: Always update UI optimistically
+    if (action == 'wake') {
+      setState(() {
+        _selectedDeviceDetail['is_awake'] = true;
+      });
+    }
+
     final success = await DeviceService().controlPower(
       _selectedControlPatientId!,
       action,
@@ -1872,28 +1894,45 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
     setState(() => _isRefreshing = false);
 
-    if (success) {
-      // Update the device status after power change
-      await _refreshDeviceStatus();
-
+    if (action == 'wake') {
+      // For wake, always show success even if ESP32 didn't respond
+      // because the ESP32 will wake up and send heartbeat
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            action == 'wake'
-                ? '✅ Device waking up...'
-                : '✅ Device going to sleep...',
-          ),
+        const SnackBar(
+          content: Text('✅ Wake command sent. Device will wake up.'),
           backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Failed to send power command'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // Refresh status after a delay to catch the heartbeat
+      Future.delayed(const Duration(seconds: 3), () {
+        _refreshDeviceStatus();
+      });
+    } else if (action == 'sleep') {
+      // For sleep, only show success if command was sent successfully
+      if (success) {
+        setState(() {
+          _selectedDeviceDetail['is_awake'] = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Device going to sleep...'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        // Refresh after a delay
+        Future.delayed(const Duration(seconds: 2), () {
+          _refreshDeviceStatus();
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to send sleep command'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -1915,6 +1954,18 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     } catch (e) {
       debugPrint('Error refreshing device status: $e');
     }
+  }
+
+  void _startStatusPolling() {
+    _statusPollTimer?.cancel();
+    _statusPollTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (timer) {
+        if (_selectedDeviceId != null && mounted) {
+          _refreshDeviceStatus();
+        }
+      },
+    );
   }
 
   Widget _buildDirectMotorButton(String label, String endpoint) {
@@ -2132,23 +2183,30 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                ...prescriptions.map(
-                  (p) {
-                    final currentInv = (p['current_inventory'] as num?)?.toInt() ?? 0;
-                    final threshold = (p['refill_threshold'] as num?)?.toInt() ?? 0;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Expanded(flex: 2, child: Text(p['patient_name'] ?? 'Unknown')),
+                ...prescriptions.map((p) {
+                  final currentInv =
+                      (p['current_inventory'] as num?)?.toInt() ?? 0;
+                  final threshold =
+                      (p['refill_threshold'] as num?)?.toInt() ?? 0;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text(p['patient_name'] ?? 'Unknown'),
+                        ),
 
-                          if (currentInv <= threshold)
-                            const Icon(Icons.warning, color: Colors.orange, size: 16),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        if (currentInv <= threshold)
+                          const Icon(
+                            Icons.warning,
+                            color: Colors.orange,
+                            size: 16,
+                          ),
+                      ],
+                    ),
+                  );
+                }),
                 const Divider(height: 24),
                 const Text(
                   'Restock this medication for all patients:',

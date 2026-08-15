@@ -33,7 +33,7 @@ Preferences prefs;  // For saving server URL across reboots
 String serverBase = "https://preschool-quality-papaya.ngrok-free.dev"; 
 // Default ngrok URL (can be changed at runtime via /config/seturl)
 
-const String deviceSerial = "DISP-1";  // Unique device ID – must match backend
+extern const String deviceSerial = "DISP-1";  // Unique device ID – must match backend
 
 WebServer server(80);                  // HTTP server on port 80
 const int ledPin = 18;                 // On‑board LED (for testing)
@@ -76,6 +76,7 @@ void clearPendingDoses();
 bool enqueuePendingDose(int motorSlot, int adlogId, int prescriptionId, const String& medName, bool isEmpty);
 void markAllPendingAsMissed();
 void showFirstPendingWarning();
+void sendPowerStatusToServer(bool isAwake); 
 
 // ──────────────────────────────────────────────────────────────
 // Helper: Build full URL from a path
@@ -366,7 +367,13 @@ void setup()
 
   // ── Connect to WiFi ─────────────────────────────────────────
   connectToWiFi();
-
+ // Check if waking from deep sleep
+    esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+    if (wakeup_cause == ESP_SLEEP_WAKEUP_EXT0) {
+        Serial.println("🔘 Woke up from deep sleep by button press");
+        // Send immediate heartbeat to update status
+        sendPowerStatusToServer(true);
+    }
   // ── Set up HTTP server endpoints ────────────────────────────
   
   // LED control (for testing)
@@ -498,19 +505,13 @@ server.on("/power/wake", HTTP_GET, []() {
   powerOnESP32();
 });
 
-server.on("/power/status", HTTP_GET, []() {
-  String json = "{\"is_awake\":" + String(isESP32Powered() ? "true" : "false") + "}";
-  server.send(200, "application/json", json);
-});
-  Serial.println("🚀 HTTP server started");
-
-
 }
 
 // ──────────────────────────────────────────────────────────────
 // Arduino loop() – runs continuously
 // ──────────────────────────────────────────────────────────────
-void loop() {
+void loop() 
+{
   handleTouch();      // Check if the physical button was pressed
   handlePushButton();  // ⬅️ 添加这一行
   server.handleClient(); // Process incoming HTTP requests
