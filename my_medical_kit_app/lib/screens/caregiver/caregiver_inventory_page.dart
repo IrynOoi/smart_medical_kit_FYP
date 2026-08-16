@@ -2477,7 +2477,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                             ),
                           ),
                           Text(
-                            'Threshold: $threshold',
+                            'Min pill to refill: $threshold',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey.shade500,

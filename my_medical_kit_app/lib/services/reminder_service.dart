@@ -529,7 +529,7 @@ class ReminderService {
         : 'Medicine Low Stock';
     final body = type == 'OUT_OF_STOCK'
         ? '$medicationName for $patientName is out of stock. Please restock immediately.'
-        : '$medicationName for $patientName is running low. $currentInventory left, threshold $refillThreshold.';
+        : '$medicationName for $patientName is running low. $currentInventory left (minimum pill to refill: $refillThreshold).';
 
     await _notifications.show(
       _caregiverStockNotificationId(alert),

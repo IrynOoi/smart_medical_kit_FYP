@@ -298,7 +298,7 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
   //                       ),
   //                     ),
   //                     Text(
-  //                       'Threshold: ${alert['refill_threshold']}',
+  //                       'Min pill to refill: ${alert['refill_threshold']}',
   //                       style: const TextStyle(
   //                         fontSize: 11,
   //                         color: Colors.grey,

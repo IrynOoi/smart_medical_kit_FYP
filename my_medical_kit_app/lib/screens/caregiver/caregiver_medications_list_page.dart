@@ -159,13 +159,13 @@ class CaregiverMedicationsListPageState
                   TextFormField(
                     controller: thresholdController,
                     decoration: _inputDecoration(
-                      'Refill Threshold *',
+                      'Minimum Pill to Refill *',
                       Icons.warning_amber,
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     validator: (v) => v == null || v.trim().isEmpty
-                        ? 'Threshold is required'
+                        ? 'Minimum pill to refill is required'
                         : null,
                   ),
                   const SizedBox(height: 16),
@@ -352,7 +352,7 @@ class CaregiverMedicationsListPageState
                   TextFormField(
                     controller: thresholdController,
                     decoration: _inputDecoration(
-                      'Refill Threshold *',
+                      'Minimum Pill to Refill *',
                       Icons.warning_amber,
                     ),
                     keyboardType: TextInputType.number,

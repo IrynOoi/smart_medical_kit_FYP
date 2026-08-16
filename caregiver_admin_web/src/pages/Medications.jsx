@@ -320,7 +320,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                         <strong style={{ color: isEmpty ? '#DC2626' : isLow ? '#B45309' : '#10B981' }}>{stock} pills</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748B' }}>Refill Threshold:</span>
+                        <span style={{ color: '#64748B' }}>Minimum Pill to Refill:</span>
                         <strong>{threshold} pills</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -406,7 +406,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                     />
                   </div>
                   <div>
-                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Refill Threshold *</label>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Minimum Pill to Refill *</label>
                     <input
                       type="number"
                       required
@@ -514,7 +514,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                     />
                   </div>
                   <div>
-                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Refill Threshold *</label>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Minimum Pill to Refill *</label>
                     <input
                       type="number"
                       required

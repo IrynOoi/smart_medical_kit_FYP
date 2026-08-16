@@ -524,7 +524,7 @@ class _CaregiverNotificationsPageState
                   ),
                   _stockChip(
                     icon: Icons.low_priority_rounded,
-                    label: 'Threshold: $refillThreshold',
+                    label: 'Min Pill to Refill: $refillThreshold',
                     foreground: AppColors.primaryPurple,
                     background: AppColors.primaryPurple.withOpacity(0.1),
                   ),
@@ -552,7 +552,7 @@ class _CaregiverNotificationsPageState
                       child: Text(
                         isOutOfStock
                             ? 'Immediate restock needed. No tablet is available for this medicine.'
-                            : 'Refill soon. Only $currentInventory tablet(s) left before the threshold of $refillThreshold.',
+                            : 'Refill soon. Only $currentInventory tablet(s) left (minimum pill to refill: $refillThreshold).',
                         style: TextStyle(
                           color: isOutOfStock
                               ? Colors.red.shade800

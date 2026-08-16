@@ -390,7 +390,7 @@ export default function Header({ title }) {
                           <span style={{ fontSize: '0.76rem', fontWeight: '700', color: isOutOfStock ? '#991B1B' : '#92400E' }}>
                             {isOutOfStock
                               ? 'Immediate restock needed. No tablet is available for this medicine.'
-                              : 'Refill soon. Medicine stock is running low near threshold.'}
+                              : 'Refill soon. Medicine stock is running low near the minimum pill to refill.'}
                           </span>
                         </div>
                       )}

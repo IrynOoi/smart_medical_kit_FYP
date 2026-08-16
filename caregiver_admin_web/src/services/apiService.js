@@ -501,21 +501,6 @@ export const apiService = {
     }
   },
 
-  async restockMedication(prescriptionId, quantity, setInventory = true) {
-    try {
-      const response = await fetch(`${BASE_URL}/restock_medication`, {
-        method: 'POST',
-        headers: getHeaders(true),
-        body: JSON.stringify({ prescription_id: prescriptionId, quantity, set_inventory: setInventory }),
-      });
-      const json = await response.json();
-      return json.success === true;
-    } catch (err) {
-      console.error('Error restocking medication:', err);
-      return false;
-    }
-  },
-
   // ==========================================
   // 🤖 AI ANALYTICS & PREDICTIONS
   // ==========================================
