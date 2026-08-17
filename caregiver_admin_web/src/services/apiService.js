@@ -778,9 +778,9 @@ export const apiService = {
         body: JSON.stringify({ device_serial: serial, last_known_ip: ip, battery }),
       });
       const json = await response.json();
-      return json.success === true;
+      return json;
     } catch (err) {
-      return false;
+      return { success: false, message: err.message };
     }
   },
 
@@ -792,9 +792,9 @@ export const apiService = {
         body: JSON.stringify({ device_serial: serial }),
       });
       const json = await response.json();
-      return json.success === true;
+      return json;
     } catch (err) {
-      return false;
+      return { success: false, message: err.message };
     }
   },
 

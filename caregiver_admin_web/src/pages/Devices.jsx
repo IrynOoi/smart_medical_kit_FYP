@@ -116,7 +116,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     (devicePrescriptions || []).forEach((item) => {
       const slotNum = item.motor_slot || 1;
       const slotKey = `slot_${slotNum}_med_${item.medication_id || item.medication_name}`;
-      
+
       if (!groups[slotKey]) {
         groups[slotKey] = {
           key: slotKey,
@@ -358,8 +358,8 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
       action === 'forward'
         ? '360° Forward'
         : action === 'backward'
-        ? '360° Backward'
-        : `${action}°`;
+          ? '360° Backward'
+          : `${action}°`;
     addLog(`Triggering Stepper Motor #${motorNum} (${actionDesc})...`);
     const ok = await apiService.controlStepper(target, motorNum, action);
     if (ok) {
@@ -477,18 +477,18 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   const currentDev = selectedDeviceDetail || {};
   const currentSerial = currentDev.device_serial || (selectedDeviceId ? `DISP-${selectedDeviceId}` : 'No Device Selected');
   const batteryLevel = currentDev.battery_level ?? currentDev.battery ?? null;
-  
+
   // Power & Online Logic:
   // A device is ONLY Online if it has recent heartbeat (<24h) AND is not explicitly sleeping
   const hasHeartbeat = isDeviceOnline(currentDev.last_active_timestamp);
   const rawAwake = currentDev.is_awake;
   const isAwakeExplicit = !(rawAwake === false || rawAwake === 0);
-  
+
   // If the device is offline / no heartbeat (e.g. 19d ago), it cannot be Awake
   const isOnline = hasHeartbeat && isAwakeExplicit;
   const isAwake = isOnline;
   const isLowBattery = isOnline && batteryLevel !== null && batteryLevel < 20;
-  
+
   const showSpinner = loading || isRefreshing;
 
   return (
@@ -504,7 +504,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
       )}
 
       <div style={{ opacity: showSpinner ? 0.35 : 1, transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        
+
         {/* ========================================================================= */}
         {/* 1. HERO DEVICE HEADER & OVERVIEW CARD (MATCHING FLUTTER APP DESIGN)       */}
         {/* ========================================================================= */}
@@ -730,18 +730,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
           {/* Action Buttons Right Side */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {selectedDeviceDetail && (
-              <button
-                className="btn btn-outline"
-                onClick={() => handleOpenEditModal(selectedDeviceDetail)}
-                style={{ padding: '9px 14px', fontSize: '0.85rem' }}
-                title="Edit Device Serial"
-              >
-                <Edit size={16} />
-                <span>Edit Serial</span>
-              </button>
-            )}
-
             <button
               className="btn btn-outline"
               onClick={() => fetchAllDevices(true)}
@@ -798,7 +786,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                   ESP32 Power Control & Sleep Management
                 </h3>
                 <p style={{ fontSize: '0.82rem', color: '#64748B', marginTop: '2px' }}>
-                  Remotely toggle deep-sleep mode on <strong>{currentSerial}</strong> to conserve battery or wake it for scheduled dispensing.
+                  Remotely toggle deep-sleep mode on <strong>{currentSerial}</strong> to conserve battery power.
                 </p>
               </div>
             </div>
@@ -849,32 +837,11 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
               <span style={{ fontSize: '0.84rem', color: '#475569' }}>
                 {isAwake
                   ? 'Device is currently awake and actively connected for medication doses and diagnostics.'
-                  : 'Device is in low-power sleep state (Offline). Click WAKE UP to re-enable Wi-Fi and motor operations.'}
+                  : 'Device is in low-power sleep state (Offline).'}
               </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {/* Wake Up Button */}
-              <button
-                className="btn"
-                onClick={() => handlePowerControl('wake')}
-                disabled={powerActionLoading || !selectedDeviceId}
-                style={{
-                  background: isAwake ? '#F1F5F9' : '#16A34A',
-                  color: isAwake ? '#94A3B8' : 'white',
-                  border: isAwake ? '1px solid #CBD5E1' : 'none',
-                  padding: '10px 20px',
-                  fontWeight: 700,
-                  fontSize: '0.9rem',
-                  borderRadius: '10px',
-                  boxShadow: isAwake ? 'none' : '0 4px 12px rgba(22, 163, 74, 0.25)',
-                  cursor: powerActionLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {powerActionLoading ? <Loader2 size={16} className="spinner" /> : <Zap size={16} />}
-                <span>WAKE UP</span>
-              </button>
-
               {/* Sleep Button */}
               <button
                 className="btn"
@@ -1155,6 +1122,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
                   <button
+                    type="button"
                     className="btn btn-outline"
                     onClick={(e) => handleDisplaySend(e, 'Hello World')}
                     style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'white' }}
@@ -1162,6 +1130,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     Preset: "Hello World"
                   </button>
                   <button
+                    type="button"
                     className="btn btn-outline"
                     onClick={(e) => handleDisplaySend(e, 'MEDKIT READY')}
                     style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'white' }}
@@ -1169,6 +1138,15 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     Preset: "Ready"
                   </button>
                   <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={(e) => handleDisplaySend(e, 'sv')}
+                    style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'white' }}
+                  >
+                    Preset: "Supervisor"
+                  </button>
+                  <button
+                    type="button"
                     className="btn btn-outline"
                     onClick={(e) => handleDisplaySend(e, 'CLEAR')}
                     style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'white' }}
@@ -1308,10 +1286,10 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                       color: log.includes('SUCCESS')
                         ? '#4ADE80'
                         : log.includes('FAILED') || log.includes('ERROR')
-                        ? '#F87171'
-                        : log.includes('WARNING')
-                        ? '#FBBF24'
-                        : '#38BDF8',
+                          ? '#F87171'
+                          : log.includes('WARNING')
+                            ? '#FBBF24'
+                            : '#38BDF8',
                       wordBreak: 'break-word',
                     }}
                   >
@@ -1358,7 +1336,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     const isSelected = (selectedDeviceId === devId || selectedDeviceId === String(devId));
                     const effectiveDev = isSelected && selectedDeviceDetail ? { ...device, ...selectedDeviceDetail } : device;
                     const devBatt = effectiveDev.battery_level ?? effectiveDev.battery ?? null;
-                    
+
                     // A device is ONLY Online if it has recent heartbeat (<24h) AND is not explicitly sleeping
                     const devHasHeartbeat = isDeviceOnline(effectiveDev.last_active_timestamp);
                     const devRawAwake = effectiveDev.is_awake;

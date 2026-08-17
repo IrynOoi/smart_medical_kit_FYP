@@ -154,7 +154,7 @@ def control_buzzer():
 def control_display():
     """
     Send a display command or custom text message to the ESP32.
-    Accepts patient_id, device_ip, or device_serial, and command (e.g. 'hello', 'clear', 'sv', or custom text).
+    Accepts patient_id, device_ip, or device_serial, and command (e.g. 'hello', 'clear', 'sv', 'ready', or custom text).
     """
     data = request.get_json(silent=True) or {}
     command = str(data.get('command', '')).strip()
@@ -167,13 +167,26 @@ def control_display():
         return jsonify({"success": False, "message": "Device IP not known or device offline"}), 404
 
     cmd_lower = command.lower()
-    if cmd_lower in ('hello', 'clear', 'sv'):
-        endpoint = f"/display/{cmd_lower}"
+    if cmd_lower in ('hello', 'hello world', 'helloworld', 'hi'):
+        endpoint = "/display/hello"
+    elif cmd_lower in ('clear', 'clearscreen', 'clear screen'):
+        endpoint = "/display/clear"
+    elif cmd_lower in ('sv', 'supervisor', 'supervisor name', 'dr noorrezam'):
+        endpoint = "/display/sv"
+    elif cmd_lower in ('ready', 'medkit ready', 'system ready'):
+        endpoint = "/display/ready"
     else:
         from urllib.parse import quote
         endpoint = f"/display/text?msg={quote(command)}"
 
     status_code, response = _forward_to_esp(device_ip, endpoint)
+    # If /display/ready or /display/text returned 404 (e.g. on older ESP32 firmware before flashing), fallback gracefully
+    if status_code == 404 and endpoint == "/display/ready":
+        status_code, response = _forward_to_esp(device_ip, "/display/hello")
+    elif status_code == 404 and "/display/text" in endpoint:
+        # Fallback to /display/hello on unupdated firmware
+        status_code, response = _forward_to_esp(device_ip, "/display/hello")
+
     if status_code == 200:
         return jsonify({"success": True, "message": f"Display command '{command}' sent"})
     else:
@@ -228,11 +241,11 @@ def update_device(device_id):
     if not new_serial:
         return jsonify({"success": False, "message": "device_serial required"}), 400
 
-    updated = update_device_serial_model(device_id, new_serial)
-    if updated:
-        return jsonify({"success": True, "message": "Device updated"})
+    success, msg = update_device_serial_model(device_id, new_serial)
+    if success:
+        return jsonify({"success": True, "message": msg})
     else:
-        return jsonify({"success": False, "message": "Device not found"}), 404
+        return jsonify({"success": False, "message": msg}), 400
 
 
 # ---------------------- Delete a Device ----------------------

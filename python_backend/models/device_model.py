@@ -154,27 +154,46 @@ def update_device_serial(device_id, new_serial):
     """
     Change the serial number of an existing device.
     - Checks that the new serial is not already used by another device.
+    - If the serial changed, resets telemetry (last_battery_report, ip, is_awake)
+      so the newly renamed device does not inherit the previous hardware's active state.
     Returns (success, message).
     """
     with get_db_connection() as conn:
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         # Ensure the new serial is unique (excluding this device)
         cursor.execute('SELECT device_id FROM iot_device WHERE device_serial = %s AND device_id != %s', (new_serial, device_id))
         if cursor.fetchone():
-            return False, "Serial number already used by another device"
+            return False, f"Device serial '{new_serial}' is already registered to another device."
 
-        # Update the serial
-        cursor.execute('''
-            UPDATE iot_device 
-            SET device_serial = %s
-            WHERE device_id = %s
-        ''', (new_serial, device_id))
-        
-        if cursor.rowcount > 0:
-            conn.commit()
-            return True, "Success"
-        else:
+        # Fetch old serial
+        cursor.execute('SELECT device_serial FROM iot_device WHERE device_id = %s', (device_id,))
+        old_dev = cursor.fetchone()
+        if not old_dev:
             return False, "Device not found"
+        
+        old_serial = old_dev['device_serial']
+        
+        # If the serial actually changed, reset heartbeat telemetry since this is a new identity
+        if old_serial != new_serial:
+            cursor.execute('''
+                UPDATE iot_device 
+                SET device_serial = %s,
+                    last_battery_report = NULL,
+                    last_known_ip = NULL,
+                    is_awake = 0,
+                    last_power_status_update = NULL
+                WHERE device_id = %s
+            ''', (new_serial, device_id))
+        else:
+            cursor.execute('''
+                UPDATE iot_device 
+                SET device_serial = %s
+                WHERE device_id = %s
+            ''', (new_serial, device_id))
+        
+        conn.commit()
+        cursor.close()
+        return True, "Device serial updated successfully."
 
 
 # ---------------------- Delete a Device ----------------------

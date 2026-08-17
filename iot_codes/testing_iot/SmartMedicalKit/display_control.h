@@ -11,6 +11,8 @@ void setupDisplay();
 void handleDisplayHello();
 void handleDisplayClear();
 void handleDisplaySV();
+void handleDisplayReady();
+void handleDisplayText();
 void updateDisplayState(String title, String subtitle);
 
 #endif

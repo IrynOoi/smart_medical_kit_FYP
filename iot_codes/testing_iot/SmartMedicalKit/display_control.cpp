@@ -144,3 +144,45 @@ void handleDisplayClear() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", "OLED Display Cleared");
 }
+
+// ========================================================
+// HTTP handler – displays "System Ready" on the OLED
+// ========================================================
+void handleDisplayReady() {
+  Serial.println("Displaying Medkit Ready");
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0, 10);
+  display.println("Smart Medical Kit");
+  display.setTextSize(2);
+  display.setCursor(0, 30);
+  display.println("READY!");
+  display.display();
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "text/plain", "Medkit Ready displayed");
+}
+
+// ========================================================
+// HTTP handler – displays custom text query (?msg=...)
+// ========================================================
+void handleDisplayText() {
+  if (server.hasArg("msg")) {
+    String msg = server.arg("msg");
+    Serial.println("Displaying Custom Text: " + msg);
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(0, 10);
+    display.println("Message:");
+    display.setTextSize(1);
+    display.setCursor(0, 25);
+    display.println(msg);
+    display.display();
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send(200, "text/plain", "Text displayed: " + msg);
+  } else {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send(400, "text/plain", "Missing msg query parameter");
+  }
+}

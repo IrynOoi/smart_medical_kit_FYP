@@ -394,6 +394,8 @@ void setup()
   server.on("/display/hello",  handleDisplayHello);
   server.on("/display/clear",  handleDisplayClear);
   server.on("/display/sv",     handleDisplaySV);   // Show system info (IP, etc.)
+  server.on("/display/ready",  handleDisplayReady); // Show system ready screen
+  server.on("/display/text",   handleDisplayText);  // Show custom text (?msg=...)
   
   // Stepper motor 1 (slot 1)
   server.on("/stepper/forward",   handleMotorForward);
