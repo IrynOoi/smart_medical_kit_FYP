@@ -225,6 +225,13 @@ def record_device_heartbeat(device_serial, battery_level, ip_address, wifi_rssi=
     """
     Update device status upon receiving a heartbeat from the ESP32.
     """
+    # Sanitize and clamp battery level between 0 and 100
+    if battery_level is not None:
+        try:
+            battery_level = max(0, min(100, int(round(float(battery_level)))))
+        except (ValueError, TypeError):
+            battery_level = 100
+
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('SELECT device_id FROM iot_device WHERE device_serial = %s', (device_serial,))

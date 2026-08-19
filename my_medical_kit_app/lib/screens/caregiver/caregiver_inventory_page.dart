@@ -282,7 +282,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             ? device
             : {
                 'device_serial': 'Not connected',
-                'battery_level': 0,
+                'battery_level': null,
                 'last_active_timestamp': null,
               };
       });
@@ -291,7 +291,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
       setState(() {
         _selectedPatientDevice = {
           'device_serial': 'Error',
-          'battery_level': 0,
+          'battery_level': null,
           'last_active_timestamp': null,
         };
       });
@@ -740,21 +740,39 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     }
   }
 
+  String _formatLastActive(dynamic timestamp) {
+    if (timestamp == null || timestamp.toString().isEmpty) return 'Never';
+    try {
+      final dateTime = DateTime.tryParse(timestamp.toString());
+      if (dateTime == null) return 'Never';
+      final now = DateTime.now();
+      final diff = now.difference(dateTime);
+      if (diff.inDays > 0) return '${diff.inDays}d ago';
+      if (diff.inHours > 0) return '${diff.inHours}h ago';
+      if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+      return 'Just now';
+    } catch (_) {
+      return 'Unknown';
+    }
+  }
+
   bool _isDeviceOnline() {
     final lastActive = _deviceData['last_active_timestamp'];
     if (lastActive == null) return false;
     try {
-      final last = DateTime.parse(lastActive);
+      final last = DateTime.tryParse(lastActive.toString());
+      if (last == null) return false;
       return DateTime.now().difference(last).inHours < _onlineThresholdHours;
     } catch (_) {
       return false;
     }
   }
 
-  bool _isDeviceOnlineFromTimestamp(String? timestamp) {
-    if (timestamp == null) return false;
+  bool _isDeviceOnlineFromTimestamp(dynamic timestamp) {
+    if (timestamp == null || timestamp.toString().isEmpty) return false;
     try {
-      final last = DateTime.parse(timestamp);
+      final last = DateTime.tryParse(timestamp.toString());
+      if (last == null) return false;
       return DateTime.now().difference(last).inHours < _onlineThresholdHours;
     } catch (_) {
       return false;
@@ -891,15 +909,28 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         ? _selectedDeviceDetail
         : _deviceData;
 
-    final batteryLevel = displayDevice['battery_level'];
-    final isLowBattery = batteryLevel != null && batteryLevel < 20;
+    final rawBatt = displayDevice['battery_level'] ?? displayDevice['battery'];
+    final int? batteryLevel = rawBatt != null ? (rawBatt as num).toInt() : null;
     final deviceName = displayDevice['device_serial'] ?? 'Not Connected';
     final rawAwake = displayDevice['is_awake'] ?? _selectedDeviceDetail['is_awake'];
-    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
+    final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
     final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(
       displayDevice['last_active_timestamp'],
     );
     final isOnline = rawAwakeBool && hasHeartbeat;
+    final isLowBattery = isOnline && batteryLevel != null && batteryLevel < 20;
+
+    // Multi-tier battery color matching web app (>=50% green, 20-49% amber, <20% red)
+    Color batteryColor;
+    if (!isOnline || batteryLevel == null) {
+      batteryColor = Colors.grey.shade400;
+    } else if (batteryLevel >= 50) {
+      batteryColor = const Color(0xFF34D399); // Emerald Green
+    } else if (batteryLevel >= 20) {
+      batteryColor = const Color(0xFFFBBF24); // Amber / Yellow
+    } else {
+      batteryColor = const Color(0xFFF87171); // Red
+    }
 
     return Container(
       width: double.infinity,
@@ -1010,12 +1041,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildDeviceStatCard(
-                'Battery',
+                isLowBattery ? '⚠️ Low Battery' : 'Battery',
                 isOnline && batteryLevel != null ? '$batteryLevel%' : '--',
                 Icons.battery_std_rounded,
-                isOnline
-                    ? (isLowBattery ? Colors.redAccent : Colors.greenAccent)
-                    : Colors.grey.shade400,
+                batteryColor,
               ),
               _buildDeviceStatCard(
                 'Status',
@@ -1257,9 +1286,25 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Widget _buildDeviceStatusCard() {
     final serial = _selectedPatientDevice['device_serial'] ?? 'Unknown';
-    final battery = _selectedPatientDevice['battery_level'];
+    final rawBatt = _selectedPatientDevice['battery_level'] ?? _selectedPatientDevice['battery'];
+    final int? battery = rawBatt != null ? (rawBatt as num).toInt() : null;
     final lastActive = _selectedPatientDevice['last_active_timestamp'];
-    final isOnline = _isDeviceOnlineFromTimestamp(lastActive);
+    final rawAwake = _selectedPatientDevice['is_awake'];
+    final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
+    final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(lastActive);
+    final isOnline = rawAwakeBool && hasHeartbeat;
+    final isLowBattery = isOnline && battery != null && battery < 20;
+
+    Color batteryColor;
+    if (!isOnline || battery == null) {
+      batteryColor = Colors.grey.shade400;
+    } else if (battery >= 50) {
+      batteryColor = const Color(0xFF34D399); // Emerald Green
+    } else if (battery >= 20) {
+      batteryColor = const Color(0xFFFBBF24); // Amber / Yellow
+    } else {
+      batteryColor = const Color(0xFFF87171); // Red
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1355,18 +1400,16 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                         Icon(
                           Icons.battery_std,
                           size: 16,
-                          color: battery != null && battery < 20
-                              ? Colors.red
-                              : Colors.green,
+                          color: batteryColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          battery != null ? '$battery%' : 'N/A',
+                          isOnline && battery != null ? '$battery%' : '--',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: battery != null && battery < 20
+                            color: isLowBattery
                                 ? Colors.red
-                                : Colors.black87,
+                                : (!isOnline || battery == null ? Colors.grey : Colors.black87),
                           ),
                         ),
                       ],
@@ -1889,10 +1932,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Widget _buildPowerStatusIndicator() {
     final rawAwake = _selectedDeviceDetail['is_awake'];
+    final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
     final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(
       _selectedDeviceDetail['last_active_timestamp'],
     );
-    final bool isAwake = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0 && hasHeartbeat;
+    final bool isAwake = rawAwakeBool && hasHeartbeat;
     final color = isAwake ? Colors.green : Colors.red;
     final statusText = isAwake ? 'Awake' : 'Sleeping';
 

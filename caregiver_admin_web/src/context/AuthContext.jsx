@@ -12,7 +12,11 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const savedUser = localStorage.getItem('caregiver_admin_user');
+        // Clear any old legacy localStorage persistence so the web app does not auto-sign-in across browser sessions
+        localStorage.removeItem('caregiver_admin_user');
+
+        // Use sessionStorage so the login session only lasts for the active browser session
+        const savedUser = sessionStorage.getItem('caregiver_admin_user');
         if (savedUser) {
           const parsed = JSON.parse(savedUser);
           setUser(parsed);
@@ -24,7 +28,7 @@ export const AuthProvider = ({ children }) => {
             if (res && res.success && res.data) {
               const merged = { ...parsed, ...res.data };
               setUser(merged);
-              localStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
+              sessionStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
             }
           }
         }
@@ -40,7 +44,7 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (newUserData) => {
     setUser((prev) => {
       const updated = { ...(prev || {}), ...newUserData };
-      localStorage.setItem('caregiver_admin_user', JSON.stringify(updated));
+      sessionStorage.setItem('caregiver_admin_user', JSON.stringify(updated));
       return updated;
     });
   };
@@ -53,7 +57,7 @@ export const AuthProvider = ({ children }) => {
       if (response && response.success && (response.data || response.user)) {
         const userData = response.data || response.user;
         setUser(userData);
-        localStorage.setItem('caregiver_admin_user', JSON.stringify(userData));
+        sessionStorage.setItem('caregiver_admin_user', JSON.stringify(userData));
 
         // Fetch complete caregiver details if available
         const cid = userData.caregiver_id || userData.id || userData.user_id;
@@ -63,7 +67,7 @@ export const AuthProvider = ({ children }) => {
             if (profileRes && profileRes.success && profileRes.data) {
               const merged = { ...userData, ...profileRes.data };
               setUser(merged);
-              localStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
+              sessionStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
             }
           } catch (e) {
             console.error('Error fetching initial caregiver profile:', e);
@@ -88,6 +92,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
+    sessionStorage.removeItem('caregiver_admin_user');
     localStorage.removeItem('caregiver_admin_user');
   };
 

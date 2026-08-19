@@ -1083,16 +1083,43 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                         fontSize: 16,
                       ),
                     ),
-                    if (patient['device_serial'] != null)
-                      Text(
-                        'Device: ${patient['device_serial']} • Battery: ${patient['battery_level'] ?? 'N/A'}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: (patient['battery_level'] ?? 100) < 20
-                              ? Colors.red
-                              : Colors.grey.shade600,
-                        ),
-                      ),
+                    if (patient['device_serial'] != null && patient['device_serial'].toString().isNotEmpty)
+                      Builder(builder: (context) {
+                        final rawBatt = patient['battery_level'] ?? patient['battery'];
+                        final int? battery = rawBatt != null ? (rawBatt as num).toInt() : null;
+                        final rawAwake = patient['is_awake'];
+                        final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
+                        final rawTime = patient['last_active_timestamp'];
+                        bool isOnline = false;
+                        if (rawTime != null) {
+                          final dt = DateTime.tryParse(rawTime.toString());
+                          if (dt != null && DateTime.now().difference(dt).inHours < 24 && rawAwakeBool) {
+                            isOnline = true;
+                          }
+                        }
+                        final isLowBattery = isOnline && battery != null && battery < 20;
+                        final String batteryStr = isOnline && battery != null ? '$battery%' : '--';
+
+                        Color textColor;
+                        if (!isOnline || battery == null) {
+                          textColor = Colors.grey.shade600;
+                        } else if (battery >= 50) {
+                          textColor = const Color(0xFF10B981);
+                        } else if (battery >= 20) {
+                          textColor = const Color(0xFFF59E0B);
+                        } else {
+                          textColor = const Color(0xFFEF4444);
+                        }
+
+                        return Text(
+                          'Device: ${patient['device_serial']} • Battery: $batteryStr',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isLowBattery ? FontWeight.bold : FontWeight.normal,
+                            color: isLowBattery ? Colors.red : textColor,
+                          ),
+                        );
+                      }),
                     const SizedBox(height: 6),
                     // ✨ NEW: Risk Label injected directly onto the patient card
                     if (pred != null)
@@ -1701,12 +1728,24 @@ class _PatientDetailPage extends StatelessWidget {
                   'Device Serial',
                   patient['device_serial'] ?? 'Not paired',
                 ),
-                _infoRow(
-                  'Battery Level',
-                  patient['battery_level'] != null
-                      ? '${patient['battery_level']}%'
-                      : '—',
-                ),
+                Builder(builder: (context) {
+                  final rawBatt = patient['battery_level'] ?? patient['battery'];
+                  final int? battery = rawBatt != null ? (rawBatt as num).toInt() : null;
+                  final rawAwake = patient['is_awake'];
+                  final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
+                  final rawTime = patient['last_active_timestamp'];
+                  bool isOnline = false;
+                  if (rawTime != null) {
+                    final dt = DateTime.tryParse(rawTime.toString());
+                    if (dt != null && DateTime.now().difference(dt).inHours < 24 && rawAwakeBool) {
+                      isOnline = true;
+                    }
+                  }
+                  return _infoRow(
+                    'Battery Level',
+                    isOnline && battery != null ? '$battery%' : '--',
+                  );
+                }),
                 _infoRow(
                   'Last Active',
                   patient['last_active_timestamp'] != null

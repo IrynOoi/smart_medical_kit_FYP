@@ -23,6 +23,7 @@
 #include "display_control.h"        // OLED display functions
 #include "secrets.h"                // WiFi SSID + password (not in repo)
 #include "push_button.h"
+#include "battery_monitor.h"
 
 // ──────────────────────────────────────────────────────────────
 // Global objects
@@ -364,6 +365,7 @@ void setup()
   setupDisplay();    // from display_control.h
   setupTouch();      // defined below (or in another file)
   setupPushButton(); 
+  setupBatteryMonitor(); // Initialize battery ADC sensing
 
   // ── Connect to WiFi ─────────────────────────────────────────
   connectToWiFi();
@@ -396,6 +398,7 @@ void setup()
   server.on("/display/sv",     handleDisplaySV);   // Show system info (IP, etc.)
   server.on("/display/ready",  handleDisplayReady); // Show system ready screen
   server.on("/display/text",   handleDisplayText);  // Show custom text (?msg=...)
+  server.on("/battery",        handleBatteryStatus); // Returns live battery % & voltage JSON
   
   // Stepper motor 1 (slot 1)
   server.on("/stepper/forward",   handleMotorForward);
@@ -583,12 +586,15 @@ void loop()
 
         String deviceIP = WiFi.localIP().toString();
         long rssi = WiFi.RSSI(); 
-        // In the heartbeat section of SmartMedicalKit.ino, add power status
-// In the heartbeat section, modify the jsonPayload
-String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
-                     "\",\"battery\":100,\"rssi\":" + String(rssi) + 
-                     ",\"ip\":\"" + deviceIP + 
-                     "\",\"is_awake\":" + String(isESP32Powered() ? "true" : "false") + "}";
+        int batteryPct = readBatteryPercentage();
+        float batteryV = readBatteryVoltage();
+        Serial.printf("🔋 Heartbeat Battery: %d%% (%.2fV)\n", batteryPct, batteryV);
+
+        String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
+                             "\",\"battery\":" + String(batteryPct) + 
+                             ",\"rssi\":" + String(rssi) + 
+                             ",\"ip\":\"" + deviceIP + 
+                             "\",\"is_awake\":" + String(isESP32Powered() ? "true" : "false") + "}";
         
         int httpCode = http.POST(jsonPayload);
         if (httpCode > 0) {

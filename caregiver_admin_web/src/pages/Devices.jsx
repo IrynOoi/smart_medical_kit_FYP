@@ -601,14 +601,25 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
           >
             {/* Battery Stat */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: !isOnline || batteryLevel === null ? '#94A3B8' : isLowBattery ? '#F87171' : '#34D399' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: !isOnline || batteryLevel === null
+                  ? '#94A3B8'
+                  : batteryLevel >= 50
+                    ? '#34D399'
+                    : batteryLevel >= 20
+                      ? '#FBBF24'
+                      : '#F87171'
+              }}>
                 <Battery size={24} />
                 <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>
                   {isOnline && batteryLevel !== null ? `${batteryLevel}%` : '--'}
                 </span>
               </div>
               <span style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.75)', marginTop: '4px' }}>
-                Battery Level
+                {isLowBattery ? '⚠️ Low Battery' : 'Battery Level'}
               </span>
             </div>
 

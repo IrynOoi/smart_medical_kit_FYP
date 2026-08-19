@@ -3,6 +3,7 @@
 #include "push_button.h"
 #include "esp_sleep.h"
 #include "display_control.h"
+#include "battery_monitor.h"
 
 // Include WiFi and HTTP libraries
 #include <WiFi.h>
@@ -45,8 +46,10 @@ void sendPowerStatusToServer(bool isAwake) {
     
     String deviceIP = WiFi.localIP().toString();
     long rssi = WiFi.RSSI();
+    int batteryPct = readBatteryPercentage();
     String jsonPayload = "{\"device_serial\":\"" + deviceSerial + 
-                         "\",\"battery\":100,\"rssi\":" + String(rssi) + 
+                         "\",\"battery\":" + String(batteryPct) + 
+                         ",\"rssi\":" + String(rssi) + 
                          ",\"ip\":\"" + deviceIP + 
                          "\",\"is_awake\":" + String(isAwake ? "true" : "false") + "}";
     
