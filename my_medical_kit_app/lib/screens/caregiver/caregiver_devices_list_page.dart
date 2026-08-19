@@ -34,8 +34,6 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
     _fetchDevices(); // Load devices when the screen is first created.
   }
 
-  static const int _onlineThresholdHours = 24;
-
   // Fetches all devices from the backend via the /devices endpoint.
   // If [showLoading] is true, shows the loading indicator; otherwise refreshes silently.
   Future<void> _fetchDevices({bool showLoading = true}) async {
@@ -61,35 +59,6 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
         _error = e.toString();
         _isLoading = false;
       });
-    }
-  }
-
-  /// Formats a timestamp to a human-readable relative time (e.g., "2h ago", "Just now").
-  String _formatLastActive(dynamic timestamp) {
-    if (timestamp == null || timestamp.toString().isEmpty) return 'Never';
-    try {
-      final dateTime = DateTime.tryParse(timestamp.toString());
-      if (dateTime == null) return 'Never';
-      final now = DateTime.now();
-      final diff = now.difference(dateTime);
-      if (diff.inDays > 0) return '${diff.inDays}d ago';
-      if (diff.inHours > 0) return '${diff.inHours}h ago';
-      if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
-      return 'Just now';
-    } catch (_) {
-      return 'Unknown';
-    }
-  }
-
-  /// Determines if the device is considered online based on its last heartbeat.
-  bool _isDeviceOnlineFromTimestamp(dynamic timestamp) {
-    if (timestamp == null || timestamp.toString().isEmpty) return false;
-    try {
-      final last = DateTime.tryParse(timestamp.toString());
-      if (last == null) return false;
-      return DateTime.now().difference(last).inHours < _onlineThresholdHours;
-    } catch (_) {
-      return false;
     }
   }
 
@@ -372,24 +341,10 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                 itemCount: _devices.length,
                 itemBuilder: (_, i) {
                   final d = _devices[i];
-                  final rawBatt = d['battery_level'] ?? d['battery'];
-                  final int? battery = rawBatt != null ? (rawBatt as num).toInt() : null;
-                  final rawAwake = d['is_awake'];
-                  final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
-                  final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(d['last_active_timestamp']);
-                  final isOnline = rawAwakeBool && hasHeartbeat;
-                  final isLowBattery = isOnline && battery != null && battery < 20;
-
-                  Color batteryColor;
-                  if (!isOnline || battery == null) {
-                    batteryColor = Colors.grey;
-                  } else if (battery >= 50) {
-                    batteryColor = const Color(0xFF10B981); // Green
-                  } else if (battery >= 20) {
-                    batteryColor = const Color(0xFFF59E0B); // Amber
-                  } else {
-                    batteryColor = const Color(0xFFEF4444); // Red
-                  }
+                  final battery = d['battery_level'] ?? 100;
+                  final isLowBattery = battery < 20;
+                  // If the device has a last_known_ip, consider it online.
+                  final isOnline = d['last_known_ip'] != null;
 
                   return Card(
                     color: Colors.white,
@@ -398,142 +353,56 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        leading: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: isOnline
-                                ? const Color(0xFFF3E8FF)
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.router,
+                        color: isOnline
+                            ? (isLowBattery ? Colors.orange : Colors.green)
+                            : Colors.grey,
+                        size: 32,
+                      ),
+                      title: Text(
+                        d['device_serial'] ?? 'Unknown',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          Text(
+                            'Battery: $battery%',
+                            style: TextStyle(
+                              color: isLowBattery ? Colors.red : Colors.black87,
+                              fontWeight: isLowBattery
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
                           ),
-                          child: Icon(
-                            Icons.router,
-                            color: isOnline ? AppColors.primaryPurple : Colors.grey,
-                            size: 24,
+                          Text(
+                            isOnline
+                                ? 'IP: ${d['last_known_ip']}'
+                                : 'Status: Offline',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
                           ),
-                        ),
-                        title: Row(
-                          children: [
-                            Text(
-                              d['device_serial'] ?? 'Unknown',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const SizedBox(width: 8),
-                            // Online/Offline Pill Badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isOnline
-                                    ? Colors.green.withValues(alpha: 0.15)
-                                    : Colors.grey.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isOnline ? Colors.green : Colors.grey,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Text(
-                                isOnline ? 'ONLINE' : 'OFFLINE',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isOnline ? Colors.green.shade700 : Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 6),
-                            // Battery & Power State Row
-                            Row(
-                              children: [
-                                Icon(Icons.battery_std, size: 16, color: batteryColor),
-                                const SizedBox(width: 4),
-                                Text(
-                                  isOnline && battery != null ? 'Battery: $battery%' : 'Battery: --',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: isLowBattery
-                                        ? Colors.red
-                                        : (!isOnline || battery == null ? Colors.grey : Colors.black87),
-                                    fontWeight: isLowBattery ? FontWeight.bold : FontWeight.w500,
-                                  ),
-                                ),
-                                if (isLowBattery) ...[
-                                  const SizedBox(width: 4),
-                                  const Text('⚠️', style: TextStyle(fontSize: 11)),
-                                ],
-                                const SizedBox(width: 12),
-                                // Power status badge
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: isOnline
-                                        ? const Color(0xFFDCFCE7)
-                                        : const Color(0xFFFFE4E6),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    isOnline ? '⚡ Awake' : '🌙 Sleeping',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isOnline
-                                          ? const Color(0xFF15803D)
-                                          : const Color(0xFFBE123C),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            // IP & Last Active Row
-                            Row(
-                              children: [
-                                Text(
-                                  d['last_known_ip'] != null && d['last_known_ip'].toString().isNotEmpty
-                                      ? 'IP: ${d['last_known_ip']}'
-                                      : 'IP: 192.168.1.100',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontFamily: 'monospace',
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'Sync: ${_formatLastActive(d['last_active_timestamp'])}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                              onPressed: () => _showEditDialog(d),
-                              tooltip: 'Edit Serial',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                              onPressed: () => _confirmDelete(d),
-                              tooltip: 'Delete Device',
-                            ),
-                          ],
-                        ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Edit button: opens edit serial dialog.
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _showEditDialog(d),
+                          ),
+                          // Delete button: opens confirmation dialog.
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _confirmDelete(d),
+                          ),
+                        ],
                       ),
                     ),
                   );

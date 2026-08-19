@@ -1,7 +1,6 @@
 # device.py - Blueprint for IoT device management, control, and communication
 
 from flask import Blueprint, request, jsonify
-from datetime import datetime, date
 
 # Device model functions for CRUD and operations
 from models.device_model import (
@@ -488,9 +487,7 @@ def get_patient_device(patient_id):
                 SELECT d.device_id, d.device_serial,
                        d.last_reported_battery AS battery_level,
                        d.last_battery_report AS last_active_timestamp,
-                       d.last_known_ip AS last_known_ip,
-                       COALESCE(d.is_awake, TRUE) AS is_awake,
-                       d.last_power_status_update
+                       d.last_known_ip AS last_known_ip
                 FROM prescription_config pc
                 JOIN medications m ON pc.medication_id = m.medication_id
                 JOIN iot_device d ON m.device_id = d.device_id
@@ -502,12 +499,6 @@ def get_patient_device(patient_id):
             cursor.close()
 
         if device:
-            if isinstance(device.get('last_active_timestamp'), (datetime, date)):
-                device['last_active_timestamp'] = device['last_active_timestamp'].isoformat()
-            if isinstance(device.get('last_power_status_update'), (datetime, date)):
-                device['last_power_status_update'] = device['last_power_status_update'].isoformat()
-            raw_awake = device.get('is_awake')
-            device['is_awake'] = False if (raw_awake is False or raw_awake == 0) else True
             return jsonify({"success": True, "data": device})
         else:
             return jsonify({"success": True, "data": {}})

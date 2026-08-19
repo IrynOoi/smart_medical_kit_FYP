@@ -60,7 +60,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
           ? device
           : {
               'device_serial': 'Not connected',
-              'battery_level': null,
+              'battery_level': 0,
               'last_active_timestamp': null,
               'last_known_ip': null,
             };
@@ -269,12 +269,11 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   // ------------------------------------------------------------
   // HELPER METHODS
   // ------------------------------------------------------------
-  /// Formats a timestamp to a human-readable relative time (e.g., "2h ago", "Just now").
-  String _formatLastActive(dynamic timestamp) {
-    if (timestamp == null || timestamp.toString().isEmpty) return 'Never';
+  /// Formats a timestamp to a human-readable relative time (e.g., "2h ago").
+  String _formatLastActive(String? timestamp) {
+    if (timestamp == null) return 'Never';
     try {
-      final dateTime = DateTime.tryParse(timestamp.toString());
-      if (dateTime == null) return 'Never';
+      final dateTime = DateTime.parse(timestamp);
       final now = DateTime.now();
       final diff = now.difference(dateTime);
       if (diff.inDays > 0) return '${diff.inDays}d ago';
@@ -287,11 +286,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   }
 
   /// Determines if the device is considered online based on its last heartbeat.
-  bool _isDeviceOnlineFromTimestamp(dynamic timestamp) {
-    if (timestamp == null || timestamp.toString().isEmpty) return false;
+  bool _isDeviceOnlineFromTimestamp(String? timestamp) {
+    if (timestamp == null) return false;
     try {
-      final last = DateTime.tryParse(timestamp.toString());
-      if (last == null) return false;
+      final last = DateTime.parse(timestamp);
       return DateTime.now().difference(last).inHours < _onlineThresholdHours;
     } catch (_) {
       return false;
@@ -685,26 +683,13 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   // DEVICE HEADER – Shows device name, status, battery, and stats
   // ------------------------------------------------------------
   Widget _buildDeviceHeader() {
-    final rawBatt = _deviceData['battery_level'] ?? _deviceData['battery'];
-    final int? batteryLevel = rawBatt != null ? (rawBatt as num).toInt() : null;
+    final batteryLevel = _deviceData['battery_level'];
+    final isLowBattery = batteryLevel != null && batteryLevel < 20;
     final deviceName = _deviceData['device_serial'] ?? 'Not Connected';
     final rawAwake = _deviceData['is_awake'];
-    final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
+    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
     final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(_deviceData['last_active_timestamp']);
     final isOnline = rawAwakeBool && hasHeartbeat;
-    final isLowBattery = isOnline && batteryLevel != null && batteryLevel < 20;
-
-    // Multi-tier battery color matching web app (>=50% green, 20-49% amber, <20% red)
-    Color batteryColor;
-    if (!isOnline || batteryLevel == null) {
-      batteryColor = Colors.grey.shade400;
-    } else if (batteryLevel >= 50) {
-      batteryColor = const Color(0xFF34D399); // Emerald Green
-    } else if (batteryLevel >= 20) {
-      batteryColor = const Color(0xFFFBBF24); // Amber / Yellow
-    } else {
-      batteryColor = const Color(0xFFF87171); // Red
-    }
 
     return Container(
       width: double.infinity,
@@ -817,10 +802,12 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildDeviceStatCard(
-                isLowBattery ? '⚠️ Low Battery' : 'Battery',
+                'Battery',
                 isOnline && batteryLevel != null ? '$batteryLevel%' : '--',
                 Icons.battery_std_rounded,
-                batteryColor,
+                isOnline
+                    ? (isLowBattery ? Colors.redAccent : Colors.greenAccent)
+                    : Colors.grey.shade400,
               ),
               _buildDeviceStatCard(
                 'Status',

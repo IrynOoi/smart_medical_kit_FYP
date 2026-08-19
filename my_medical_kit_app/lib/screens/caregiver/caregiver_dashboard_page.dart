@@ -351,25 +351,9 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
       _notifications = results[3] as List<Map<String, dynamic>>;
       _lowStockAlerts = results[4] as List<Map<String, dynamic>>;
       final allDevices =
-          results[5] as List<dynamic>; // 🌟 Extract device data
+          results[5] as List<dynamic>; // 🌟 ADD THIS: Extract device data
 
       _unreadCount = _notifications.where((n) => n['is_read'] == 0).length;
-
-      // Count devices that are genuinely online (heartbeat < 24h and awake)
-      int onlineCount = 0;
-      for (final d in allDevices) {
-        if (d is Map) {
-          final rawAwake = d['is_awake'];
-          final bool isAwake = !(rawAwake == false || rawAwake == 0);
-          final rawTime = d['last_active_timestamp'];
-          if (rawTime != null) {
-            final dt = DateTime.tryParse(rawTime.toString());
-            if (dt != null && DateTime.now().difference(dt).inHours < 24 && isAwake) {
-              onlineCount++;
-            }
-          }
-        }
-      }
 
       await _fetchChartData('Week');
 
@@ -377,7 +361,8 @@ class _CaregiverDashboardPageState extends State<CaregiverDashboardPage> {
         _overviewStats = overview;
         _patients = patients;
         _recentActivities = alerts.take(5).toList();
-        _globalDevicesOnline = onlineCount;
+        _globalDevicesOnline =
+            allDevices.length; // 🌟 ADD THIS: Save the global count
         _isLoading = false;
       });
     } catch (e, s) {

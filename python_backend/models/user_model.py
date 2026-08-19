@@ -347,8 +347,6 @@ def get_caregiver_patients_list(caregiver_id, status='active'):
                     d.device_serial,
                     d.last_battery_report AS last_active_timestamp,
                     d.last_known_ip,
-                    COALESCE(d.is_awake, TRUE) AS is_awake,
-                    d.last_power_status_update,
                     m.current_inventory AS inventory,
                     m.refill_threshold AS refill_threshold,
                     (SELECT COUNT(*) 
@@ -367,8 +365,8 @@ def get_caregiver_patients_list(caregiver_id, status='active'):
             )
             SELECT patient_id, email, full_name, date_of_birth, gender, phone_no, address,
                    medical_notes, profile_photo, is_active, device_id, battery_level, device_serial,
-                   last_active_timestamp, last_known_ip, is_awake, last_power_status_update,
-                   inventory, refill_threshold, prescription_count
+                   last_active_timestamp, last_known_ip, inventory, refill_threshold,
+                   prescription_count
             FROM RankedPatients WHERE rn = 1
         '''
         cursor.execute(query, (caregiver_id,))
@@ -385,13 +383,6 @@ def get_caregiver_patients_list(caregiver_id, status='active'):
         p['phone'] = p['phone_no']
         p['is_my_patient'] = True
         p['assignment_status'] = 'Assigned to Me'
-
-        if isinstance(p.get('last_active_timestamp'), (dt.datetime, dt.date)):
-            p['last_active_timestamp'] = p['last_active_timestamp'].isoformat()
-        if isinstance(p.get('last_power_status_update'), (dt.datetime, dt.date)):
-            p['last_power_status_update'] = p['last_power_status_update'].isoformat()
-        raw_awake = p.get('is_awake')
-        p['is_awake'] = False if (raw_awake is False or raw_awake == 0) else True
 
         # Compute age from date_of_birth if available
         age_val = None
