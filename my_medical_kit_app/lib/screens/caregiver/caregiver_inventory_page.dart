@@ -71,14 +71,24 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     super.dispose();
   }
 
-  Future<void> _loadDevices() async {
+  Future<void> _loadDevices({bool autoSelectFirst = true}) async {
     try {
       final devices = await DeviceService().getDevices();
-      setState(() {
-        _devicesList = devices.cast<Map<String, dynamic>>();
-      });
+      if (mounted) {
+        setState(() {
+          _devicesList = devices.cast<Map<String, dynamic>>();
+        });
+        // Auto-select first device by default (matching web app behavior)
+        if (autoSelectFirst && _selectedDeviceId == null && _devicesList.isNotEmpty) {
+          final firstDev = _devicesList.first;
+          final firstId = (firstDev['device_id'] ?? firstDev['id']) as int?;
+          if (firstId != null) {
+            _onDeviceSelected(firstId);
+          }
+        }
+      }
     } catch (e) {
-      print('Error loading devices: $e');
+      debugPrint('Error loading devices: $e');
     }
   }
 
@@ -277,24 +287,28 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   Future<void> _fetchDeviceForPatient(int patientId) async {
     try {
       final device = await DeviceService().getPatientDevice(patientId);
-      setState(() {
-        _selectedPatientDevice = device.isNotEmpty
-            ? device
-            : {
-                'device_serial': 'Not connected',
-                'battery_level': 0,
-                'last_active_timestamp': null,
-              };
-      });
+      if (mounted) {
+        setState(() {
+          _selectedPatientDevice = device.isNotEmpty
+              ? device
+              : {
+                  'device_serial': 'Not connected',
+                  'battery_level': null,
+                  'last_active_timestamp': null,
+                };
+        });
+      }
     } catch (e) {
-      print('Error fetching device for patient $patientId: $e');
-      setState(() {
-        _selectedPatientDevice = {
-          'device_serial': 'Error',
-          'battery_level': 0,
-          'last_active_timestamp': null,
-        };
-      });
+      debugPrint('Error fetching device for patient $patientId: $e');
+      if (mounted) {
+        setState(() {
+          _selectedPatientDevice = {
+            'device_serial': 'Error',
+            'battery_level': null,
+            'last_active_timestamp': null,
+          };
+        });
+      }
     }
   }
 
@@ -891,8 +905,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         ? _selectedDeviceDetail
         : _deviceData;
 
-    final batteryLevel = displayDevice['battery_level'];
-    final isLowBattery = batteryLevel != null && batteryLevel < 20;
+    final rawBatt = displayDevice['battery_level'] ?? displayDevice['battery'];
+    final int? batteryLevel = rawBatt is num ? rawBatt.toInt() : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
+
     final deviceName = displayDevice['device_serial'] ?? 'Not Connected';
     final rawAwake = displayDevice['is_awake'] ?? _selectedDeviceDetail['is_awake'];
     final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
@@ -900,6 +915,26 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
       displayDevice['last_active_timestamp'],
     );
     final isOnline = rawAwakeBool && hasHeartbeat;
+    final isLowBattery = isOnline && batteryLevel != null && batteryLevel < 20;
+
+    Color batteryColor;
+    IconData batteryIcon;
+    if (!isOnline || batteryLevel == null) {
+      batteryColor = Colors.grey.shade400;
+      batteryIcon = Icons.battery_unknown_rounded;
+    } else if (batteryLevel >= 80) {
+      batteryColor = const Color(0xFF10B981);
+      batteryIcon = Icons.battery_full_rounded;
+    } else if (batteryLevel >= 50) {
+      batteryColor = const Color(0xFF10B981);
+      batteryIcon = Icons.battery_5_bar_rounded;
+    } else if (batteryLevel >= 20) {
+      batteryColor = const Color(0xFFF59E0B);
+      batteryIcon = Icons.battery_3_bar_rounded;
+    } else {
+      batteryColor = const Color(0xFFEF4444);
+      batteryIcon = Icons.battery_alert_rounded;
+    }
 
     return Container(
       width: double.infinity,
@@ -972,8 +1007,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: (isOnline ? Colors.green : Colors.grey).withOpacity(
-                    0.2,
+                  color: (isOnline ? Colors.green : Colors.grey).withValues(
+                    alpha: 0.2,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
@@ -995,8 +1030,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       style: TextStyle(
                         fontSize: 12,
                         color: isOnline
-                            ? Colors.greenAccent
-                            : Colors.grey.shade400,
+                          ? Colors.greenAccent
+                          : Colors.grey.shade400,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1010,12 +1045,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildDeviceStatCard(
-                'Battery',
+                isLowBattery ? '⚠️ Low Battery' : 'Battery',
                 isOnline && batteryLevel != null ? '$batteryLevel%' : '--',
-                Icons.battery_std_rounded,
-                isOnline
-                    ? (isLowBattery ? Colors.redAccent : Colors.greenAccent)
-                    : Colors.grey.shade400,
+                batteryIcon,
+                batteryColor,
               ),
               _buildDeviceStatCard(
                 'Status',
@@ -1257,9 +1290,28 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Widget _buildDeviceStatusCard() {
     final serial = _selectedPatientDevice['device_serial'] ?? 'Unknown';
-    final battery = _selectedPatientDevice['battery_level'];
+    final rawBatt = _selectedPatientDevice['battery_level'] ?? _selectedPatientDevice['battery'];
+    final int? battery = rawBatt is num ? rawBatt.toInt() : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
     final lastActive = _selectedPatientDevice['last_active_timestamp'];
-    final isOnline = _isDeviceOnlineFromTimestamp(lastActive);
+    final rawAwake = _selectedPatientDevice['is_awake'];
+    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
+    final isOnline = rawAwakeBool && _isDeviceOnlineFromTimestamp(lastActive);
+
+    Color batteryColor;
+    IconData batteryIcon;
+    if (!isOnline || battery == null) {
+      batteryColor = Colors.grey;
+      batteryIcon = Icons.battery_unknown;
+    } else if (battery >= 50) {
+      batteryColor = const Color(0xFF10B981);
+      batteryIcon = Icons.battery_full;
+    } else if (battery >= 20) {
+      batteryColor = const Color(0xFFF59E0B);
+      batteryIcon = Icons.battery_charging_full;
+    } else {
+      batteryColor = const Color(0xFFEF4444);
+      batteryIcon = Icons.battery_alert;
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1279,7 +1331,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.devices_rounded,
                 color: AppColors.primaryPurple,
                 size: 24,
@@ -1353,20 +1405,16 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     Row(
                       children: [
                         Icon(
-                          Icons.battery_std,
+                          batteryIcon,
                           size: 16,
-                          color: battery != null && battery < 20
-                              ? Colors.red
-                              : Colors.green,
+                          color: batteryColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          battery != null ? '$battery%' : 'N/A',
+                          isOnline && battery != null ? '$battery%' : '--',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: battery != null && battery < 20
-                                ? Colors.red
-                                : Colors.black87,
+                            color: batteryColor,
                           ),
                         ),
                       ],
@@ -1992,7 +2040,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
     try {
       final status = await DeviceService().getDeviceStatus(_selectedDeviceId!);
-      if (status != null) {
+      if (status != null && mounted) {
         setState(() {
           _selectedDeviceDetail = status;
           // Update the IP if it changed
@@ -2000,6 +2048,13 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
             _testEspIp = status['last_known_ip'];
             _espIpController.text = _testEspIp;
           }
+        });
+      }
+      // Also silently refresh devices list to update battery across options
+      final devices = await DeviceService().getDevices();
+      if (mounted && devices.isNotEmpty) {
+        setState(() {
+          _devicesList = devices.cast<Map<String, dynamic>>();
         });
       }
     } catch (e) {
@@ -2010,8 +2065,12 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   void _startStatusPolling() {
     _statusPollTimer?.cancel();
     _statusPollTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (_selectedDeviceId != null && mounted) {
-        _refreshDeviceStatus();
+      if (mounted) {
+        if (_selectedDeviceId != null) {
+          _refreshDeviceStatus();
+        } else {
+          _loadDevices(autoSelectFirst: true);
+        }
       }
     });
   }

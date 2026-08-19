@@ -6,6 +6,7 @@
 //   - Delete a device (unlinks it from any medications/patients).
 // Shows battery level, online/offline status (based on last known IP), and low-battery warnings.
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,20 +28,44 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
   List<Map<String, dynamic>> _devices = []; // List of device maps from API
   bool _isLoading = true;
   String _error = '';
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchDevices(); // Load devices when the screen is first created.
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) {
+        _fetchDevices(showLoading: false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  bool _isDeviceOnline(String? timestamp) {
+    if (timestamp == null) return false;
+    try {
+      final last = DateTime.parse(timestamp);
+      return DateTime.now().difference(last).inHours < 24;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Fetches all devices from the backend via the /devices endpoint.
   // If [showLoading] is true, shows the loading indicator; otherwise refreshes silently.
   Future<void> _fetchDevices({bool showLoading = true}) async {
-    setState(() {
-      if (showLoading) _isLoading = true;
-      _error = '';
-    });
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _error = '';
+      });
+    }
     try {
       final response = await ApiClient.get('/devices');
       if (response.statusCode == 200) {
@@ -341,10 +366,34 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                 itemCount: _devices.length,
                 itemBuilder: (_, i) {
                   final d = _devices[i];
-                  final battery = d['battery_level'] ?? 100;
-                  final isLowBattery = battery < 20;
-                  // If the device has a last_known_ip, consider it online.
-                  final isOnline = d['last_known_ip'] != null;
+                  final rawBatt = d['battery_level'] ?? d['battery'];
+                  final int? battery = rawBatt is num
+                      ? rawBatt.toInt()
+                      : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
+                  final rawAwake = d['is_awake'];
+                  final bool rawAwakeBool = !(rawAwake == false || rawAwake == 0);
+                  final bool hasHeartbeat = _isDeviceOnline(d['last_active_timestamp']);
+                  final bool isOnline = rawAwakeBool && hasHeartbeat;
+                  final bool isLowBattery = isOnline && battery != null && battery < 20;
+
+                  Color batteryColor;
+                  IconData batteryIcon;
+                  if (!isOnline || battery == null) {
+                    batteryColor = Colors.grey;
+                    batteryIcon = Icons.battery_unknown_rounded;
+                  } else if (battery >= 80) {
+                    batteryColor = const Color(0xFF10B981);
+                    batteryIcon = Icons.battery_full_rounded;
+                  } else if (battery >= 50) {
+                    batteryColor = const Color(0xFF10B981);
+                    batteryIcon = Icons.battery_5_bar_rounded;
+                  } else if (battery >= 20) {
+                    batteryColor = const Color(0xFFF59E0B);
+                    batteryIcon = Icons.battery_3_bar_rounded;
+                  } else {
+                    batteryColor = const Color(0xFFEF4444);
+                    batteryIcon = Icons.battery_alert_rounded;
+                  }
 
                   return Card(
                     color: Colors.white,
@@ -354,37 +403,74 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: ListTile(
-                      leading: Icon(
-                        Icons.router,
-                        color: isOnline
-                            ? (isLowBattery ? Colors.orange : Colors.green)
-                            : Colors.grey,
-                        size: 32,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: (isOnline ? AppColors.primaryPurple : Colors.grey).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.router_rounded,
+                          color: isOnline ? AppColors.primaryPurple : Colors.grey,
+                          size: 28,
+                        ),
                       ),
                       title: Text(
                         d['device_serial'] ?? 'Unknown',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(
+                                batteryIcon,
+                                size: 16,
+                                color: batteryColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isOnline && battery != null
+                                    ? 'Battery: $battery%'
+                                    : 'Battery: --',
+                                style: TextStyle(
+                                  color: batteryColor,
+                                  fontWeight: isLowBattery ? FontWeight.bold : FontWeight.w600,
+                                ),
+                              ),
+                              if (isLowBattery) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Low Battery',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                           const SizedBox(height: 4),
                           Text(
-                            'Battery: $battery%',
-                            style: TextStyle(
-                              color: isLowBattery ? Colors.red : Colors.black87,
-                              fontWeight: isLowBattery
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                          Text(
                             isOnline
-                                ? 'IP: ${d['last_known_ip']}'
+                                ? (d['last_known_ip'] != null && d['last_known_ip'].toString().isNotEmpty
+                                    ? 'IP: ${d['last_known_ip']}'
+                                    : 'Status: Online')
                                 : 'Status: Offline',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: isOnline ? Colors.grey.shade700 : Colors.grey,
                             ),
                           ),
                         ],
@@ -407,6 +493,7 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                     ),
                   );
                 },
+
               ),
       ),
     );

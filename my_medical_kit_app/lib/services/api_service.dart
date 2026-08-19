@@ -951,7 +951,7 @@ class ApiService {
   }
 
   /// Add a new IoT device.
-  Future<bool> addDevice(String serial, String ip, int battery) async {
+  Future<bool> addDevice(String serial, String? ip, int battery) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/iot_device'),

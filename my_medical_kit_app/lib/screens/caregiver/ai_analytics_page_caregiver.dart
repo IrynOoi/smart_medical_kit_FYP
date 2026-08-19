@@ -1084,15 +1084,29 @@ class _AiAnalyticsPageState extends State<AiAnalyticsPage> {
                       ),
                     ),
                     if (patient['device_serial'] != null)
-                      Text(
-                        'Device: ${patient['device_serial']} • Battery: ${patient['battery_level'] ?? 'N/A'}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: (patient['battery_level'] ?? 100) < 20
-                              ? Colors.red
-                              : Colors.grey.shade600,
-                        ),
-                      ),
+                      Builder(builder: (_) {
+                        final rawBatt = patient['battery_level'] ?? patient['battery'];
+                        final int? battery = rawBatt is num ? rawBatt.toInt() : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
+                        final String battText = battery != null ? '$battery%' : '--';
+                        Color battColor;
+                        if (battery == null) {
+                          battColor = Colors.grey.shade600;
+                        } else if (battery >= 50) {
+                          battColor = const Color(0xFF10B981);
+                        } else if (battery >= 20) {
+                          battColor = const Color(0xFFF59E0B);
+                        } else {
+                          battColor = const Color(0xFFEF4444);
+                        }
+                        return Text(
+                          'Device: ${patient['device_serial']} • Battery: $battText',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: battColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      }),
                     const SizedBox(height: 6),
                     // ✨ NEW: Risk Label injected directly onto the patient card
                     if (pred != null)
@@ -1703,8 +1717,8 @@ class _PatientDetailPage extends StatelessWidget {
                 ),
                 _infoRow(
                   'Battery Level',
-                  patient['battery_level'] != null
-                      ? '${patient['battery_level']}%'
+                  patient['battery_level'] != null || patient['battery'] != null
+                      ? '${patient['battery_level'] ?? patient['battery']}%'
                       : '—',
                 ),
                 _infoRow(

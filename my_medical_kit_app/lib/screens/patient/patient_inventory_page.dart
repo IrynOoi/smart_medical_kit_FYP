@@ -4,6 +4,7 @@
 // and provides a remote control panel for the IoT pill dispenser (LED, buzzer, display, stepper motors).
 // Patients can view but NOT restock medications – that is a caregiver/admin function.
 
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:my_medical_kit_app/theme/colors.dart';
@@ -35,6 +36,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   int _selectedTestMotor = 1;
   String _testEspIp = '';
   final TextEditingController _espIpController = TextEditingController();
+  Timer? _pollTimer;
 
   // Threshold to consider device online (hours since last heartbeat)
   static const int _onlineThresholdHours = 24;
@@ -44,6 +46,11 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
     super.initState();
     _loadData();
     _espIpController.text = _testEspIp; // Initialise controller
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) {
+        _loadData(showLoading: false);
+      }
+    });
   }
 
   // ---------------------- Load Data from API ----------------------
@@ -60,7 +67,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
           ? device
           : {
               'device_serial': 'Not connected',
-              'battery_level': 0,
+              'battery_level': null,
               'last_active_timestamp': null,
               'last_known_ip': null,
             };
@@ -102,6 +109,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _espIpController.dispose();
     super.dispose();
   }
@@ -683,13 +691,36 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
   // DEVICE HEADER – Shows device name, status, battery, and stats
   // ------------------------------------------------------------
   Widget _buildDeviceHeader() {
-    final batteryLevel = _deviceData['battery_level'];
-    final isLowBattery = batteryLevel != null && batteryLevel < 20;
+    final rawBatt = _deviceData['battery_level'] ?? _deviceData['battery'];
+    final int? batteryLevel = rawBatt is num
+        ? rawBatt.toInt()
+        : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
+
     final deviceName = _deviceData['device_serial'] ?? 'Not Connected';
     final rawAwake = _deviceData['is_awake'];
     final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
     final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(_deviceData['last_active_timestamp']);
     final isOnline = rawAwakeBool && hasHeartbeat;
+    final isLowBattery = isOnline && batteryLevel != null && batteryLevel < 20;
+
+    Color batteryColor;
+    IconData batteryIcon;
+    if (!isOnline || batteryLevel == null) {
+      batteryColor = Colors.grey.shade400;
+      batteryIcon = Icons.battery_unknown_rounded;
+    } else if (batteryLevel >= 80) {
+      batteryColor = const Color(0xFF10B981);
+      batteryIcon = Icons.battery_full_rounded;
+    } else if (batteryLevel >= 50) {
+      batteryColor = const Color(0xFF10B981);
+      batteryIcon = Icons.battery_5_bar_rounded;
+    } else if (batteryLevel >= 20) {
+      batteryColor = const Color(0xFFF59E0B);
+      batteryIcon = Icons.battery_3_bar_rounded;
+    } else {
+      batteryColor = const Color(0xFFEF4444);
+      batteryIcon = Icons.battery_alert_rounded;
+    }
 
     return Container(
       width: double.infinity,
@@ -763,8 +794,8 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: (isOnline ? Colors.green : Colors.grey).withOpacity(
-                    0.2,
+                  color: (isOnline ? Colors.green : Colors.grey).withValues(
+                    alpha: 0.2,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
@@ -802,12 +833,10 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildDeviceStatCard(
-                'Battery',
+                isLowBattery ? '⚠️ Low Battery' : 'Battery',
                 isOnline && batteryLevel != null ? '$batteryLevel%' : '--',
-                Icons.battery_std_rounded,
-                isOnline
-                    ? (isLowBattery ? Colors.redAccent : Colors.greenAccent)
-                    : Colors.grey.shade400,
+                batteryIcon,
+                batteryColor,
               ),
               _buildDeviceStatCard(
                 'Status',
@@ -827,6 +856,7 @@ class _PatientInventoryPageState extends State<PatientInventoryPage> {
       ),
     );
   }
+
 
   // Individual stat card for the header
   Widget _buildDeviceStatCard(
