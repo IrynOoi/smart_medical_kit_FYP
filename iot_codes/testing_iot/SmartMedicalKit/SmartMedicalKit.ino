@@ -16,12 +16,12 @@
 #include <HTTPClient.h>             // HTTP/HTTPS requests
 #include <ArduinoJson.h>            // JSON parsing / construction
 #include <Preferences.h>            // Persistent storage (flash)
+#include <WiFiManager.h>            // ⬅️ WiFiManager Captive Portal Library
 
 // ── Custom hardware abstraction layers ──────────────────────
 #include "dispenser_motor.h"        // Stepper motor control functions
 #include "buzzer_control.h"         // Buzzer on/off functions
 #include "display_control.h"        // OLED display functions
-#include "secrets.h"                // WiFi SSID + password (not in repo)
 #include "push_button.h"
 #include "battery_monitor.h"
 
@@ -87,38 +87,39 @@ String buildURL(String path) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// WiFi connection routine
+// WiFi connection routine using WiFiManager Captive Portal
 // ──────────────────────────────────────────────────────────────
 void connectToWiFi() {
-  WiFi.disconnect(true);        // Clear any previous WiFi settings
-  delay(1000); 
-  WiFi.mode(WIFI_STA);          // Station mode (not AP)
-  
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(SECRET_SSID);
-  updateDisplayState("Connecting...", "WiFi");   // Show on OLED
-  
-  WiFi.begin(SECRET_SSID, SECRET_PASS); 
+  Serial.println("\n=================================");
+  Serial.println("🌐 Starting WiFi Connection (WiFiManager)...");
+  Serial.println("=================================");
+  updateDisplayState("WiFi Setup AP", "MedSmart-Setup");
 
-  int retries = 0;
-  while (WiFi.status() != WL_CONNECTED && retries < 40) {
-    delay(500);
-    Serial.print(".");
-    retries++;
-  }
+  WiFiManager wm;
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi Connected!");
+  // Set timeout of 180 seconds for captive portal before restarting
+  wm.setConfigPortalTimeout(180);
+
+  // Automatically connects to saved WiFi, OR starts AP "MedSmart-Setup"
+  // and stays open until user configures it on phone/PC!
+  bool res = wm.autoConnect("MedSmart-Setup");
+
+  if (!res) {
+    Serial.println("\n❌ Failed to connect or portal timed out. Restarting...");
+    updateDisplayState("Setup Failed", "Restarting...");
+    delay(2000);
+    ESP.restart();
+  } else {
+    Serial.println("\n✅ WiFi Connected Successfully!");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
     updateDisplayState("MedSmart System", "Ready!");
-  } else {
-    Serial.println("\n❌ WiFi Connection Failed. Restarting...");
-    updateDisplayState("Conn. Failed", "Restarting...");
-    delay(2000);
-    ESP.restart();
   }
 }
+
+
+
+
 
 // ──────────────────────────────────────────────────────────────
 // HTTP Helper: Add common headers to every request
@@ -348,6 +349,8 @@ void executeDispense() {
 void setup() 
 {
   Serial.begin(115200);
+   // ⭐ ADD THIS: Give serial time to initialize
+  delay(1000);
 
   // ── Load saved server URL from flash (persistent across reboots) ──
   prefs.begin("medsmart", false);
@@ -417,6 +420,17 @@ void setup()
   server.on("/stepper3/backward", handleMotor3Backward);
   server.on("/stepper3/90",       handleMotor390);
   server.on("/stepper3/180",      handleMotor3180);
+
+
+    // ── Reset WiFi endpoint: clears stored WiFi and reboots into Captive Portal ──
+  server.on("/config/reset_wifi", []() {
+    WiFiManager wm;
+    wm.resetSettings();
+    server.send(200, "text/plain", "WiFi credentials wiped. Rebooting into AP Setup Portal...");
+    delay(1000);
+    ESP.restart();
+  });
+
 
   // ── Special endpoint for retake (initiated by the backend) ──
   server.on("/retake", HTTP_GET, []() {
@@ -513,21 +527,49 @@ server.on("/power/wake", HTTP_GET, []() {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Check if button is held for 5 seconds to trigger WiFi reset
+// ──────────────────────────────────────────────────────────────
+unsigned long buttonPressStartTime = 0;
+bool isHoldingButton = false;
+
+void checkWiFiResetButton() {
+  if (digitalRead(PUSH_BUTTON_PIN) == BUTTON_PRESSED) {
+    if (!isHoldingButton) {
+      isHoldingButton = true;
+      buttonPressStartTime = millis();
+    } else if (millis() - buttonPressStartTime > 5000) { // Held for 5 seconds
+      Serial.println("🔄 Button held for 5s: Resetting WiFi...");
+      updateDisplayState("Resetting WiFi", "Please Wait...");
+      
+      WiFiManager wm;
+      wm.resetSettings(); // Clears saved WiFi credentials from flash
+      
+      delay(1000);
+      ESP.restart(); // Reboots into 'MedSmart-Setup' captive portal
+    }
+  } else {
+    isHoldingButton = false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
 // Arduino loop() – runs continuously
 // ──────────────────────────────────────────────────────────────
 void loop() 
 {
-  handleTouch();      // Check if the physical button was pressed
-  handlePushButton();  // ⬅️ 添加这一行
-  server.handleClient(); // Process incoming HTTP requests
+  handleTouch();            // Check if the physical touch button was pressed
+  checkWiFiResetButton();   // 🔄 Check if button is held for 5s to reset WiFi
+  handlePushButton();       // Normal short-press button handler
+  server.handleClient();    // Process incoming HTTP requests
 
   // 1. WiFi watchdog – reconnect if disconnected
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("⚠️ WiFi lost. Reconnecting...");
     WiFi.disconnect();
-    WiFi.begin(SECRET_SSID, SECRET_PASS); 
+    WiFi.reconnect();
     delay(2000); 
   }
+
 
   // 2. Poll for pending dose from the server (only if not already waiting)
   if (WiFi.status() == WL_CONNECTED) {
