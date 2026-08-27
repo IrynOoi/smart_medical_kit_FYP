@@ -64,8 +64,15 @@ export const apiService = {
         headers: getHeaders(true),
         body: JSON.stringify({ email, password }),
       });
-      const data = await response.json();
-      return data;
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.message || data?.error || 'Invalid email or password.',
+          message: data?.message || data?.error || 'Invalid email or password.',
+        };
+      }
+      return data || { success: false, error: 'Empty response from server.' };
     } catch (err) {
       console.error('Login request failed:', err);
       return { success: false, error: 'Network error or server unreachable. Please check backend connection.' };
@@ -79,10 +86,18 @@ export const apiService = {
         headers: getHeaders(true),
         body: JSON.stringify(userData),
       });
-      return await response.json();
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.error || data?.message || 'Registration failed.',
+          message: data?.error || data?.message || 'Registration failed.',
+        };
+      }
+      return data || { success: false, error: 'Empty response from server.' };
     } catch (err) {
       console.error('Register request failed:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Network error during registration.' };
     }
   },
 
@@ -93,9 +108,17 @@ export const apiService = {
         headers: getHeaders(true),
         body: JSON.stringify({ email }),
       });
-      return await response.json();
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.message || data?.error || 'Email address not found in system.',
+          message: data?.message || data?.error || 'Email address not found in system.',
+        };
+      }
+      return data || { success: false, error: 'Empty response from server.' };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Network error. Please try again.' };
     }
   },
 
@@ -106,9 +129,17 @@ export const apiService = {
         headers: getHeaders(true),
         body: JSON.stringify({ email, otp }),
       });
-      return await response.json();
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.message || data?.error || 'Invalid or expired OTP code.',
+          message: data?.message || data?.error || 'Invalid or expired OTP code.',
+        };
+      }
+      return data || { success: false, error: 'Empty response from server.' };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Network error. Please try again.' };
     }
   },
 
@@ -119,9 +150,17 @@ export const apiService = {
         headers: getHeaders(true),
         body: JSON.stringify({ email, otp, new_password: newPassword }),
       });
-      return await response.json();
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.message || data?.error || 'Failed to update password.',
+          message: data?.message || data?.error || 'Failed to update password.',
+        };
+      }
+      return data || { success: false, error: 'Empty response from server.' };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Network error. Please try again.' };
     }
   },
 
@@ -132,9 +171,17 @@ export const apiService = {
         headers: getHeaders(true),
         body: JSON.stringify({ email, new_password: newPassword }),
       });
-      return await response.json();
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.message || data?.error || 'Failed to reset password.',
+          message: data?.message || data?.error || 'Failed to reset password.',
+        };
+      }
+      return data || { success: false, error: 'Empty response from server.' };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Network error. Please try again.' };
     }
   },
 
@@ -244,9 +291,9 @@ export const apiService = {
   // ==========================================
   // 👥 PATIENT MANAGEMENT
   // ==========================================
-  async getCaregiverPatients(caregiverId) {
+  async getCaregiverPatients(caregiverId, show = 'all') {
     try {
-      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/patients`, {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/patients?show=${show}`, {
         headers: getHeaders(false),
       });
       const json = await response.json();
@@ -308,6 +355,20 @@ export const apiService = {
       return json.success === true;
     } catch (err) {
       console.error('Error deactivating patient:', err);
+      return false;
+    }
+  },
+
+  async reactivatePatient(patientId) {
+    try {
+      const response = await fetch(`${BASE_URL}/patient/${patientId}/reactivate`, {
+        method: 'PUT',
+        headers: getHeaders(false),
+      });
+      const json = await response.json();
+      return json && json.success === true;
+    } catch (err) {
+      console.error('Error reactivating patient:', err);
       return false;
     }
   },

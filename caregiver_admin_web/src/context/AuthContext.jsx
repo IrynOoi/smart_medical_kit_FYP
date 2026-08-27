@@ -19,16 +19,22 @@ export const AuthProvider = ({ children }) => {
         const savedUser = sessionStorage.getItem('caregiver_admin_user');
         if (savedUser) {
           const parsed = JSON.parse(savedUser);
-          setUser(parsed);
+          const userRole = (parsed.role || '').toLowerCase();
+          if (userRole === 'patient' || (userRole !== 'caregiver' && userRole !== 'admin')) {
+            sessionStorage.removeItem('caregiver_admin_user');
+            setUser(null);
+          } else {
+            setUser(parsed);
 
-          // Fetch caregiver profile details to get full_name and latest profile photo
-          const cid = parsed.caregiver_id || parsed.id || parsed.user_id;
-          if (cid) {
-            const res = await apiService.getCaregiverProfile(cid);
-            if (res && res.success && res.data) {
-              const merged = { ...parsed, ...res.data };
-              setUser(merged);
-              sessionStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
+            // Fetch caregiver profile details to get full_name and latest profile photo
+            const cid = parsed.caregiver_id || parsed.id || parsed.user_id;
+            if (cid) {
+              const res = await apiService.getCaregiverProfile(cid);
+              if (res && res.success && res.data) {
+                const merged = { ...parsed, ...res.data };
+                setUser(merged);
+                sessionStorage.setItem('caregiver_admin_user', JSON.stringify(merged));
+              }
             }
           }
         }
@@ -51,11 +57,25 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     setError(null);
-    setLoading(true);
     try {
       const response = await apiService.login(email, password);
       if (response && response.success && (response.data || response.user)) {
         const userData = response.data || response.user;
+        const userRole = (userData.role || '').toLowerCase();
+
+        // Strict role validation: Reject patient login on Web Portal
+        if (userRole === 'patient') {
+          const errMsg = 'Access Denied: Patient accounts are not permitted to log into the Web Portal. Please use the mobile application.';
+          setError(errMsg);
+          return { success: false, error: errMsg };
+        }
+
+        if (userRole !== 'caregiver' && userRole !== 'admin') {
+          const errMsg = 'Access Denied: Only registered caregivers are authorized to log into this portal.';
+          setError(errMsg);
+          return { success: false, error: errMsg };
+        }
+
         setUser(userData);
         sessionStorage.setItem('caregiver_admin_user', JSON.stringify(userData));
 
@@ -74,18 +94,15 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
-        setLoading(false);
         return { success: true, user: userData };
       } else {
         const errMsg = response?.message || response?.error || 'Invalid credentials or user not found.';
         setError(errMsg);
-        setLoading(false);
         return { success: false, error: errMsg };
       }
     } catch (err) {
       const errMsg = err.message || 'An unexpected error occurred during login.';
       setError(errMsg);
-      setLoading(false);
       return { success: false, error: errMsg };
     }
   };

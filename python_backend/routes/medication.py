@@ -85,6 +85,10 @@ def add_prescription():
         if not all([patient_id, medication_name, dosage_tablet, dispense_times, start_date]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
+        # Validate that end_date is not earlier than start_date
+        if start_date and end_date and str(end_date).strip() and str(end_date)[:10] < str(start_date)[:10]:
+            return jsonify({"success": False, "message": "End date cannot be earlier than start date"}), 400
+
         # Call model to create prescription; returns success, message, and new prescription data
         success, msg, new_prescription = create_prescription_config(
             patient_id, medication_name, dosage_tablet, dispense_times,
@@ -204,6 +208,10 @@ def update_prescription(prescription_id):
         # Mandatory fields (can't be null for a valid prescription)
         if not all([medication_name, dosage_tablet, dispense_times]):
             return jsonify({"success": False, "message": "Missing required fields (medication_name, dosage_tablet, dispense_times)"}), 400
+
+        # Validate that end_date is not earlier than start_date
+        if start_date and end_date and str(end_date).strip() and str(end_date)[:10] < str(start_date)[:10]:
+            return jsonify({"success": False, "message": "End date cannot be earlier than start date"}), 400
 
         # Check if device_id was explicitly provided (to distinguish from None)
         check_none = 'device_id' in data or 'motor_slot' in data

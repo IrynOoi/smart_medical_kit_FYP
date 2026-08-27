@@ -12,6 +12,7 @@ from models.medication_model import get_prescriptions_by_patient  # Fetch prescr
 from models.adherence_model import get_patient_adherence_stats, get_patient_adherence_logs  # Adherence data
 
 from models.analytics_model import get_latest_ai_prediction  # AI prediction
+from utils.sanitizers import normalize_phone_number  # Standardize phone numbers
 
 # Create a Flask Blueprint for patient routes; will be registered with a URL prefix in the main app
 patient_bp = Blueprint('patient', __name__)
@@ -190,6 +191,8 @@ def update_patient(patient_id):
         # Extract fields from JSON or Form with property aliases
         full_name = json_data.get('full_name') or json_data.get('fullname') or json_data.get('name') or form_data.get('full_name') or form_data.get('fullname')
         phone_no = json_data.get('phone_no') or json_data.get('phone') or form_data.get('phone_no') or form_data.get('phone')
+        if phone_no:
+            phone_no = normalize_phone_number(phone_no)
         address = json_data.get('address') if 'address' in json_data else form_data.get('address')
         email = json_data.get('email') if 'email' in json_data else form_data.get('email')
         gender = json_data.get('gender') if 'gender' in json_data else form_data.get('gender')

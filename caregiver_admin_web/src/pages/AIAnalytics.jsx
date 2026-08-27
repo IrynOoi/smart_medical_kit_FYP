@@ -51,20 +51,22 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     try {
       const [overviewData, patientsData, riskData] = await Promise.all([
         apiService.getAnalyticsOverview(caregiverId),
-        apiService.getCaregiverPatients(caregiverId),
+        apiService.getCaregiverPatients(caregiverId, 'active'),
         apiService.getAtRiskPatients(caregiverId),
       ]);
 
       if (overviewData) setOverview(overviewData);
 
-      // Merge patient details with predictions
-      const patientList = Array.isArray(patientsData) && patientsData.length > 0
+      // Merge patient details with predictions - strictly filter to ACTIVE patients only
+      const rawList = Array.isArray(patientsData) && patientsData.length > 0
         ? patientsData
         : (Array.isArray(riskData) ? riskData : []);
 
-      // Fetch predictions for each patient concurrently
+      const activePatientList = rawList.filter((pat) => pat.is_active !== false && pat.is_active !== 0);
+
+      // Fetch predictions for each active patient concurrently
       const enriched = await Promise.all(
-        patientList.map(async (pat) => {
+        activePatientList.map(async (pat) => {
           const pid = pat.patient_id || pat.id;
           const pred = await apiService.getAIPrediction(pid);
           return {

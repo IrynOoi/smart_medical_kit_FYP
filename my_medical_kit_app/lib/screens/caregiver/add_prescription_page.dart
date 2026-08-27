@@ -76,33 +76,139 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
 
   // Opens a date picker for the start or end date.
   Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final initialDate = isStart
-        ? _startDate
-        : (_endDate ?? _startDate.add(const Duration(days: 1)));
-    final firstDate = isStart
-        ? DateTime(2000)
-        : _startDate.add(const Duration(days: 1));
-    final picked = await showDatePicker(
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final startDay = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final minEndDay = startDay.isAfter(today) ? startDay.add(const Duration(days: 1)) : tomorrow;
+
+    final firstDate = isStart ? DateTime(2000) : minEndDay;
+
+    DateTime initialDate = isStart ? _startDate : (_endDate ?? minEndDay);
+    if (initialDate.isBefore(firstDate)) {
+      initialDate = firstDate;
+    }
+
+    final picked = await showDialog<DateTime?>(
       context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: DateTime(2101),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primaryPurple,
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
+      builder: (BuildContext dialogContext) {
+        DateTime selectedDate = initialDate;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              child: SizedBox(
+                width: 328,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header with purple theme
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      color: AppColors.primaryPurple,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isStart ? 'SELECT START DATE' : 'SELECT END DATE',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            DateFormat('EEE, MMM d, yyyy').format(selectedDate),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Calendar grid
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.light(
+                          primary: AppColors.primaryPurple,
+                          onPrimary: Colors.white,
+                          onSurface: Colors.black,
+                        ),
+                      ),
+                      child: SizedBox(
+                        height: 310,
+                        child: CalendarDatePicker(
+                          initialDate: selectedDate,
+                          firstDate: firstDate,
+                          lastDate: DateTime(2101),
+                          onDateChanged: (newDate) {
+                            setDialogState(() {
+                              selectedDate = newDate;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+                    // Action Buttons: Clear at bottom leftmost, Cancel and OK at rightmost
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          if (!isStart)
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop(DateTime(1970, 1, 1));
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red.shade600,
+                              ),
+                              child: const Text(
+                                'Clear',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                            ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(null),
+                            child: const Text('Cancel', style: TextStyle(fontSize: 14)),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(selectedDate),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.primaryPurple,
+                            ),
+                            child: const Text(
+                              'OK',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
+
     if (picked != null) {
       setState(() {
-        if (isStart) {
+        if (picked.year == 1970) {
+          _endDate = null;
+        } else if (isStart) {
           _startDate = picked;
           // Ensure end date is strictly after start date.
           if (_endDate != null && !_endDate!.isAfter(_startDate)) {

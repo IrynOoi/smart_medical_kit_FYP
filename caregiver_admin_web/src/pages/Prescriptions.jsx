@@ -79,6 +79,35 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
   const [loading, setLoading] = useState(true);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
 
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const todayStr = getTodayStr();
+
+  const getMinEndDate = (startDateStr) => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    
+    let minDate = tomorrow;
+    if (startDateStr) {
+      const sDate = new Date(startDateStr);
+      const dayAfterStart = new Date(sDate);
+      dayAfterStart.setDate(sDate.getDate() + 1);
+      if (dayAfterStart > minDate) {
+        minDate = dayAfterStart;
+      }
+    }
+    const year = minDate.getFullYear();
+    const month = String(minDate.getMonth() + 1).padStart(2, '0');
+    const day = String(minDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Add Prescription Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPrescription, setNewPrescription] = useState({
@@ -88,7 +117,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     dosage: '1.0',
     dispense_times: ['08:00'],
     dispense_days: [], // empty = Everyday
-    start_date: new Date().toISOString().split('T')[0],
+    start_date: todayStr,
     end_date: '',
   });
 
@@ -112,14 +141,24 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     if (showSpinner) setLoading(true);
     try {
       const [patientsData, catalogData] = await Promise.all([
-        apiService.getCaregiverPatients(caregiverId),
+        apiService.getCaregiverPatients(caregiverId, 'active'),
         apiService.getMedicationsCatalog(),
       ]);
 
       if (Array.isArray(patientsData)) {
-        setPatients(patientsData);
-        if (patientsData.length > 0 && !selectedPatientId) {
-          setSelectedPatientId(patientsData[0].patient_id || patientsData[0].id);
+        const activePatientsOnly = patientsData.filter(
+          (p) => p.is_active !== false && p.is_active !== 0
+        );
+        setPatients(activePatientsOnly);
+        if (activePatientsOnly.length > 0) {
+          const exists = activePatientsOnly.some(
+            (p) => String(p.patient_id || p.id) === String(selectedPatientId)
+          );
+          if (!selectedPatientId || !exists) {
+            setSelectedPatientId(activePatientsOnly[0].patient_id || activePatientsOnly[0].id);
+          }
+        } else {
+          setSelectedPatientId('');
         }
       }
       if (Array.isArray(catalogData)) {
@@ -184,6 +223,12 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
 
     const medId = pres.medication_id || '';
     const medName = pres.medication_name || pres.name || '';
+    let sDate = pres.start_date ? pres.start_date.substring(0, 10) : todayStr;
+    let eDate = pres.end_date ? pres.end_date.substring(0, 10) : '';
+    const minAllowedEnd = getMinEndDate(sDate);
+    if (eDate && eDate < minAllowedEnd) {
+      eDate = '';
+    }
 
     setEditForm({
       medication_name: medName,
@@ -191,8 +236,8 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
       dosage: pres.dosage ? String(pres.dosage).replace(/[^0-9.]/g, '') : (pres.dosage_tablet ? String(pres.dosage_tablet) : '1.0'),
       dispense_times: times,
       dispense_days: Array.isArray(pres.dispense_days) ? pres.dispense_days : [],
-      start_date: pres.start_date ? pres.start_date.substring(0, 10) : new Date().toISOString().split('T')[0],
-      end_date: pres.end_date ? pres.end_date.substring(0, 10) : '',
+      start_date: sDate,
+      end_date: eDate,
     });
     setFormError('');
   };
@@ -209,8 +254,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
       const medName = selectedMed ? (selectedMed.medication_name || selectedMed.name) : (newPrescription.medication_name || 'Medication');
 
       // Date validation
-      if (newPrescription.end_date && newPrescription.end_date < newPrescription.start_date) {
-        setFormError('End date cannot be earlier than start date.');
+      const minAddAllowed = getMinEndDate(newPrescription.start_date);
+      if (newPrescription.end_date && newPrescription.end_date < minAddAllowed) {
+        setFormError(`End date must be after start date and today (Earliest: ${minAddAllowed}).`);
         setFormLoading(false);
         return;
       }
@@ -256,8 +302,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
       const medName = selectedMed ? (selectedMed.medication_name || selectedMed.name) : (editForm.medication_name || editingPrescription.medication_name || 'Medication');
 
       // Date validation
-      if (editForm.end_date && editForm.end_date < editForm.start_date) {
-        setFormError('End date cannot be earlier than start date.');
+      const minEditAllowed = getMinEndDate(editForm.start_date);
+      if (editForm.end_date && editForm.end_date < minEditAllowed) {
+        setFormError(`End date must be after start date and today (Earliest: ${minEditAllowed}).`);
         setFormLoading(false);
         return;
       }
@@ -754,7 +801,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* Start Date & End Date Datepicker (End Date validated >= Start Date) */}
+                {/* Start Date & End Date Datepicker (End Date validated > Start Date and > Today) */}
                 <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
                   <div>
                     <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Start Date *</label>
@@ -763,9 +810,10 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                       value={newPrescription.start_date}
                       onChange={(e) => {
                         const newStart = e.target.value;
+                        const minAllowedForEnd = getMinEndDate(newStart);
                         let updatedEnd = newPrescription.end_date;
-                        if (updatedEnd && updatedEnd < newStart) {
-                          updatedEnd = newStart;
+                        if (updatedEnd && updatedEnd < minAllowedForEnd) {
+                          updatedEnd = minAllowedForEnd;
                         }
                         setNewPrescription({ ...newPrescription, start_date: newStart, end_date: updatedEnd });
                       }}
@@ -774,12 +822,44 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                     />
                   </div>
                   <div>
-                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>End Date</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                      <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>End Date (Optional)</label>
+                      {newPrescription.end_date && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormError('');
+                            setNewPrescription({ ...newPrescription, end_date: '' });
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#EF4444',
+                            fontSize: '0.78rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            padding: '0 4px',
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="date"
                       value={newPrescription.end_date}
-                      min={newPrescription.start_date}
-                      onChange={(e) => setNewPrescription({ ...newPrescription, end_date: e.target.value })}
+                      min={getMinEndDate(newPrescription.start_date)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const minAllowed = getMinEndDate(newPrescription.start_date);
+                        if (val && val < minAllowed) {
+                          setFormError(`End date must be after start date and today (Earliest: ${minAllowed}).`);
+                          setNewPrescription({ ...newPrescription, end_date: minAllowed });
+                        } else {
+                          setFormError('');
+                          setNewPrescription({ ...newPrescription, end_date: val });
+                        }
+                      }}
                       style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
                     />
                   </div>
@@ -983,7 +1063,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* Start Date & End Date Datepicker (End Date validated >= Start Date) */}
+                {/* Start Date & End Date Datepicker (End Date validated > Start Date and > Today) */}
                 <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
                   <div>
                     <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Start Date *</label>
@@ -992,9 +1072,10 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                       value={editForm.start_date}
                       onChange={(e) => {
                         const newStart = e.target.value;
+                        const minAllowedForEnd = getMinEndDate(newStart);
                         let updatedEnd = editForm.end_date;
-                        if (updatedEnd && updatedEnd < newStart) {
-                          updatedEnd = newStart;
+                        if (updatedEnd && updatedEnd < minAllowedForEnd) {
+                          updatedEnd = minAllowedForEnd;
                         }
                         setEditForm({ ...editForm, start_date: newStart, end_date: updatedEnd });
                       }}
@@ -1003,12 +1084,44 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                     />
                   </div>
                   <div>
-                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>End Date</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                      <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>End Date (Optional)</label>
+                      {editForm.end_date && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormError('');
+                            setEditForm({ ...editForm, end_date: '' });
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#EF4444',
+                            fontSize: '0.78rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            padding: '0 4px',
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="date"
                       value={editForm.end_date}
-                      min={editForm.start_date}
-                      onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
+                      min={getMinEndDate(editForm.start_date)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const minAllowed = getMinEndDate(editForm.start_date);
+                        if (val && val < minAllowed) {
+                          setFormError(`End date must be after start date and today (Earliest: ${minAllowed}).`);
+                          setEditForm({ ...editForm, end_date: minAllowed });
+                        } else {
+                          setFormError('');
+                          setEditForm({ ...editForm, end_date: val });
+                        }
+                      }}
                       style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
                     />
                   </div>

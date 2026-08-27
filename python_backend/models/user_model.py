@@ -412,7 +412,7 @@ def get_available_patients(caregiver_id, status_filter='all'):
         query = '''
             SELECT 
                 u.user_id as patient_id, u.email, u.full_name, u.phone_no, u.address,
-                u.gender, u.date_of_birth, u.is_active, p.medical_notes,
+                u.gender, u.date_of_birth, u.is_active, u.profile_photo, p.medical_notes,
                 (SELECT pcam.caregiver_id FROM patient_caregiver_mapping pcam WHERE pcam.patient_id = u.user_id LIMIT 1) as cg_id
             FROM users u
             JOIN patient p ON u.user_id = p.patient_id

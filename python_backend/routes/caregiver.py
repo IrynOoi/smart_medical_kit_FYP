@@ -17,6 +17,7 @@ from models.user_model import (
     update_caregiver_profile,
     get_caregiver_patients_list
 )
+from utils.sanitizers import normalize_phone_number  # Standardize phone numbers
 
 
 # Create Blueprint for caregiver routes
@@ -212,6 +213,9 @@ def update_caregiver(caregiver_id):
             gender = request.form.get('gender')
             date_of_birth = request.form.get('date_of_birth') or request.form.get('dob')
             photo_url = request.form.get('profile_photo')
+
+        if phone_no:
+            phone_no = normalize_phone_number(phone_no)
 
         # Handle file upload if present
         if 'profile_photo' in request.files:

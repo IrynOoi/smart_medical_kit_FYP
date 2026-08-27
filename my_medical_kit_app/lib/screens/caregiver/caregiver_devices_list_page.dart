@@ -424,25 +424,33 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 6),
-                          Row(
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
+                            runSpacing: 4,
                             children: [
-                              Icon(
-                                batteryIcon,
-                                size: 16,
-                                color: batteryColor,
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    batteryIcon,
+                                    size: 16,
+                                    color: batteryColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isOnline && battery != null
+                                        ? 'Battery: $battery%'
+                                        : 'Battery: --',
+                                    style: TextStyle(
+                                      color: batteryColor,
+                                      fontWeight: isLowBattery ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                isOnline && battery != null
-                                    ? 'Battery: $battery%'
-                                    : 'Battery: --',
-                                style: TextStyle(
-                                  color: batteryColor,
-                                  fontWeight: isLowBattery ? FontWeight.bold : FontWeight.w600,
-                                ),
-                              ),
-                              if (isLowBattery) ...[
-                                const SizedBox(width: 6),
+                              if (isLowBattery)
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
@@ -458,7 +466,6 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                                     ),
                                   ),
                                 ),
-                              ],
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -480,13 +487,22 @@ class CaregiverDevicesListPageState extends State<CaregiverDevicesListPage> {
                         children: [
                           // Edit button: opens edit serial dialog.
                           IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
                             onPressed: () => _showEditDialog(d),
+                            tooltip: 'Edit Serial',
                           ),
+                          const SizedBox(width: 8),
                           // Delete button: opens confirmation dialog.
                           IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
+                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
                             onPressed: () => _confirmDelete(d),
+                            tooltip: 'Delete Device',
                           ),
                         ],
                       ),

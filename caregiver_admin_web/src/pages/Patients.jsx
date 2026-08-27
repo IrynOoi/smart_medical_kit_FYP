@@ -286,12 +286,45 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Combine or filter patients based on category selection
-  const getDisplayList = () => {
-    if (filterCategory === 'my_patients') return myPatients;
-    if (filterCategory === 'available') return availablePatients;
+  // Reactivate Patient Account
+  const handleReactivatePatient = async (patient) => {
+    const pId = patient.id || patient.patient_id;
+    const name = patient.fullname || patient.full_name || patient.name || 'this patient';
 
-    // 'all' category: combine myPatients and availablePatients, removing duplicates
+    if (window.confirm(`Activate account for "${name}"?\n\nThis will restore the patient's account to active status.`)) {
+      setFormLoading(true);
+      try {
+        const success = await apiService.reactivatePatient(pId);
+        if (success) {
+          setActionSuccessMsg(`Patient "${name}" has been successfully activated!`);
+          setTimeout(() => setActionSuccessMsg(''), 4000);
+          if (selectedPatient && (selectedPatient.id === pId || selectedPatient.patient_id === pId)) {
+            setSelectedPatient({ ...selectedPatient, is_active: 1 });
+          }
+          fetchAllPatientData();
+        } else {
+          alert('Failed to activate patient account.');
+        }
+      } catch (err) {
+        alert('An error occurred while activating patient.');
+      } finally {
+        setFormLoading(false);
+      }
+    }
+  };
+
+  // Active patients assigned to me
+  const myActivePatients = myPatients.filter(
+    (p) => p.is_active !== false && p.is_active !== 0 && p.is_active !== '0'
+  );
+
+  // Available active patients (not assigned to me, and is_active == 1)
+  const availableActivePatients = availablePatients.filter(
+    (p) => p.is_active !== false && p.is_active !== 0 && p.is_active !== '0'
+  );
+
+  // All patients in the system (unique combination of myPatients + availablePatients)
+  const getAllPatients = () => {
     const combined = [...myPatients];
     const myIds = new Set(myPatients.map((p) => p.id || p.patient_id));
     availablePatients.forEach((p) => {
@@ -301,6 +334,20 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
       }
     });
     return combined;
+  };
+  const allPatients = getAllPatients();
+
+  // Inactive patients across the entire system
+  const inactivePatients = allPatients.filter(
+    (p) => p.is_active === false || p.is_active === 0 || p.is_active === '0'
+  );
+
+  // Combine or filter patients based on category selection
+  const getDisplayList = () => {
+    if (filterCategory === 'my_patients') return myActivePatients;
+    if (filterCategory === 'available') return availableActivePatients;
+    if (filterCategory === 'inactive') return inactivePatients;
+    return allPatients; // 'all'
   };
 
   const displayList = getDisplayList();
@@ -364,7 +411,17 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
             </div>
 
             {/* Category Filter Tabs */}
-            <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '12px', gap: '4px' }}>
+            <div
+              style={{
+                display: 'flex',
+                background: '#F1F5F9',
+                padding: '4px',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                gap: '4px',
+                flexWrap: 'wrap',
+              }}
+            >
               <button
                 onClick={() => setFilterCategory('my_patients')}
                 style={{
@@ -379,7 +436,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   transition: 'all 0.2s ease',
                 }}
               >
-                My Patients ({myPatients.length})
+                My Patients ({myActivePatients.length})
               </button>
               <button
                 onClick={() => setFilterCategory('available')}
@@ -395,7 +452,23 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   transition: 'all 0.2s ease',
                 }}
               >
-                Available Patients ({availablePatients.length})
+                Available Active Patients ({availableActivePatients.length})
+              </button>
+              <button
+                onClick={() => setFilterCategory('inactive')}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: '700',
+                  border: 'none',
+                  borderRadius: '9px',
+                  background: filterCategory === 'inactive' ? '#6A4C93' : 'transparent',
+                  color: filterCategory === 'inactive' ? 'white' : '#64748B',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Inactive Patients ({inactivePatients.length})
               </button>
               <button
                 onClick={() => setFilterCategory('all')}
@@ -411,7 +484,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   transition: 'all 0.2s ease',
                 }}
               >
-                All System Patients
+                All System Patients ({allPatients.length})
               </button>
             </div>
 
@@ -431,8 +504,12 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
               {searchQuery
                 ? 'No patients matched your search criteria.'
                 : filterCategory === 'available'
-                  ? 'No unassigned or available patients found in system.'
-                  : 'Click "Add New Patient" to enroll a patient.'}
+                  ? 'No unassigned active patients found in system.'
+                  : filterCategory === 'inactive'
+                    ? 'No inactive or deactivated patients found in system.'
+                    : filterCategory === 'my_patients'
+                      ? 'No active patients currently assigned to your care.'
+                      : 'Click "Add New Patient" to enroll a patient.'}
             </p>
           </div>
         ) : (
@@ -457,15 +534,17 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    opacity: isActive ? 1 : 0.65,
+                    opacity: 1,
+                    border: isActive ? '1px solid #E2E8F0' : '1px solid #FECACA',
                     borderLeft: isMyPatient
                       ? '4px solid #6A4C93'
                       : '4px solid #3B82F6',
+                    boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.05)' : '0 1px 4px rgba(239, 68, 68, 0.08)',
                   }}
                 >
                   <div>
                     {/* Top Header Row with Status Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', gap: '8px' }}>
                       {isMyPatient ? (
                         <span className="badge badge-purple" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <ShieldCheck size={13} />
@@ -478,8 +557,14 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                         </span>
                       )}
 
-                      {!isActive && (
-                        <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>Inactive</span>
+                      {!isActive ? (
+                        <span className="badge" style={{ fontSize: '0.72rem', background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5', fontWeight: '700' }}>
+                          Inactive
+                        </span>
+                      ) : (
+                        <span className="badge" style={{ fontSize: '0.72rem', background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', fontWeight: '700' }}>
+                          Active
+                        </span>
                       )}
                     </div>
 
@@ -554,23 +639,23 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   </div>
 
                   {/* Card Action Buttons */}
-                  <div style={{ display: 'flex', gap: '8px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '6px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', alignItems: 'center' }}>
                     <button
                       className="btn btn-outline"
-                      style={{ flex: 1, padding: '7px 10px', fontSize: '0.8rem' }}
+                      style={{ flex: 1, padding: '7px 8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                       onClick={() => handleViewPatient(patient)}
                     >
-                      <Eye size={15} />
+                      <Eye size={14} />
                       <span>View</span>
                     </button>
 
                     <button
                       className="btn"
-                      style={{ padding: '7px 12px', fontSize: '0.8rem', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1' }}
+                      style={{ padding: '7px 8px', fontSize: '0.8rem', background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', display: 'flex', alignItems: 'center', gap: '4px' }}
                       onClick={() => handleOpenEdit(patient)}
                       title="Edit Patient Details"
                     >
-                      <Edit size={15} />
+                      <Edit size={14} />
                       <span>Edit</span>
                     </button>
 
@@ -578,42 +663,64 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                     {isMyPatient ? (
                       <button
                         className="btn"
-                        style={{ padding: '7px 10px', background: '#FEF3C7', color: '#D97706', border: '1px solid #FCD34D' }}
+                        style={{ padding: '7px 8px', background: '#FEF3C7', color: '#D97706', border: '1px solid #FCD34D' }}
                         onClick={() => handleUnlinkPatient(patient)}
                         title="Unlink from My Care List"
                       >
-                        <Unlink size={15} />
+                        <Unlink size={14} />
                       </button>
                     ) : (
                       <button
                         className="btn"
-                        style={{ padding: '7px 12px', background: '#6A4C93', color: 'white', border: 'none', fontSize: '0.78rem', fontWeight: '600' }}
+                        style={{ padding: '7px 8px', background: '#6A4C93', color: 'white', border: 'none', fontSize: '0.78rem', fontWeight: '600' }}
                         onClick={() => handleLinkPatient(patient)}
                         title="Link Patient to My Care List"
                         disabled={formLoading}
                       >
-                        <UserCheck size={15} />
-                        <span>Link to Care</span>
+                        <UserCheck size={14} />
                       </button>
                     )}
 
-                    {/* Account Lifecycle Actions */}
-                    <button
-                      className="btn"
-                      style={{ padding: '7px 10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0' }}
-                      onClick={() => handleDeactivatePatient(patient)}
-                      title="Deactivate Patient Account"
-                    >
-                      <UserX size={15} />
-                    </button>
+                    {/* Account Lifecycle Actions: Deactivate or Reactivate/Activate */}
+                    {!isActive ? (
+                      <button
+                        className="btn"
+                        style={{
+                          padding: '7px 10px',
+                          background: '#10B981',
+                          color: 'white',
+                          border: 'none',
+                          fontSize: '0.78rem',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        onClick={() => handleReactivatePatient(patient)}
+                        title="Activate Patient Account"
+                        disabled={formLoading}
+                      >
+                        <UserCheck size={14} />
+                        <span>Activate</span>
+                      </button>
+                    ) : (
+                      <button
+                        className="btn"
+                        style={{ padding: '7px 8px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0' }}
+                        onClick={() => handleDeactivatePatient(patient)}
+                        title="Deactivate Patient Account"
+                      >
+                        <UserX size={14} />
+                      </button>
+                    )}
 
                     <button
                       className="btn btn-secondary"
-                      style={{ padding: '7px 10px', color: '#EF4444', background: '#FEE2E2', border: '1px solid #FCA5A5' }}
+                      style={{ padding: '7px 8px', color: '#EF4444', background: '#FEE2E2', border: '1px solid #FCA5A5' }}
                       onClick={() => handleDeletePatientPermanent(patient)}
                       title="Delete Account Permanently"
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -710,6 +817,16 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                {(selectedPatient.is_active === false || selectedPatient.is_active === 0) && (
+                  <button
+                    className="btn"
+                    onClick={() => handleReactivatePatient(selectedPatient)}
+                    style={{ flex: 1, background: '#10B981', color: 'white', border: 'none', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <UserCheck size={16} />
+                    <span>Activate Patient</span>
+                  </button>
+                )}
                 <button
                   className="btn"
                   onClick={() => {

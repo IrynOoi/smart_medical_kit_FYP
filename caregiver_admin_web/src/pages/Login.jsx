@@ -138,11 +138,16 @@ export default function Login() {
     setLoading(true);
     setErrorMessage('');
 
-    const result = await login(email, password);
-    if (!result.success) {
-      setErrorMessage(result.error || 'Login failed. Please check your credentials.');
+    try {
+      const result = await login(email, password);
+      if (!result.success) {
+        setErrorMessage(result.error || result.message || 'Invalid email or password.');
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'An unexpected error occurred during login.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSendOTP = async (e) => {
@@ -294,7 +299,10 @@ export default function Login() {
                 type="email"
                 placeholder="caregiver@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 required
               />
             </div>
@@ -308,7 +316,10 @@ export default function Login() {
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 required
                 style={{ paddingRight: '40px' }}
               />

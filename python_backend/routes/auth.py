@@ -7,7 +7,7 @@ import random
 from services.email_service import send_reset_otp_email
 
 from models.user_model import get_user_by_credentials, create_new_user, get_user_id_by_email, update_user_password, get_caregiver_patient_count
-from utils.sanitizers import clean_string  # Helper to strip dangerous characters from inputs
+from utils.sanitizers import clean_string, normalize_phone_number  # Helper to strip dangerous characters and standardize phone numbers
 
 # Create Blueprint for authentication routes
 auth_bp = Blueprint('auth', __name__)
@@ -66,7 +66,7 @@ def register():
         password = data.get('password')
         name = data.get('fullname') or data.get('full_name')  # Accept either field name
         gender = data.get('gender', 'Other')
-        phone = data.get('phone_no')
+        phone = normalize_phone_number(data.get('phone_no') or data.get('phone'))
         dob = data.get('date_of_birth')
         address = data.get('address')
 
