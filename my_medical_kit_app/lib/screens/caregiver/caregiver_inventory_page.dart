@@ -80,7 +80,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
           _devicesList = devices.cast<Map<String, dynamic>>();
         });
         // Auto-select first device by default (matching web app behavior)
-        if (autoSelectFirst && _selectedDeviceId == null && _devicesList.isNotEmpty) {
+        if (autoSelectFirst &&
+            _selectedDeviceId == null &&
+            _devicesList.isNotEmpty) {
           final firstDev = _devicesList.first;
           final firstId = (firstDev['device_id'] ?? firstDev['id']) as int?;
           if (firstId != null) {
@@ -911,11 +913,17 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
         : _deviceData;
 
     final rawBatt = displayDevice['battery_level'] ?? displayDevice['battery'];
-    final int? batteryLevel = rawBatt is num ? rawBatt.toInt() : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
+    final int? batteryLevel = rawBatt is num
+        ? rawBatt.toInt()
+        : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
 
     final deviceName = displayDevice['device_serial'] ?? 'Not Connected';
-    final rawAwake = displayDevice['is_awake'] ?? _selectedDeviceDetail['is_awake'];
-    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
+    final rawAwake =
+        displayDevice['is_awake'] ?? _selectedDeviceDetail['is_awake'];
+    final bool rawAwakeBool =
+        (rawAwake == true || rawAwake == 1 || rawAwake == null) &&
+        rawAwake != false &&
+        rawAwake != 0;
     final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(
       displayDevice['last_active_timestamp'],
     );
@@ -1035,8 +1043,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       style: TextStyle(
                         fontSize: 12,
                         color: isOnline
-                          ? Colors.greenAccent
-                          : Colors.grey.shade400,
+                            ? Colors.greenAccent
+                            : Colors.grey.shade400,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1295,11 +1303,18 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
   Widget _buildDeviceStatusCard() {
     final serial = _selectedPatientDevice['device_serial'] ?? 'Unknown';
-    final rawBatt = _selectedPatientDevice['battery_level'] ?? _selectedPatientDevice['battery'];
-    final int? battery = rawBatt is num ? rawBatt.toInt() : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
+    final rawBatt =
+        _selectedPatientDevice['battery_level'] ??
+        _selectedPatientDevice['battery'];
+    final int? battery = rawBatt is num
+        ? rawBatt.toInt()
+        : (rawBatt != null ? int.tryParse(rawBatt.toString()) : null);
     final lastActive = _selectedPatientDevice['last_active_timestamp'];
     final rawAwake = _selectedPatientDevice['is_awake'];
-    final bool rawAwakeBool = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0;
+    final bool rawAwakeBool =
+        (rawAwake == true || rawAwake == 1 || rawAwake == null) &&
+        rawAwake != false &&
+        rawAwake != 0;
     final isOnline = rawAwakeBool && _isDeviceOnlineFromTimestamp(lastActive);
 
     Color batteryColor;
@@ -1409,11 +1424,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     ),
                     Row(
                       children: [
-                        Icon(
-                          batteryIcon,
-                          size: 16,
-                          color: batteryColor,
-                        ),
+                        Icon(batteryIcon, size: 16, color: batteryColor),
                         const SizedBox(width: 4),
                         Text(
                           isOnline && battery != null ? '$battery%' : '--',
@@ -1945,7 +1956,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     final bool hasHeartbeat = _isDeviceOnlineFromTimestamp(
       _selectedDeviceDetail['last_active_timestamp'],
     );
-    final bool isAwake = (rawAwake == true || rawAwake == 1 || rawAwake == null) && rawAwake != false && rawAwake != 0 && hasHeartbeat;
+    final bool isAwake =
+        (rawAwake == true || rawAwake == 1 || rawAwake == null) &&
+        rawAwake != false &&
+        rawAwake != 0 &&
+        hasHeartbeat;
     final color = isAwake ? Colors.green : Colors.red;
     final statusText = isAwake ? 'Awake' : 'Sleeping';
 
@@ -2633,7 +2648,8 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
   // CONTACT TECHNICIAN SECTION
   // ------------------------------------------------------------
   Widget _buildContactTechnicianCard() {
-    final currentSerial = _selectedDeviceDetail['device_serial'] ??
+    final currentSerial =
+        _selectedDeviceDetail['device_serial'] ??
         (_selectedDeviceId != null ? 'DISP-$_selectedDeviceId' : 'DISP-1');
 
     return Padding(
@@ -2687,10 +2703,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFFF5F3FF),
-                    Color(0xFFEDE9FE),
-                  ],
+                  colors: [Color(0xFFF5F3FF), Color(0xFFEDE9FE)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -2711,7 +2724,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primaryPurple.withValues(alpha: 0.25),
+                          color: AppColors.primaryPurple.withValues(
+                            alpha: 0.25,
+                          ),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -2791,7 +2806,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 Clipboard.setData(const ClipboardData(text: '+60 12-345 6789'));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('✅ Hotline number copied to clipboard (+60 12-345 6789)'),
+                    content: Text(
+                      '✅ Hotline number copied to clipboard (+60 12-345 6789)',
+                    ),
                     backgroundColor: Colors.green,
                     duration: Duration(seconds: 2),
                   ),
@@ -2893,10 +2910,7 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 icon: const Icon(Icons.headset_mic_rounded, size: 18),
                 label: const Text(
                   'Request On-Site Technician Inspection',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPurple,
@@ -2924,32 +2938,33 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
     required VoidCallback onCopy,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: iconBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: iconColor, size: 18),
+            child: Icon(icon, color: iconColor, size: 19),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey.shade600,
                     letterSpacing: 0.5,
@@ -2959,18 +2974,21 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                 Text(
                   subtitle,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1E293B),
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 6),
+          // Copy Button
           IconButton(
             onPressed: onCopy,
-            icon: const Icon(Icons.copy_rounded, size: 18),
-            color: AppColors.primaryPurple,
+            icon: const Icon(Icons.copy_rounded, size: 16),
+            color: Colors.grey.shade600,
             tooltip: 'Copy',
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.all(6),
@@ -3039,7 +3057,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                     RichText(
                       textAlign: TextAlign.center,
                       text: TextSpan(
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF475569),
+                        ),
                         children: [
                           const TextSpan(text: 'Ticket '),
                           TextSpan(
@@ -3049,7 +3070,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                               color: AppColors.primaryPurple,
                             ),
                           ),
-                          TextSpan(text: ' has been registered for $deviceSerial.'),
+                          TextSpan(
+                            text: ' has been registered for $deviceSerial.',
+                          ),
                         ],
                       ),
                     ),
@@ -3066,7 +3089,11 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                         children: [
                           Row(
                             children: const [
-                              Icon(Icons.mail_rounded, size: 16, color: Color(0xFF15803D)),
+                              Icon(
+                                Icons.mail_rounded,
+                                size: 16,
+                                color: Color(0xFF15803D),
+                              ),
                               SizedBox(width: 6),
                               Text(
                                 'Reflected on Mailtrap (Sandbox)',
@@ -3081,7 +3108,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                           const SizedBox(height: 4),
                           const Text(
                             'An automated ticket notification email has been dispatched via Mailtrap SMTP. Assigned Lead Engineer: Ooi Xien Xien.',
-                            style: TextStyle(fontSize: 11, color: Color(0xFF166534)),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF166534),
+                            ),
                           ),
                         ],
                       ),
@@ -3099,7 +3129,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'Done',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],
@@ -3115,17 +3148,26 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
               contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               title: Row(
                 children: [
-                  const Icon(Icons.build_rounded, color: AppColors.primaryPurple, size: 20),
+                  const Icon(
+                    Icons.build_rounded,
+                    color: AppColors.primaryPurple,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
                       'Request Hardware Inspection',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
-                    onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
+                    onPressed: isSubmitting
+                        ? null
+                        : () => Navigator.pop(dialogContext),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -3138,7 +3180,10 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                   children: [
                     Text(
                       'Submit an on-site hardware maintenance ticket for $deviceSerial. The ticket will be dispatched to the technician and reflected on Mailtrap.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     const Text(
@@ -3156,9 +3201,14 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       decoration: InputDecoration(
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFCBD5E1),
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
                       items: categories.map((cat) {
                         return DropdownMenuItem<String>(
@@ -3198,10 +3248,15 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                         hintText: selectedCategory == 'Other'
                             ? 'Please describe the specific hardware issue in detail...'
                             : 'Describe symptoms (e.g. motor ticking, pill jammed)...',
-                        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                        hintStyle: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade400,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFCBD5E1),
+                          ),
                         ),
                         contentPadding: const EdgeInsets.all(12),
                       ),
@@ -3212,7 +3267,9 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
+                            onPressed: isSubmitting
+                                ? null
+                                : () => Navigator.pop(dialogContext),
                             style: OutlinedButton.styleFrom(
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -3230,9 +3287,13 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                                 : () async {
                                     if (selectedCategory == 'Other' &&
                                         notesController.text.trim().isEmpty) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
-                                          content: Text('Please enter issue details for category "Other"'),
+                                          content: Text(
+                                            'Please enter issue details for category "Other"',
+                                          ),
                                           backgroundColor: Colors.red,
                                         ),
                                       );
@@ -3241,36 +3302,48 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
 
                                     setDialogState(() => isSubmitting = true);
                                     try {
-                                      final res = await DeviceService().submitTechnicianTicket(
-                                        deviceSerial: deviceSerial,
-                                        deviceId: _selectedDeviceId,
-                                        caregiverId: widget.userId,
-                                        issueCategory: selectedCategory,
-                                        notes: notesController.text.trim(),
-                                        technicianName: 'Ooi Xien Xien',
-                                      );
+                                      final res = await DeviceService()
+                                          .submitTechnicianTicket(
+                                            deviceSerial: deviceSerial,
+                                            deviceId: _selectedDeviceId,
+                                            caregiverId: widget.userId,
+                                            issueCategory: selectedCategory,
+                                            notes: notesController.text.trim(),
+                                            technicianName: 'Ooi Xien Xien',
+                                          );
 
                                       if (res['success'] == true) {
-                                        ticketCode = res['ticket_id'] ?? 'HW-0001';
+                                        ticketCode =
+                                            res['ticket_id'] ?? 'HW-0001';
                                         setDialogState(() {
                                           isSubmitting = false;
                                           isSuccess = true;
                                         });
                                       } else {
-                                        setDialogState(() => isSubmitting = false);
+                                        setDialogState(
+                                          () => isSubmitting = false,
+                                        );
                                         if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
                                             SnackBar(
-                                              content: Text('❌ Ticket submission failed: ${res['error'] ?? res['message'] ?? 'Unknown error'}'),
+                                              content: Text(
+                                                '❌ Ticket submission failed: ${res['error'] ?? res['message'] ?? 'Unknown error'}',
+                                              ),
                                               backgroundColor: Colors.red,
                                             ),
                                           );
                                         }
                                       }
                                     } catch (e) {
-                                      setDialogState(() => isSubmitting = false);
+                                      setDialogState(
+                                        () => isSubmitting = false,
+                                      );
                                       if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
                                             content: Text('❌ Error: $e'),
                                             backgroundColor: Colors.red,
@@ -3296,7 +3369,12 @@ class _CaregiverInventoryPageState extends State<CaregiverInventoryPage> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text('Submit Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
+                                : const Text(
+                                    'Submit Ticket',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],

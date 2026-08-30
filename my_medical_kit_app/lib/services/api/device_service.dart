@@ -58,7 +58,7 @@ class DeviceService {
 
   // ---------------------- Get Device by ID ----------------------
   /// Retrieve a single device's details (including battery, IP, etc.).
-  /// Returns a Map<String, dynamic> or null if not found/error.
+  /// Returns a Map of device properties or null if not found/error.
   Future<Map<String, dynamic>?> getDevice(int id) async {
     try {
       final response = await ApiClient.get('/device/$id');

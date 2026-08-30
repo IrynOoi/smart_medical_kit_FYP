@@ -1419,14 +1419,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <a
-                      href="tel:+60123456789"
-                      className="btn btn-primary"
-                      style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
-                    >
-                      <Phone size={13} />
-                      <span>Call</span>
-                    </a>
                     <button
                       className="btn btn-outline"
                       onClick={() => handleCopyContact('+60123456789', 'phone')}
@@ -1478,14 +1470,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <a
-                      href={`mailto:hardware.support@smartmedkit.my?subject=Hardware%20Support%20Request%20-%20${currentSerial}`}
-                      className="btn btn-outline"
-                      style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none', background: 'white' }}
-                    >
-                      <Mail size={13} />
-                      <span>Email</span>
-                    </a>
                     <button
                       className="btn btn-outline"
                       onClick={() => handleCopyContact('hardware.support@smartmedkit.my', 'email')}
