@@ -312,4 +312,37 @@ class DeviceService {
       return null;
     }
   }
+
+  // ---------------------- Submit Hardware Inspection Ticket ----------------------
+  /// Submit an on-site hardware inspection ticket (reflected on Mailtrap).
+  Future<Map<String, dynamic>> submitTechnicianTicket({
+    required String deviceSerial,
+    int? deviceId,
+    int? caregiverId,
+    required String issueCategory,
+    String? notes,
+    String technicianName = 'Ooi Xien Xien',
+  }) async {
+    try {
+      final body = {
+        'device_serial': deviceSerial,
+        'device_id': deviceId,
+        'caregiver_id': caregiverId,
+        'issue_category': issueCategory,
+        'notes': notes ?? '',
+        'technician_name': technicianName,
+      };
+      final response = await ApiClient.post(
+        '/device/technician-ticket',
+        body: body,
+      );
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        return jsonResponse;
+      }
+      return {'success': false, 'message': 'HTTP ${response.statusCode}'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
 }

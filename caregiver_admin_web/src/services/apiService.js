@@ -941,4 +941,26 @@ export const apiService = {
       return false;
     }
   },
+
+  // 🛠️ HARDWARE TECHNICIAN TICKETS (MAILTRAP EMAIL DISPATCH)
+  async submitTechnicianTicket(ticketData) {
+    try {
+      const response = await fetch(`${BASE_URL}/device/technician-ticket`, {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify(ticketData),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data?.message || data?.error || 'Failed to submit technician ticket.',
+        };
+      }
+      return data || { success: true };
+    } catch (err) {
+      console.error('Submit technician ticket failed:', err);
+      return { success: false, error: err.message || 'Network error during ticket submission' };
+    }
+  },
 };

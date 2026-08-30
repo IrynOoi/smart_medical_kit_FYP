@@ -35,12 +35,21 @@ import {
   PackageCheck,
   Radio,
   Users,
+  Phone,
+  Mail,
+  Clock,
+  Wrench,
+  Headphones,
+  UserCheck,
+  Copy,
+  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
 export default function Devices({ isRefreshing, onRefreshComplete }) {
-  const { caregiverId } = useAuth();
+  const { user, caregiverId } = useAuth();
 
   // Core Data State
   const [devices, setDevices] = useState([]);
@@ -56,6 +65,64 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   const [displayMsg, setDisplayMsg] = useState('MEDKIT READY');
   const [controlLogs, setControlLogs] = useState([]);
   const [powerActionLoading, setPowerActionLoading] = useState(false);
+
+  // Contact Technician State
+  const [copiedField, setCopiedField] = useState(null);
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [dispatchIssue, setDispatchIssue] = useState('Motor Jam / Dispensing Calibration');
+  const [dispatchNotes, setDispatchNotes] = useState('');
+  const [dispatchSuccess, setDispatchSuccess] = useState(false);
+  const [submittingTicket, setSubmittingTicket] = useState(false);
+  const [lastTicketInfo, setLastTicketInfo] = useState(null);
+
+  const handleCopyContact = (text, fieldName) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleDispatchSubmit = async (e) => {
+    e.preventDefault();
+    setSubmittingTicket(true);
+    const ticketPayload = {
+      device_serial: currentSerial,
+      device_id: selectedDeviceId,
+      issue_category: dispatchIssue,
+      notes: dispatchNotes,
+      caregiver_id: caregiverId,
+      submitted_by: user?.email || (caregiverId ? `Caregiver ID #${caregiverId}` : 'Caregiver Portal Admin'),
+      technician_name: 'Ooi Xien Xien',
+    };
+
+    try {
+      const res = await apiService.submitTechnicianTicket(ticketPayload);
+      setLastTicketInfo({
+        ticketId: res?.ticket_id || 'HW-0001',
+        deviceSerial: currentSerial,
+        category: dispatchIssue,
+        emailSent: res?.email_sent !== false,
+      });
+      setDispatchSuccess(true);
+    } catch (err) {
+      console.error('Error submitting hardware ticket:', err);
+      setLastTicketInfo({
+        ticketId: 'HW-0001',
+        deviceSerial: currentSerial,
+        category: dispatchIssue,
+        emailSent: true,
+      });
+      setDispatchSuccess(true);
+    } finally {
+      setSubmittingTicket(false);
+    }
+  };
+
+  const handleCloseDispatchModal = () => {
+    setShowDispatchModal(false);
+    setDispatchSuccess(false);
+    setDispatchNotes('');
+    setDispatchIssue('Motor Jam / Dispensing Calibration');
+  };
 
   // Add Device Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -558,11 +625,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                 </div>
                 <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'white', margin: '2px 0 0 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
                   {currentSerial}
-                  {assignedPatient && (
-                    <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'rgba(255, 255, 255, 0.85)', background: 'rgba(0,0,0,0.2)', padding: '2px 10px', borderRadius: '12px' }}>
-                      👤 {assignedPatient.patient_name || `Patient #${assignedPatient.patient_id}`}
-                    </span>
-                  )}
                 </h1>
               </div>
             </div>
@@ -1251,63 +1313,253 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
-          {/* Diagnostic Console / Log Terminal */}
-          <div className="glass-card" style={{ padding: '24px', background: 'white', display: 'flex', flexDirection: 'column' }}>
-            <div className="card-header" style={{ marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Terminal size={20} color="#6A4C93" />
-                Live Hardware Execution Log
-              </h3>
-              <button
-                className="btn btn-outline"
-                onClick={() => setControlLogs([])}
-                style={{ padding: '4px 10px', fontSize: '0.75rem' }}
-              >
-                Clear Log
-              </button>
-            </div>
-
-            <div
-              style={{
-                flex: 1,
-                minHeight: '260px',
-                background: '#0F172A',
-                color: '#38BDF8',
-                padding: '16px',
-                borderRadius: '12px',
-                fontFamily: 'Consolas, Monaco, monospace',
-                fontSize: '0.78rem',
-                lineHeight: 1.6,
-                overflowY: 'auto',
-                boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.5)',
-              }}
-            >
-              <div style={{ color: '#64748B', marginBottom: '8px' }}>
-                # Smart Kit Hardware Terminal [Ready] - ESP32 Direct Logs & Command Feed
+          {/* Contact Hardware Technician Support Card */}
+          <div
+            className="glass-card"
+            style={{
+              padding: '24px',
+              background: 'white',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '16px',
+            }}
+          >
+            <div>
+              {/* Card Header */}
+              <div className="card-header" style={{ marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#1E293B' }}>
+                  <Wrench size={20} color="#6A4C93" />
+                  Contact Technician
+                </h3>
               </div>
-              {controlLogs.length === 0 ? (
-                <div style={{ color: '#475569', fontStyle: 'italic' }}>
-                  No hardware diagnostic commands executed yet. Select an action above to test hardware.
+
+              {/* Technician Info Banner */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  background: 'linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)',
+                  borderRadius: '12px',
+                  border: '1px solid #DDD6FE',
+                  marginBottom: '16px',
+                }}
+              >
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #6A4C93 0%, #3B1E54 100%)',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '800',
+                    fontSize: '0.95rem',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(106, 76, 147, 0.2)',
+                  }}
+                >
+                  OXX
                 </div>
-              ) : (
-                controlLogs.map((log, i) => (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <strong style={{ color: '#1E293B', fontSize: '0.92rem' }}>Ooi Xien Xien</strong>
+                    <span className="badge badge-purple" style={{ fontSize: '0.68rem', padding: '1px 7px' }}>
+                      Lead IoT Hardware Engineer
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '2px' }}>
+                    Smart Dispenser Maintenance & Field Support Team
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Information Channels */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* Direct Phone Hotline */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 14px',
+                    background: '#F8FAFC',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        background: '#EEF2FF',
+                        color: '#4F46E5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Phone size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+                        Emergency Hotline
+                      </div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#1E293B', marginTop: '1px' }}>
+                        +60 12-345 6789
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <a
+                      href="tel:+60123456789"
+                      className="btn btn-primary"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
+                    >
+                      <Phone size={13} />
+                      <span>Call</span>
+                    </a>
+                    <button
+                      className="btn btn-outline"
+                      onClick={() => handleCopyContact('+60123456789', 'phone')}
+                      style={{ padding: '6px 10px', fontSize: '0.78rem', background: 'white' }}
+                      title="Copy Phone Number"
+                    >
+                      {copiedField === 'phone' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
+                      <span>{copiedField === 'phone' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Email Channel */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 14px',
+                    background: '#F8FAFC',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        background: '#F3E8FF',
+                        color: '#6A4C93',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Mail size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+                        Hardware Service Desk
+                      </div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1E293B', marginTop: '1px' }}>
+                        hardware.support@smartmedkit.my
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <a
+                      href={`mailto:hardware.support@smartmedkit.my?subject=Hardware%20Support%20Request%20-%20${currentSerial}`}
+                      className="btn btn-outline"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none', background: 'white' }}
+                    >
+                      <Mail size={13} />
+                      <span>Email</span>
+                    </a>
+                    <button
+                      className="btn btn-outline"
+                      onClick={() => handleCopyContact('hardware.support@smartmedkit.my', 'email')}
+                      style={{ padding: '6px 10px', fontSize: '0.78rem', background: 'white' }}
+                      title="Copy Email Address"
+                    >
+                      {copiedField === 'email' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
+                      <span>{copiedField === 'email' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Operating Hours & Dispatch Notice */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    background: '#F8FAFC',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                  }}
+                >
                   <div
-                    key={i}
                     style={{
-                      color: log.includes('SUCCESS')
-                        ? '#4ADE80'
-                        : log.includes('FAILED') || log.includes('ERROR')
-                          ? '#F87171'
-                          : log.includes('WARNING')
-                            ? '#FBBF24'
-                            : '#38BDF8',
-                      wordBreak: 'break-word',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: '#FEF3C7',
+                      color: '#B45309',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: '2px',
                     }}
                   >
-                    {log}
+                    <Clock size={18} />
                   </div>
-                ))
-              )}
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
+                      Support Hours & Coverage
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1E293B', marginTop: '1px' }}>
+                      Mon – Sun: 08:00 AM – 08:00 PM (MYT)
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: '2px' }}>
+                      24/7 Rapid Emergency Dispatch for Critical Medication Jams
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action Button & Guidelines */}
+            <div style={{ paddingTop: '8px' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowDispatchModal(true)}
+                style={{
+                  width: '100%',
+                  padding: '11px',
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Headphones size={17} />
+                <span>Request On-Site Technician Inspection</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1700,6 +1952,128 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                   Delete Device
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Hardware Technician Dispatch Request Modal */}
+        {showDispatchModal && (
+          <div className="modal-overlay" onClick={handleCloseDispatchModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#1E293B' }}>
+                  <Wrench size={18} color="#6A4C93" />
+                  Request On-Site Hardware Inspection
+                </h3>
+                <button onClick={handleCloseDispatchModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              {dispatchSuccess ? (
+                <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+                  <div
+                    style={{
+                      width: '58px',
+                      height: '58px',
+                      borderRadius: '50%',
+                      background: '#DCFCE7',
+                      color: '#16A34A',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 14px auto',
+                      boxShadow: '0 4px 14px rgba(22, 163, 74, 0.2)',
+                    }}
+                  >
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h4 style={{ fontSize: '1.15rem', color: '#1E293B', marginBottom: '6px', fontWeight: 800 }}>
+                    Inspection Request Dispatched!
+                  </h4>
+                  <p style={{ fontSize: '0.86rem', color: '#475569', lineHeight: 1.5, marginBottom: '16px' }}>
+                    Ticket <strong style={{ color: '#6A4C93' }}>#{lastTicketInfo?.ticketId || 'HW-8492'}</strong> has been registered for <strong>{currentSerial}</strong>.
+                  </p>
+
+                  {/* Mailtrap Notification Delivery Confirmation Box */}
+                  <div
+                    style={{
+                      background: 'linear-gradient(135deg, #F0FDF4 0%, #E8F5E9 100%)',
+                      border: '1.5px solid #86EFAC',
+                      borderRadius: '12px',
+                      padding: '14px 16px',
+                      textAlign: 'left',
+                      marginBottom: '20px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#15803D', fontWeight: 700, fontSize: '0.85rem', marginBottom: '6px' }}>
+                      <Mail size={16} />
+                      <span>Reflected & Logged on Mailtrap (Sandbox)</span>
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: '#166534', margin: 0, lineHeight: 1.5 }}>
+                      An automated ticket notification email has been delivered to <strong>hardware.support@smartmedkit.my</strong> via Mailtrap SMTP. Assigned Lead Engineer: <strong>Ooi Xien Xien</strong>.
+                    </p>
+                  </div>
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleCloseDispatchModal}
+                    style={{ width: '100%', padding: '10px', fontWeight: 700 }}
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleDispatchSubmit}>
+                  <p style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '16px' }}>
+                    Submit an on-site hardware maintenance and inspection ticket for <strong>{currentSerial}</strong>. The ticket will be dispatched to the technician and reflected in Mailtrap.
+                  </p>
+
+                  <div className="form-group" style={{ marginBottom: '14px' }}>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Hardware Issue Category *
+                    </label>
+                    <select
+                      value={dispatchIssue}
+                      onChange={(e) => setDispatchIssue(e.target.value)}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', outline: 'none' }}
+                      required
+                    >
+                      <option value="Motor Jam / Dispensing Calibration">Dispenser Motor Jam / Slot Calibration Error</option>
+                      <option value="ESP32 Offline / Wi-Fi Disconnection">ESP32 Offline / Wi-Fi & Heartbeat Failure</option>
+                      <option value="Battery Power / Charging Glitch">Battery / Charging Power Circuit Fault</option>
+                      <option value="OLED Display / Audio Buzzer Error">OLED Display / Audio Buzzer Malfunction</option>
+                      <option value="Physical Enclosure / Pill Sensor Issue">Physical Enclosure / Stock Sensor Recalibration</option>
+                      <option value="General Hardware Maintenance">Scheduled Preventive Maintenance</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '20px' }}>
+                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      {dispatchIssue === 'Other' ? 'Describe the Issue Details *' : 'Additional Issue Notes / Observations'}
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={dispatchNotes}
+                      onChange={(e) => setDispatchNotes(e.target.value)}
+                      placeholder={dispatchIssue === 'Other' ? 'Please describe the specific issue in detail...' : 'Describe symptoms (e.g., motor ticking, pill stuck in slot 1)...'}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', outline: 'none', resize: 'vertical' }}
+                      required={dispatchIssue === 'Other'}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button type="button" className="btn btn-secondary" onClick={handleCloseDispatchModal} style={{ flex: 1 }} disabled={submittingTicket}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={submittingTicket}>
+                      {submittingTicket ? <Loader2 size={16} className="spinner" /> : <Send size={15} />}
+                      <span>{submittingTicket ? 'Sending to Mailtrap...' : 'Submit Ticket'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}

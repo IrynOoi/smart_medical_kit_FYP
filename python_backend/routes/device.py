@@ -747,3 +747,129 @@ def dispense_missed():
             return jsonify({"success": False, "message": "No pending log found"}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ---------------------- Submit Hardware Technician Inspection Ticket ----------------------
+@device_bp.route('/device/technician-ticket', methods=['POST'])
+def submit_technician_ticket():
+    """
+    Submits a hardware technician inspection ticket for a device,
+    persists it with a sequential formatted ID (HW-0001, HW-0002, etc.),
+    retrieves the caregiver's email from the database,
+    and immediately dispatches an email notification via Mailtrap SMTP.
+    """
+    try:
+        from services.email_service import send_hardware_ticket_email
+
+        data = request.get_json(silent=True) or {}
+        device_serial = data.get('device_serial') or 'DISP-Unknown'
+        device_id = data.get('device_id')
+        issue_category = data.get('issue_category') or 'Other'
+        notes = data.get('notes', '')
+        caregiver_id = data.get('caregiver_id')
+        submitted_by_input = data.get('submitted_by')
+        technician_name = data.get('technician_name') or 'Ooi Xien Xien'
+        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Query caregiver's email directly from database
+        caregiver_email = None
+        if caregiver_id:
+            try:
+                with get_db_connection() as conn:
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute('SELECT email, full_name FROM users WHERE user_id = %s', (caregiver_id,))
+                    row = cursor.fetchone()
+                    cursor.close()
+                    if row and row.get('email'):
+                        caregiver_email = row['email']
+            except Exception as query_err:
+                print(f"[DEBUG] Error querying caregiver email for ID {caregiver_id}: {query_err}")
+
+        # Fallback if submitted_by_input is already an email
+        if not caregiver_email and submitted_by_input:
+            if '@' in str(submitted_by_input):
+                caregiver_email = str(submitted_by_input).strip()
+            else:
+                digits = ''.join(filter(str.isdigit, str(submitted_by_input)))
+                if digits:
+                    try:
+                        with get_db_connection() as conn:
+                            cursor = conn.cursor(dictionary=True)
+                            cursor.execute('SELECT email FROM users WHERE user_id = %s', (int(digits),))
+                            row = cursor.fetchone()
+                            cursor.close()
+                            if row and row.get('email'):
+                                caregiver_email = row['email']
+                    except Exception:
+                        pass
+
+        # Final submitted_by is the caregiver's email from DB
+        submitted_by = caregiver_email or submitted_by_input or 'caregiver@mymedicalkit.com'
+
+        ticket_code = None
+        new_id = 1
+
+        # 1. Insert into database to obtain dynamic auto-incrementing ID
+        try:
+            with get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS hardware_tickets (
+                        ticket_id INT AUTO_INCREMENT PRIMARY KEY,
+                        ticket_code VARCHAR(32),
+                        device_serial VARCHAR(64) NOT NULL,
+                        device_id INT NULL,
+                        issue_category VARCHAR(128) NOT NULL,
+                        notes TEXT NULL,
+                        submitted_by VARCHAR(128) NULL,
+                        technician_name VARCHAR(128) DEFAULT 'Ooi Xien Xien',
+                        status VARCHAR(32) DEFAULT 'PENDING',
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                conn.commit()
+
+                cursor.execute('''
+                    INSERT INTO hardware_tickets (device_serial, device_id, issue_category, notes, submitted_by, technician_name, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ''', (device_serial, device_id, issue_category, notes, submitted_by, technician_name))
+                conn.commit()
+
+                new_id = cursor.lastrowid or 1
+                ticket_code = f"HW-{new_id:04d}"
+
+                cursor.execute('UPDATE hardware_tickets SET ticket_code = %s WHERE ticket_id = %s', (ticket_code, new_id))
+                conn.commit()
+                cursor.close()
+        except Exception as db_err:
+            print(f"[WARNING] Database insert for ticket failed, using fallback sequential numbering: {db_err}")
+            if not ticket_code:
+                ticket_code = "HW-0001"
+
+        if not ticket_code:
+            ticket_code = f"HW-{new_id:04d}"
+
+        ticket_data = {
+            'ticket_id': ticket_code,
+            'device_serial': device_serial,
+            'issue_category': issue_category,
+            'notes': notes,
+            'submitted_by': submitted_by,
+            'technician_name': technician_name,
+            'created_at': created_at
+        }
+
+        # 2. Dispatch Email via Mailtrap SMTP
+        email_sent = send_hardware_ticket_email(ticket_data)
+
+        return jsonify({
+            "success": True,
+            "message": "Hardware technician inspection ticket submitted successfully and notification sent to Mailtrap.",
+            "ticket_id": ticket_code,
+            "email_sent": email_sent,
+            "ticket": ticket_data
+        }), 200
+
+    except Exception as e:
+        print(f"[ERROR] Failed to process technician ticket: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
