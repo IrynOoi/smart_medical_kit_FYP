@@ -35,7 +35,6 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
   const [editingMed, setEditingMed] = useState(null);
   const [editForm, setEditForm] = useState({
     medication_name: '',
-    current_inventory: 0,
     refill_threshold: 10,
     device_serial: '',
     motor_slot: 1,
@@ -97,7 +96,6 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     const defaultSerial = med.device_serial || (devicesList[0]?.device_serial || 'DISP-1');
     setEditForm({
       medication_name: med.medication_name || med.name || '',
-      current_inventory: med.current_inventory ?? 0,
       refill_threshold: med.refill_threshold ?? 10,
       device_serial: defaultSerial,
       motor_slot: med.motor_slot || 1,
@@ -146,7 +144,6 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
       const medId = editingMed.id || editingMed.medication_id;
       const payload = {
         medication_name: editForm.medication_name.trim(),
-        current_inventory: parseInt(editForm.current_inventory) || 0,
         refill_threshold: parseInt(editForm.refill_threshold) || 10,
         device_serial: editForm.device_serial,
         motor_slot: parseInt(editForm.motor_slot) || 1,
@@ -500,30 +497,17 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   />
                 </div>
 
-                {/* 2. Current Inventory & 3. Refill Threshold */}
-                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                  <div>
-                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Current Inventory *</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={editForm.current_inventory}
-                      onChange={(e) => setEditForm({ ...editForm, current_inventory: e.target.value })}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Minimum Pill to Refill *</label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={editForm.refill_threshold}
-                      onChange={(e) => setEditForm({ ...editForm, refill_threshold: e.target.value })}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
+                {/* 2. Refill Threshold */}
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Minimum Pill to Refill *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={editForm.refill_threshold}
+                    onChange={(e) => setEditForm({ ...editForm, refill_threshold: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
+                  />
                 </div>
 
                 {/* 4. Device Serial (Dropdown) */}
