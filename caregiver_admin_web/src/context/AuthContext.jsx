@@ -2,13 +2,22 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
 
+// Create the authentication context object
 const AuthContext = createContext(null);
 
+/**
+ * AuthProvider component manages global authentication states, session persistence via sessionStorage,
+ * strict role validation (rejecting patient logins on the web portal), and profile synchronization.
+ */
 export const AuthProvider = ({ children }) => {
+  // Authentication state hooks
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  /**
+   * Initialize authentication status on component mount.
+   */
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -20,6 +29,8 @@ export const AuthProvider = ({ children }) => {
         if (savedUser) {
           const parsed = JSON.parse(savedUser);
           const userRole = (parsed.role || '').toLowerCase();
+
+          // Enforce role restriction on session reload
           if (userRole === 'patient' || (userRole !== 'caregiver' && userRole !== 'admin')) {
             sessionStorage.removeItem('caregiver_admin_user');
             setUser(null);
@@ -47,6 +58,9 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
+  /**
+   * Updates current user state and synchronizes changes to sessionStorage.
+   */
   const updateUser = (newUserData) => {
     setUser((prev) => {
       const updated = { ...(prev || {}), ...newUserData };
@@ -55,6 +69,9 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  /**
+   * Authenticates a caregiver with email and password credentials, enforcing strict role checks.
+   */
   const login = async (email, password) => {
     setError(null);
     try {
@@ -70,6 +87,7 @@ export const AuthProvider = ({ children }) => {
           return { success: false, error: errMsg };
         }
 
+        // Enforce that only caregivers or admins are allowed
         if (userRole !== 'caregiver' && userRole !== 'admin') {
           const errMsg = 'Access Denied: Only registered caregivers are authorized to log into this portal.';
           setError(errMsg);
@@ -107,12 +125,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Logs out the current user and clears all session storage and local persistence.
+   */
   const logout = () => {
     setUser(null);
     sessionStorage.removeItem('caregiver_admin_user');
     localStorage.removeItem('caregiver_admin_user');
   };
 
+  // Derive the active caregiver ID with fallback
   const caregiverId = user?.caregiver_id || user?.id || user?.user_id || 1;
 
   return (
@@ -133,6 +155,9 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+/**
+ * Custom hook to consume the authentication context safely within components.
+ */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -140,4 +165,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

@@ -16,6 +16,7 @@ import {
 import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
+// Constant array mapping day numbers to short labels
 const DAYS_OF_WEEK = [
   { id: 1, label: 'Mon' },
   { id: 2, label: 'Tue' },
@@ -26,7 +27,9 @@ const DAYS_OF_WEEK = [
   { id: 7, label: 'Sun' },
 ];
 
-// Helper to format day numbers array to readable string
+/**
+ * Helper to format day numbers array into a readable string.
+ */
 const formatDispenseDays = (days) => {
   if (!days || days.length === 0 || days.length === 7) return 'Everyday';
   const dayMap = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
@@ -34,7 +37,9 @@ const formatDispenseDays = (days) => {
   return sorted.map((d) => dayMap[d]).join(', ');
 };
 
-// Helper to format time string "08:00:00" or "20:00:00" to "8:00 AM" / "8:00 PM"
+/**
+ * Helper to format time strings (e.g., "08:00:00" or "20:00:00") into 12-hour AM/PM format.
+ */
 const formatTimeAMPM = (timeStr) => {
   if (!timeStr) return '';
   try {
@@ -51,7 +56,9 @@ const formatTimeAMPM = (timeStr) => {
   }
 };
 
-// Helper to format time string like "8:00:00", "8:00", or "08:00:00" to valid HTML5 time input format "08:00"
+/**
+ * Helper to format time strings into valid HTML5 time input format (HH:mm).
+ */
 const formatTime24HHMM = (timeStr) => {
   if (!timeStr) return '08:00';
   try {
@@ -69,9 +76,45 @@ const formatTime24HHMM = (timeStr) => {
   }
 };
 
+/**
+ * Helper to get the next available unique dispense time string (HH:mm).
+ */
+const getNextAvailableTime = (existingTimes) => {
+  const defaultSlots = ['08:00', '12:00', '16:00', '20:00', '22:00', '06:00', '10:00', '14:00', '18:00'];
+  const formattedExisting = (existingTimes || []).map((t) => formatTime24HHMM(t));
+  for (const slot of defaultSlots) {
+    if (!formattedExisting.includes(slot)) {
+      return slot;
+    }
+  }
+  for (let h = 0; h < 24; h++) {
+    const slot = `${String(h).padStart(2, '0')}:00`;
+    if (!formattedExisting.includes(slot)) {
+      return slot;
+    }
+  }
+  return '08:00';
+};
+
+/**
+ * Checks if a list of dispense times contains duplicate values.
+ */
+const checkDuplicateTimes = (timesList) => {
+  if (!timesList || timesList.length === 0) return false;
+  const formatted = timesList.map((t) => formatTime24HHMM(t).trim()).filter(Boolean);
+  const unique = new Set(formatted);
+  return unique.size !== formatted.length;
+};
+
+/**
+ * Prescriptions component manages patient medication schedules, dosages, 
+ * dispense timings, days of the week, and prescription CRUD operations.
+ */
 export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
+  // Extract caregiver ID from authentication context
   const { caregiverId } = useAuth();
 
+  // Component local states for patients list, selected patient, prescriptions, and medication catalog
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [prescriptions, setPrescriptions] = useState([]);
@@ -79,6 +122,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
   const [loading, setLoading] = useState(true);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
 
+  /**
+   * Helper returning today's date formatted as YYYY-MM-DD.
+   */
   const getTodayStr = () => {
     const d = new Date();
     const year = d.getFullYear();
@@ -88,11 +134,14 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
   };
   const todayStr = getTodayStr();
 
+  /**
+   * Calculates the minimum allowed end date based on start date constraints.
+   */
   const getMinEndDate = (startDateStr) => {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
-    
+
     let minDate = tomorrow;
     if (startDateStr) {
       const sDate = new Date(startDateStr);
@@ -108,7 +157,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     return `${year}-${month}-${day}`;
   };
 
-  // Add Prescription Modal state
+  // Add Prescription Modal state and form fields
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPrescription, setNewPrescription] = useState({
     patient_id: '',
@@ -121,7 +170,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     end_date: '',
   });
 
-  // Edit Prescription Modal state
+  // Edit Prescription Modal state and form fields
   const [editingPrescription, setEditingPrescription] = useState(null);
   const [editForm, setEditForm] = useState({
     medication_name: '',
@@ -133,10 +182,14 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     end_date: '',
   });
 
+  // Form error, loading status, and success notification states
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
+  /**
+   * Loads active patients and the master medication catalog from the API.
+   */
   const loadData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -171,6 +224,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Fetches prescriptions associated with a specific patient ID.
+   */
   const fetchPrescriptions = async (pid, showSpinner = true) => {
     if (!pid) return;
     if (showSpinner) setLoadingPrescriptions(true);
@@ -184,16 +240,19 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Initial data fetch on mount or caregiver change
   useEffect(() => {
     loadData(true);
   }, [caregiverId]);
 
+  // Fetch prescriptions whenever the selected patient changes
   useEffect(() => {
     if (selectedPatientId) {
       fetchPrescriptions(selectedPatientId, true);
     }
   }, [selectedPatientId]);
 
+  // Set up a 15-second background polling interval for data updates
   useEffect(() => {
     const interval = setInterval(() => {
       loadData(false);
@@ -202,6 +261,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     return () => clearInterval(interval);
   }, [caregiverId, selectedPatientId]);
 
+  // Handle external refresh triggers (props)
   useEffect(() => {
     if (isRefreshing) {
       loadData(true);
@@ -210,11 +270,12 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     }
   }, [isRefreshing]);
 
-  // Open Edit Modal
+  /**
+   * Opens the edit modal for a specific prescription and populates form fields.
+   */
   const handleOpenEdit = (pres) => {
     setEditingPrescription(pres);
 
-    // Format dispense times array safely to 24h HH:mm format for HTML time input
     let rawTimes = pres.dispense_times && pres.dispense_times.length > 0
       ? pres.dispense_times
       : (pres.scheduled_time ? [pres.scheduled_time] : ['08:00']);
@@ -242,7 +303,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     setFormError('');
   };
 
-  // Submit Add Prescription Form
+  /**
+   * Handles submission of the new prescription creation form.
+   */
   const handleAddPrescriptionSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -253,10 +316,23 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
       const selectedMed = medCatalog.find((m) => String(m.medication_id || m.id) === String(newPrescription.medication_id));
       const medName = selectedMed ? (selectedMed.medication_name || selectedMed.name) : (newPrescription.medication_name || 'Medication');
 
-      // Date validation
       const minAddAllowed = getMinEndDate(newPrescription.start_date);
       if (newPrescription.end_date && newPrescription.end_date < minAddAllowed) {
         setFormError(`End date must be after start date and today (Earliest: ${minAddAllowed}).`);
+        setFormLoading(false);
+        return;
+      }
+
+      // Validate dispense times
+      const formattedTimes = (newPrescription.dispense_times || []).map((t) => formatTime24HHMM(t).trim()).filter(Boolean);
+      if (formattedTimes.length === 0) {
+        setFormError('At least one dispense time is required.');
+        setFormLoading(false);
+        return;
+      }
+      const uniqueTimes = new Set(formattedTimes);
+      if (uniqueTimes.size !== formattedTimes.length) {
+        setFormError('Duplicate dispense times detected. Please ensure all scheduled times are unique.');
         setFormLoading(false);
         return;
       }
@@ -267,7 +343,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
         medication_name: medName,
         dosage: `${newPrescription.dosage} tablet(s)`,
         dosage_tablet: parseFloat(newPrescription.dosage) || 1.0,
-        dispense_times: newPrescription.dispense_times,
+        dispense_times: formattedTimes,
         dispense_days: newPrescription.dispense_days.length > 0 ? newPrescription.dispense_days : [1, 2, 3, 4, 5, 6, 7],
         start_date: newPrescription.start_date,
         end_date: newPrescription.end_date || null,
@@ -290,7 +366,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Submit Edit Prescription Form
+  /**
+   * Handles submission of the prescription update form.
+   */
   const handleEditPrescriptionSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -301,10 +379,23 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
       const selectedMed = medCatalog.find((m) => String(m.medication_id || m.id) === String(editForm.medication_id));
       const medName = selectedMed ? (selectedMed.medication_name || selectedMed.name) : (editForm.medication_name || editingPrescription.medication_name || 'Medication');
 
-      // Date validation
       const minEditAllowed = getMinEndDate(editForm.start_date);
       if (editForm.end_date && editForm.end_date < minEditAllowed) {
         setFormError(`End date must be after start date and today (Earliest: ${minEditAllowed}).`);
+        setFormLoading(false);
+        return;
+      }
+
+      // Validate dispense times
+      const formattedTimes = (editForm.dispense_times || []).map((t) => formatTime24HHMM(t).trim()).filter(Boolean);
+      if (formattedTimes.length === 0) {
+        setFormError('At least one dispense time is required.');
+        setFormLoading(false);
+        return;
+      }
+      const uniqueTimes = new Set(formattedTimes);
+      if (uniqueTimes.size !== formattedTimes.length) {
+        setFormError('Duplicate dispense times detected. Please ensure all scheduled times are unique.');
         setFormLoading(false);
         return;
       }
@@ -314,7 +405,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
         medication_id: editForm.medication_id ? parseInt(editForm.medication_id) : undefined,
         dosage: `${editForm.dosage} tablet(s)`,
         dosage_tablet: parseFloat(editForm.dosage) || 1.0,
-        dispense_times: editForm.dispense_times,
+        dispense_times: formattedTimes,
         dispense_days: editForm.dispense_days.length > 0 ? editForm.dispense_days : [1, 2, 3, 4, 5, 6, 7],
         start_date: editForm.start_date,
         end_date: editForm.end_date || null,
@@ -336,7 +427,9 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Delete Prescription
+  /**
+   * Handles prescription deletion with confirmation prompt.
+   */
   const handleDeletePrescription = async (pres) => {
     const presId = pres.id || pres.prescription_id;
     const name = pres.medication_name || pres.name || 'this prescription';
@@ -353,11 +446,12 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Determine global loading state spinner visibility
   const showSpinner = loading || isRefreshing || loadingPrescriptions;
 
   return (
     <div style={{ position: 'relative', minHeight: '400px' }}>
-      {/* Spinner overlay */}
+      {/* Loading spinner overlay */}
       {showSpinner && (
         <div className="loading-overlay">
           <Loader2 className="spinner" size={48} color="#6A4C93" />
@@ -365,14 +459,15 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
             {loadingPrescriptions
               ? 'Loading patient prescriptions...'
               : loading
-              ? 'Loading prescription schedule...'
-              : 'Refreshing...'}
+                ? 'Loading prescription schedule...'
+                : 'Refreshing...'}
           </p>
         </div>
       )}
 
-      {/* Main content */}
+      {/* Main content area */}
       <div style={{ opacity: showSpinner ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+
         {/* Success Notification Banner */}
         {actionSuccessMsg && (
           <div style={{
@@ -396,6 +491,8 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
         {/* Patient Selector & Action Bar */}
         <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'white' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+
+            {/* Patient dropdown selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#2D3142' }}>
                 Select Patient:
@@ -433,6 +530,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
               </select>
             </div>
 
+            {/* Add New Prescription trigger button */}
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -460,7 +558,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
           </div>
         </div>
 
-        {/* Prescriptions Schedule List */}
+        {/* Prescriptions Schedule List Card */}
         <div className="glass-card" style={{ padding: '24px', background: 'white' }}>
           <div className="card-header">
             <div>
@@ -502,6 +600,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                     }}
                   >
                     <div>
+                      {/* Prescription Card Header */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
                         <div style={{
                           width: '44px',
@@ -525,12 +624,13 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                         </div>
                       </div>
 
+                      {/* Prescription Details List */}
                       <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#64748B' }}>Dosage (Tablets):</span>
                           <strong>{pres.dosage_tablet ? `${pres.dosage_tablet} pill(s)` : (pres.dosage || '1.0 pill')}</strong>
                         </div>
-                        
+
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <span style={{ color: '#64748B' }}>Dispense Times ({timesList.length}):</span>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -569,7 +669,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                       </div>
                     </div>
 
-                    {/* Prescription Action Buttons: Edit & Delete */}
+                    {/* Card Action Buttons (Edit & Delete) */}
                     <div style={{ display: 'flex', gap: '8px', paddingTop: '14px', borderTop: '1px solid #E2E8F0' }}>
                       <button
                         className="btn"
@@ -615,7 +715,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
               )}
 
               <form onSubmit={handleAddPrescriptionSubmit}>
-                {/* Select Patient */}
+                {/* Target Patient Select */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Target Patient *</label>
                   <select
@@ -636,7 +736,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </select>
                 </div>
 
-                {/* Select Medication (Fixed: Extracts medication_name & medication_id correctly) */}
+                {/* Medication Catalog Select */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Select Medication *</label>
                   <select
@@ -666,7 +766,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </select>
                 </div>
 
-                {/* Dosage (Tablets) - Dispenser Motor removed as requested */}
+                {/* Dosage Input */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Dosage (Tablets) *</label>
                   <input
@@ -681,59 +781,72 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   />
                 </div>
 
-                {/* Dispense Times Section (Multiple Times) */}
+                {/* Dispense Times Input Array */}
                 <div className="form-group" style={{ marginBottom: '18px' }}>
-                  <label style={{ fontWeight: '700', fontSize: '0.9rem', color: '#2D3142', display: 'block', marginBottom: '4px' }}>
-                    Dispense Times
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <label style={{ fontWeight: '700', fontSize: '0.9rem', color: '#2D3142', margin: 0 }}>
+                      Dispense Times
+                    </label>
+                    {checkDuplicateTimes(newPrescription.dispense_times) && (
+                      <span style={{ fontSize: '0.78rem', color: '#EF4444', fontWeight: '600' }}>
+                        ⚠️ Duplicate times detected
+                      </span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                    {newPrescription.dispense_times.map((tVal, idx) => (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          flex: 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          background: '#F8FAFC',
-                          padding: '8px 12px',
-                          borderRadius: '10px',
-                          border: '1px solid #E2E8F0'
-                        }}>
-                          <Clock size={16} color="#6A4C93" />
-                          <input
-                            type="time"
-                            value={tVal}
-                            onChange={(e) => {
-                              const updated = [...newPrescription.dispense_times];
-                              updated[idx] = e.target.value;
-                              setNewPrescription({ ...newPrescription, dispense_times: updated });
-                            }}
-                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.95rem', fontWeight: '600', color: '#6A4C93' }}
-                            required
-                          />
+                    {newPrescription.dispense_times.map((tVal, idx) => {
+                      const formattedCurrent = formatTime24HHMM(tVal);
+                      const isDuplicate = newPrescription.dispense_times.filter((t) => formatTime24HHMM(t) === formattedCurrent).length > 1;
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            background: isDuplicate ? '#FEF2F2' : '#F8FAFC',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: isDuplicate ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0',
+                            transition: 'all 0.2s ease',
+                          }}>
+                            <Clock size={16} color={isDuplicate ? '#EF4444' : '#6A4C93'} />
+                            <input
+                              type="time"
+                              value={tVal}
+                              onChange={(e) => {
+                                const updated = [...newPrescription.dispense_times];
+                                updated[idx] = e.target.value;
+                                setNewPrescription({ ...newPrescription, dispense_times: updated });
+                              }}
+                              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.95rem', fontWeight: '600', color: isDuplicate ? '#EF4444' : '#6A4C93' }}
+                              required
+                            />
+                          </div>
+                          {newPrescription.dispense_times.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = newPrescription.dispense_times.filter((_, i) => i !== idx);
+                                setNewPrescription({ ...newPrescription, dispense_times: updated });
+                              }}
+                              style={{ background: '#FEE2E2', border: 'none', color: '#EF4444', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
+                              title="Remove time"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
-                        {newPrescription.dispense_times.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = newPrescription.dispense_times.filter((_, i) => i !== idx);
-                              setNewPrescription({ ...newPrescription, dispense_times: updated });
-                            }}
-                            style={{ background: '#FEE2E2', border: 'none', color: '#EF4444', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
-                            title="Remove time"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     <button
                       type="button"
                       onClick={() => {
+                        const nextSlot = getNextAvailableTime(newPrescription.dispense_times);
                         setNewPrescription({
                           ...newPrescription,
-                          dispense_times: [...newPrescription.dispense_times, '12:00'],
+                          dispense_times: [...newPrescription.dispense_times, nextSlot],
                         });
                       }}
                       style={{
@@ -757,7 +870,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* Days of the Week Section */}
+                {/* Days of the Week Selector */}
                 <div className="form-group" style={{ marginBottom: '20px' }}>
                   <label style={{ fontWeight: '700', fontSize: '0.9rem', color: '#2D3142', display: 'block', marginBottom: '2px' }}>
                     Days of the Week
@@ -801,7 +914,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* Start Date & End Date Datepicker (End Date validated > Start Date and > Today) */}
+                {/* Start Date & End Date Pickers */}
                 <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
                   <div>
                     <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Start Date *</label>
@@ -899,7 +1012,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
               )}
 
               <form onSubmit={handleEditPrescriptionSubmit}>
-                {/* Select Medication (Fixed: Extracts medication_name & medication_id correctly) */}
+                {/* Medication Catalog Select */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Select Medication *</label>
                   <select
@@ -928,7 +1041,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </select>
                 </div>
 
-                {/* Dosage (Tablets) - Dispenser Motor Slot removed */}
+                {/* Dosage Input */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Dosage (Tablets) *</label>
                   <input
@@ -943,59 +1056,72 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   />
                 </div>
 
-                {/* Dispense Times Section (Multiple Times) */}
+                {/* Dispense Times Input Array */}
                 <div className="form-group" style={{ marginBottom: '18px' }}>
-                  <label style={{ fontWeight: '700', fontSize: '0.9rem', color: '#2D3142', display: 'block', marginBottom: '4px' }}>
-                    Dispense Times
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <label style={{ fontWeight: '700', fontSize: '0.9rem', color: '#2D3142', margin: 0 }}>
+                      Dispense Times
+                    </label>
+                    {checkDuplicateTimes(editForm.dispense_times) && (
+                      <span style={{ fontSize: '0.78rem', color: '#EF4444', fontWeight: '600' }}>
+                        ⚠️ Duplicate times detected
+                      </span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                    {editForm.dispense_times.map((tVal, idx) => (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          flex: 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          background: '#F8FAFC',
-                          padding: '8px 12px',
-                          borderRadius: '10px',
-                          border: '1px solid #E2E8F0'
-                        }}>
-                          <Clock size={16} color="#6A4C93" />
-                          <input
-                            type="time"
-                            value={tVal}
-                            onChange={(e) => {
-                              const updated = [...editForm.dispense_times];
-                              updated[idx] = e.target.value;
-                              setEditForm({ ...editForm, dispense_times: updated });
-                            }}
-                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.95rem', fontWeight: '600', color: '#6A4C93' }}
-                            required
-                          />
+                    {editForm.dispense_times.map((tVal, idx) => {
+                      const formattedCurrent = formatTime24HHMM(tVal);
+                      const isDuplicate = editForm.dispense_times.filter((t) => formatTime24HHMM(t) === formattedCurrent).length > 1;
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            background: isDuplicate ? '#FEF2F2' : '#F8FAFC',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: isDuplicate ? '1.5px solid #FCA5A5' : '1px solid #E2E8F0',
+                            transition: 'all 0.2s ease',
+                          }}>
+                            <Clock size={16} color={isDuplicate ? '#EF4444' : '#6A4C93'} />
+                            <input
+                              type="time"
+                              value={tVal}
+                              onChange={(e) => {
+                                const updated = [...editForm.dispense_times];
+                                updated[idx] = e.target.value;
+                                setEditForm({ ...editForm, dispense_times: updated });
+                              }}
+                              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.95rem', fontWeight: '600', color: isDuplicate ? '#EF4444' : '#6A4C93' }}
+                              required
+                            />
+                          </div>
+                          {editForm.dispense_times.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = editForm.dispense_times.filter((_, i) => i !== idx);
+                                setEditForm({ ...editForm, dispense_times: updated });
+                              }}
+                              style={{ background: '#FEE2E2', border: 'none', color: '#EF4444', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
+                              title="Remove time"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
-                        {editForm.dispense_times.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = editForm.dispense_times.filter((_, i) => i !== idx);
-                              setEditForm({ ...editForm, dispense_times: updated });
-                            }}
-                            style={{ background: '#FEE2E2', border: 'none', color: '#EF4444', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
-                            title="Remove time"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     <button
                       type="button"
                       onClick={() => {
+                        const nextSlot = getNextAvailableTime(editForm.dispense_times);
                         setEditForm({
                           ...editForm,
-                          dispense_times: [...editForm.dispense_times, '12:00'],
+                          dispense_times: [...editForm.dispense_times, nextSlot],
                         });
                       }}
                       style={{
@@ -1019,7 +1145,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* Days of the Week Section */}
+                {/* Days of the Week Selector */}
                 <div className="form-group" style={{ marginBottom: '20px' }}>
                   <label style={{ fontWeight: '700', fontSize: '0.9rem', color: '#2D3142', display: 'block', marginBottom: '2px' }}>
                     Days of the Week
@@ -1063,7 +1189,7 @@ export default function Prescriptions({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* Start Date & End Date Datepicker (End Date validated > Start Date and > Today) */}
+                {/* Start Date & End Date Pickers */}
                 <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
                   <div>
                     <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Start Date *</label>

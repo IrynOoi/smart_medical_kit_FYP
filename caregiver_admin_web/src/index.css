@@ -1,4 +1,8 @@
 /* index.css */
+
+/* ==========================================
+   Design Tokens & CSS Variables Definition
+   ========================================== */
 :root {
   /* Premium Purple Color Palette matching Flutter App Theme */
   --primary-dark: #3B1E54;
@@ -41,6 +45,9 @@
   --font-heading: 'Outfit', sans-serif;
 }
 
+/* ==========================================
+   Global Resets & Base Elements Styles
+   ========================================== */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -76,7 +83,9 @@ button {
   cursor: pointer;
 }
 
-/* Scrollbar */
+/* ==========================================
+   Custom Scrollbar Styling
+   ========================================== */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -95,7 +104,9 @@ button {
   background: var(--primary-light);
 }
 
-/* Glassmorphism Card Utility */
+/* ==========================================
+   Glassmorphism Card Utility
+   ========================================== */
 .glass-card {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
@@ -104,7 +115,9 @@ button {
   box-shadow: var(--shadow-md);
 }
 
-/* Status Badges */
+/* ==========================================
+   Status Badges Styles
+   ========================================== */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -141,7 +154,9 @@ button {
   color: var(--primary-dark);
 }
 
-/* Primary Button Styling */
+/* ==========================================
+   Interactive Button Variants
+   ========================================== */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -194,7 +209,9 @@ button {
   background: #DC2626;
 }
 
-/* Modal Backdrop & Overlay */
+/* ==========================================
+   Modal Backdrop, Overlay & Animation Keyframes
+   ========================================== */
 .modal-overlay {
   position: fixed;
   top: 0;

@@ -15,13 +15,18 @@ import {
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 
+/**
+ * Medications component manages the master medication catalog, inventory levels,
+ * hardware device serial assignments, and motor slot mappings.
+ */
 export default function Medications({ isRefreshing, onRefreshComplete }) {
+  // Component local state for medication catalog list, connected devices list, loading status, and search query
   const [medications, setMedications] = useState([]);
   const [devicesList, setDevicesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Add Medication Modal State
+  // Add Medication Modal State and form data
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMed, setNewMed] = useState({
     medication_name: '',
@@ -31,7 +36,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     motor_slot: 1,
   });
 
-  // Edit Medication Modal State
+  // Edit Medication Modal State and form data
   const [editingMed, setEditingMed] = useState(null);
   const [editForm, setEditForm] = useState({
     medication_name: '',
@@ -40,10 +45,15 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     motor_slot: 1,
   });
 
+  // Form error states, loading spinners, and action success notification messages
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
+  /**
+   * Fetches the master medication catalog and hardware devices list from the backend API.
+   * @param {boolean} showSpinner - Whether to show the main loading overlay.
+   */
   const fetchMedications = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -64,6 +74,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Initial fetch on mount and setup a 15-second background auto-reload polling interval
   useEffect(() => {
     fetchMedications(true);
     const interval = setInterval(() => {
@@ -72,11 +83,14 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Handle external refresh triggers (props)
   useEffect(() => {
     if (isRefreshing) fetchMedications(true);
   }, [isRefreshing]);
 
-  // Open Add Modal
+  /**
+   * Opens the add medication modal and initializes form defaults.
+   */
   const handleOpenAdd = () => {
     const defaultSerial = devicesList[0]?.device_serial || 'DISP-1';
     setNewMed({
@@ -90,7 +104,9 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     setShowAddModal(true);
   };
 
-  // Open Edit Modal
+  /**
+   * Opens the edit medication modal and populates form fields with existing data.
+   */
   const handleOpenEdit = (med) => {
     setEditingMed(med);
     const defaultSerial = med.device_serial || (devicesList[0]?.device_serial || 'DISP-1');
@@ -103,7 +119,9 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     setFormError('');
   };
 
-  // Handle Add Medication Submit
+  /**
+   * Handles submission of the new medication addition form.
+   */
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -134,7 +152,9 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Handle Edit Medication Submit
+  /**
+   * Handles submission of the medication update form.
+   */
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -165,7 +185,9 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Handle Delete Medication
+  /**
+   * Handles medication deletion from the master catalog with confirmation checks.
+   */
   const handleDeleteMedication = async (med) => {
     const medId = med.id || med.medication_id;
     const name = med.medication_name || med.name || 'this medication';
@@ -182,7 +204,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Filter list by search query
+  // Filter the medication list based on the search query input (matches name or serial)
   const filteredMeds = medications.filter((m) => {
     const name = m.medication_name || m.name || '';
     const serial = m.device_serial || '';
@@ -194,7 +216,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
 
   return (
     <div style={{ position: 'relative', minHeight: '400px' }}>
-      {/* Spinner overlay */}
+      {/* Loading spinner overlay */}
       {showSpinner && (
         <div className="loading-overlay">
           <Loader2 className="spinner" size={48} color="#6A4C93" />
@@ -204,8 +226,9 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <div style={{ opacity: showSpinner ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+
         {/* Success Notification Banner */}
         {actionSuccessMsg && (
           <div style={{
@@ -226,7 +249,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
           </div>
         )}
 
-        {/* Top Banner & Search */}
+        {/* Top Search & Action Bar */}
         <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'white' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
             <div className="search-box" style={{ width: '320px' }}>
@@ -265,6 +288,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
               const stock = med.current_inventory ?? 0;
               const threshold = med.refill_threshold ?? 10;
 
+              // Compute stock status indicators (Empty vs Low Stock vs Normal)
               const isEmpty = stock === 0;
               const isLow = stock <= threshold && stock > 0;
 
@@ -282,6 +306,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   }}
                 >
                   <div>
+                    {/* Medication Card Header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
                       <div style={{
                         width: '48px',
@@ -311,6 +336,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                       </div>
                     </div>
 
+                    {/* Inventory & Hardware Specification Details */}
                     <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#64748B' }}>Current Inventory:</span>
@@ -331,7 +357,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                     </div>
                   </div>
 
-                  {/* Actions */}
+                  {/* Card Action Buttons (Edit & Delete) */}
                   <div style={{ display: 'flex', gap: '8px', paddingTop: '14px', borderTop: '1px solid #E2E8F0' }}>
                     <button
                       className="btn"
@@ -376,7 +402,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
               )}
 
               <form onSubmit={handleAddSubmit}>
-                {/* 1. Medication Name * */}
+                {/* Medication Name Input */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Medication Name *</label>
                   <input
@@ -389,7 +415,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   />
                 </div>
 
-                {/* 2. Initial Inventory & 3. Refill Threshold */}
+                {/* Initial Inventory & Refill Threshold Inputs */}
                 <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                   <div>
                     <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Initial Inventory *</label>
@@ -415,7 +441,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   </div>
                 </div>
 
-                {/* 4. Device Serial (Dropdown) */}
+                {/* Device Serial Dropdown */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Device Serial *</label>
                   <select
@@ -436,7 +462,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   </select>
                 </div>
 
-                {/* 5. Motor Slot (1-3) */}
+                {/* Motor Slot Dropdown */}
                 <div className="form-group" style={{ marginBottom: '24px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Motor Slot (1-3) *</label>
                   <select
@@ -485,7 +511,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
               )}
 
               <form onSubmit={handleEditSubmit}>
-                {/* 1. Medication Name * */}
+                {/* Medication Name Input */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Medication Name *</label>
                   <input
@@ -497,7 +523,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   />
                 </div>
 
-                {/* 2. Refill Threshold */}
+                {/* Refill Threshold Input */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Minimum Pill to Refill *</label>
                   <input
@@ -510,7 +536,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   />
                 </div>
 
-                {/* 4. Device Serial (Dropdown) */}
+                {/* Device Serial Dropdown */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Device Serial *</label>
                   <select
@@ -531,7 +557,7 @@ export default function Medications({ isRefreshing, onRefreshComplete }) {
                   </select>
                 </div>
 
-                {/* 5. Motor Slot (1-3) */}
+                {/* Motor Slot Dropdown */}
                 <div className="form-group" style={{ marginBottom: '24px' }}>
                   <label style={{ fontWeight: '600', fontSize: '0.85rem', color: '#475569' }}>Motor Slot (1-3) *</label>
                   <select

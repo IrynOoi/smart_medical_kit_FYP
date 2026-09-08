@@ -26,7 +26,9 @@ import {
 import { apiService, BASE_URL, getPhotoUrl, handleImageError } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
-// Helper to compute age from date string or object
+/**
+ * Helper function to compute patient age from a date of birth string or object.
+ */
 const calculateAge = (dob) => {
   if (!dob) return 'N/A';
   try {
@@ -45,20 +47,27 @@ const today = new Date();
 const maxDate = new Date(today.setFullYear(today.getFullYear() - 60))
   .toISOString()
   .split('T')[0]; // e.g., "1966-07-27"
+
+/**
+ * Patients component manages the patient directory, caregiver-patient linking/unlinking,
+ * patient enrolment, profile editing, and account status updates.
+ */
 export default function Patients({ isRefreshing, onRefreshComplete }) {
+  // Extract caregiver ID from authentication context
   const { caregiverId } = useAuth();
 
+  // Component local states for patient lists, search filtering, and active categories
   const [myPatients, setMyPatients] = useState([]);
   const [availablePatients, setAvailablePatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterCategory, setFilterCategory] = useState('my_patients'); // 'my_patients', 'available', 'all'
+  const [filterCategory, setFilterCategory] = useState('my_patients'); // 'my_patients', 'available', 'inactive', 'all'
 
   // View Details Modal state
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [patientMedications, setPatientMedications] = useState([]);
 
-  // Add Patient Modal state
+  // Add Patient Modal state and form data
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPatient, setNewPatient] = useState({
     fullname: '',
@@ -71,7 +80,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     caregiver_id: caregiverId,
   });
 
-  // Edit Patient Modal state
+  // Edit Patient Modal state and form data
   const [editingPatient, setEditingPatient] = useState(null);
   const [editForm, setEditForm] = useState({
     full_name: '',
@@ -83,11 +92,14 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     medical_notes: '',
   });
 
-  // Action status state
+  // Form error handling, loading spinners, and success notifications
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
+  /**
+   * Fetches assigned patients and unassigned available patients from the backend API.
+   */
   const fetchAllPatientData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -109,6 +121,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Initial fetch on mount and setup 15-second background auto-reload interval
   useEffect(() => {
     fetchAllPatientData(true);
     const interval = setInterval(() => {
@@ -117,11 +130,14 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     return () => clearInterval(interval);
   }, [caregiverId]);
 
+  // Handle external refresh triggers (props)
   useEffect(() => {
     if (isRefreshing) fetchAllPatientData(true);
   }, [isRefreshing]);
 
-  // View patient details
+  /**
+   * Opens the detailed patient profile view modal and loads their active prescriptions.
+   */
   const handleViewPatient = async (patient) => {
     setSelectedPatient(patient);
     try {
@@ -133,7 +149,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Link Patient to Caregiver
+  /**
+   * Links an available patient to the current caregiver's care list.
+   */
   const handleLinkPatient = async (patient) => {
     const pId = patient.id || patient.patient_id;
     const name = patient.fullname || patient.full_name || patient.name || 'this patient';
@@ -155,7 +173,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Unlink Patient from Caregiver
+  /**
+   * Unlinks a patient from the current caregiver's care list.
+   */
   const handleUnlinkPatient = async (patient) => {
     const pId = patient.id || patient.patient_id;
     const name = patient.fullname || patient.full_name || patient.name || 'this patient';
@@ -173,7 +193,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Open Edit Modal
+  /**
+   * Opens the edit patient modal and populates form fields with existing patient data.
+   */
   const handleOpenEdit = (patient) => {
     setEditingPatient(patient);
     setEditForm({
@@ -188,7 +210,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     setFormError('');
   };
 
-  // Submit Edit Patient Form
+  /**
+   * Handles submission of the patient edit form.
+   */
   const handleEditPatientSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -213,7 +237,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Add Patient Submission
+  /**
+   * Handles submission of the new patient enrolment form.
+   */
   const handleAddPatientSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -250,7 +276,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Deactivate Patient Account (Soft Delete)
+  /**
+   * Handles soft deletion (deactivation) of a patient account.
+   */
   const handleDeactivatePatient = async (patient) => {
     const pId = patient.id || patient.patient_id;
     const name = patient.fullname || patient.full_name || patient.name || 'this patient';
@@ -268,7 +296,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Delete Patient Account Permanently (Hard Delete)
+  /**
+   * Handles permanent deletion of a patient account.
+   */
   const handleDeletePatientPermanent = async (patient) => {
     const pId = patient.id || patient.patient_id;
     const name = patient.fullname || patient.full_name || patient.name || 'this patient';
@@ -286,7 +316,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Reactivate Patient Account
+  /**
+   * Reactivates a previously deactivated patient account.
+   */
   const handleReactivatePatient = async (patient) => {
     const pId = patient.id || patient.patient_id;
     const name = patient.fullname || patient.full_name || patient.name || 'this patient';
@@ -313,17 +345,17 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Active patients assigned to me
+  // Filter active patients assigned to the current caregiver
   const myActivePatients = myPatients.filter(
     (p) => p.is_active !== false && p.is_active !== 0 && p.is_active !== '0'
   );
 
-  // Available active patients (not assigned to me, and is_active == 1)
+  // Filter unassigned active patients available in the system
   const availableActivePatients = availablePatients.filter(
     (p) => p.is_active !== false && p.is_active !== 0 && p.is_active !== '0'
   );
 
-  // All patients in the system (unique combination of myPatients + availablePatients)
+  // Combine all system patients uniquely
   const getAllPatients = () => {
     const combined = [...myPatients];
     const myIds = new Set(myPatients.map((p) => p.id || p.patient_id));
@@ -337,12 +369,12 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
   };
   const allPatients = getAllPatients();
 
-  // Inactive patients across the entire system
+  // Filter inactive patients across the entire system
   const inactivePatients = allPatients.filter(
     (p) => p.is_active === false || p.is_active === 0 || p.is_active === '0'
   );
 
-  // Combine or filter patients based on category selection
+  // Determine which patient list to display based on the active filter category
   const getDisplayList = () => {
     if (filterCategory === 'my_patients') return myActivePatients;
     if (filterCategory === 'available') return availableActivePatients;
@@ -352,7 +384,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
 
   const displayList = getDisplayList();
 
-  // Filter patients by search query
+  // Filter the display list by search query (name or email)
   const filteredPatients = displayList.filter((p) => {
     const name = p.fullname || p.full_name || p.name || '';
     const email = p.email || '';
@@ -364,7 +396,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
 
   return (
     <div style={{ position: 'relative', minHeight: '400px' }}>
-      {/* Spinner overlay – shows during initial load or refresh */}
+      {/* Loading spinner overlay */}
       {showSpinner && (
         <div className="loading-overlay">
           <Loader2 className="spinner" size={48} color="#6A4C93" />
@@ -374,8 +406,9 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
         </div>
       )}
 
-      {/* Main content – dimmed when spinner is visible */}
+      {/* Main content area */}
       <div style={{ opacity: showSpinner ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+
         {/* Success Notification Banner */}
         {actionSuccessMsg && (
           <div style={{
@@ -399,7 +432,8 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
         {/* Action & Filter Bar */}
         <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'white' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-            {/* Search Box */}
+
+            {/* Search Input Box */}
             <div className="search-box" style={{ width: '300px' }}>
               <Search size={18} />
               <input
@@ -488,6 +522,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
               </button>
             </div>
 
+            {/* Add New Patient Button */}
             <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
               <UserPlus size={18} />
               <span>Add New Patient</span>
@@ -543,7 +578,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                   }}
                 >
                   <div>
-                    {/* Top Header Row with Status Badges */}
+                    {/* Card Header Badges */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', gap: '8px' }}>
                       {isMyPatient ? (
                         <span className="badge badge-purple" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -568,7 +603,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                       )}
                     </div>
 
-                    {/* Patient Name & Avatar */}
+                    {/* Patient Avatar & Name */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
                       {getPhotoUrl(patient.profile_photo) ? (
                         <img
@@ -615,7 +650,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                       </div>
                     </div>
 
-                    {/* Contact Info */}
+                    {/* Patient Contact Info */}
                     <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
                       {patient.email && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -638,7 +673,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                     </div>
                   </div>
 
-                  {/* Card Action Buttons */}
+                  {/* Card Action Buttons (View, Edit, Link/Unlink, Deactivate/Activate, Delete) */}
                   <div style={{ display: 'flex', gap: '6px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', alignItems: 'center' }}>
                     <button
                       className="btn btn-outline"
@@ -659,7 +694,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                       <span>Edit</span>
                     </button>
 
-                    {/* Caregiver Assignment Action: Link or Unlink */}
+                    {/* Caregiver Link/Unlink Action Button */}
                     {isMyPatient ? (
                       <button
                         className="btn"
@@ -681,7 +716,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                       </button>
                     )}
 
-                    {/* Account Lifecycle Actions: Deactivate or Reactivate/Activate */}
+                    {/* Account Lifecycle Action Button (Activate / Deactivate) */}
                     {!isActive ? (
                       <button
                         className="btn"
@@ -714,6 +749,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                       </button>
                     )}
 
+                    {/* Permanent Delete Button */}
                     <button
                       className="btn btn-secondary"
                       style={{ padding: '7px 8px', color: '#EF4444', background: '#FEE2E2', border: '1px solid #FCA5A5' }}
@@ -764,7 +800,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                 </div>
               </div>
 
-              {/* Profile Field Details Grid */}
+              {/* Patient Profile Details Summary Box */}
               <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#64748B', fontWeight: '600' }}>Email:</span>
@@ -794,6 +830,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                 )}
               </div>
 
+              {/* Prescribed Medications Section */}
               <h4 style={{ fontSize: '1rem', color: '#3B1E54', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Pill size={18} />
                 Prescribed Medications ({patientMedications.length})
@@ -816,6 +853,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                 </div>
               )}
 
+              {/* Modal Action Buttons */}
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 {(selectedPatient.is_active === false || selectedPatient.is_active === 0) && (
                   <button
@@ -926,7 +964,7 @@ export default function Patients({ isRefreshing, onRefreshComplete }) {
                     value={editForm.date_of_birth}
                     onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1' }}
-                    max={maxDate}   // <-- add this
+                    max={maxDate}
                   />
                 </div>
 

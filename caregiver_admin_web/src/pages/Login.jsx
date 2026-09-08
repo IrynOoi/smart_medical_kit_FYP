@@ -8,17 +8,24 @@ import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/apiService';
 import logoPng from '../assets/medical-smart-kit-logo.png';
 
+/**
+ * Login component handles caregiver authentication, password visibility toggling,
+ * multi-step password reset via OTP, and new caregiver registration with age restriction rules.
+ */
 export default function Login() {
+  // Extract login function from AuthContext
   const { login } = useAuth();
+
+  // Login form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Forgot Password modal state
+  // Forgot Password modal state and multi-step progression (1: Send OTP, 2: Enter OTP, 3: New Password)
   const [showForgotModal, setShowForgotModal] = useState(false);
-  const [resetStep, setResetStep] = useState(1); // 1: Send OTP, 2: Enter OTP, 3: New Password
+  const [resetStep, setResetStep] = useState(1);
   const [resetEmail, setResetEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -28,7 +35,7 @@ export default function Login() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState({ type: '', text: '' });
 
-  // Caregiver Registration modal state
+  // Caregiver Registration modal state and form fields
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -44,6 +51,9 @@ export default function Login() {
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState('');
 
+  /**
+   * Helper returning the maximum date constraint to ensure caregivers are at least 18 years old.
+   */
   const get18YearsAgoDate = () => {
     const today = new Date();
     const maxYear = today.getFullYear() - 18;
@@ -52,6 +62,9 @@ export default function Login() {
     return `${maxYear}-${month}-${day}`;
   };
 
+  /**
+   * Helper function to calculate exact age from a date of birth string.
+   */
   const calculateAge = (dobString) => {
     if (!dobString) return 0;
     const birthDate = new Date(dobString);
@@ -64,6 +77,9 @@ export default function Login() {
     return age;
   };
 
+  /**
+   * Handles caregiver registration form submission and validation checks.
+   */
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setRegError('');
@@ -128,6 +144,9 @@ export default function Login() {
     }
   };
 
+  /**
+   * Handles login form submission and authentication via AuthContext.
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -150,6 +169,9 @@ export default function Login() {
     }
   };
 
+  /**
+   * Step 1: Sends the password reset OTP code to the caregiver's email.
+   */
   const handleSendOTP = async (e) => {
     e.preventDefault();
     if (!resetEmail) {
@@ -174,6 +196,9 @@ export default function Login() {
     setResetLoading(false);
   };
 
+  /**
+   * Step 2: Verifies the 6-digit OTP code entered by the user.
+   */
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     if (!otpCode) {
@@ -198,6 +223,9 @@ export default function Login() {
     setResetLoading(false);
   };
 
+  /**
+   * Step 3: Submits the new verified password update.
+   */
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (!newPassword || !confirmPassword) {
@@ -240,12 +268,12 @@ export default function Login() {
 
   return (
     <div className="login-container">
-      {/* Background Decorations (unchanged) */}
+      {/* Background Decorative Gradient Orbs */}
       <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', filter: 'blur(40px)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '400px', height: '400px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(40px)', pointerEvents: 'none' }} />
 
       <div className="login-card">
-        {/* Logo & Header */}
+        {/* Logo & Header Section */}
         <div className="login-logo">
           <div className="login-logo-icon">
             <img
@@ -270,7 +298,7 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Error Alert */}
+        {/* Error Alert Notification Banner */}
         {errorMessage && (
           <div style={{
             display: 'flex',
@@ -289,7 +317,7 @@ export default function Login() {
           </div>
         )}
 
-        {/* Form */}
+        {/* Main Login Form */}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Caregiver Email</label>
@@ -360,7 +388,7 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Forgot Password Link */}
+        {/* Forgot Password Trigger Link */}
         <div style={{ marginTop: '16px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '16px' }}>
           <button
             type="button"
@@ -378,7 +406,7 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Create Caregiver Account Link */}
+        {/* Create Caregiver Account Trigger Link */}
         <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #E2E8F0', textAlign: 'center' }}>
           <span style={{ fontSize: '0.85rem', color: '#64748B' }}>New Caregiver? </span>
           <button
@@ -401,8 +429,6 @@ export default function Login() {
             Create Caregiver Account
           </button>
         </div>
-
-        {/* (Removed the Demo Credentials section) */}
       </div>
 
       {/* Forgot Password Modal */}
@@ -421,7 +447,6 @@ export default function Login() {
             zIndex: 1000,
           }}
           onClick={() => {
-            // Close modal if clicking outside
             if (resetMessage.type !== 'success') {
               setShowForgotModal(false);
               setResetMessage({ type: '', text: '' });
@@ -483,7 +508,7 @@ export default function Login() {
               </div>
             )}
 
-            {/* STEP 1: Enter Email */}
+            {/* STEP 1: Enter Email for OTP */}
             {resetStep === 1 && (
               <form onSubmit={handleSendOTP}>
                 <div className="form-group">
@@ -511,7 +536,7 @@ export default function Login() {
               </form>
             )}
 
-            {/* STEP 2: Verify OTP Interface */}
+            {/* STEP 2: Verify OTP Code */}
             {resetStep === 2 && (
               <form onSubmit={handleVerifyOTP}>
                 <div className="form-group">
@@ -574,7 +599,7 @@ export default function Login() {
               </form>
             )}
 
-            {/* STEP 3: Reset Password Interface */}
+            {/* STEP 3: Create New Password */}
             {resetStep === 3 && (
               <form onSubmit={handleResetPassword}>
                 <div className="form-group">
@@ -733,6 +758,7 @@ export default function Login() {
               </div>
             )}
 
+            {/* Caregiver Registration Form */}
             <form onSubmit={handleRegisterSubmit}>
               <div className="form-group">
                 <label>Full Name *</label>

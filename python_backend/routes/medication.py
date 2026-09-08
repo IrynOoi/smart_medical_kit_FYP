@@ -59,6 +59,44 @@ def record_medication():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def validate_and_normalize_dispense_times(dispense_times):
+    """
+    Validates and normalizes a list of dispense times.
+    Returns (is_valid, error_msg, normalized_times_list).
+    Ensures:
+      - Non-empty list.
+      - Each item is a valid 24h time (HH:MM or HH:MM:SS).
+      - No duplicate times exist for the prescription schedule.
+    """
+    if not isinstance(dispense_times, list) or len(dispense_times) == 0:
+        return False, "At least one dispense time is required.", []
+
+    cleaned = []
+    seen = set()
+    for t in dispense_times:
+        t_str = str(t).strip()
+        parts = t_str.split(':')
+        if len(parts) >= 2:
+            try:
+                h = int(parts[0])
+                m = int(parts[1])
+                s = int(parts[2]) if len(parts) >= 3 else 0
+                if not (0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59):
+                    return False, f"Invalid time value: '{t_str}'. Hours must be 0-23 and minutes 0-59.", []
+                formatted = f"{h:02d}:{m:02d}:{s:02d}"
+                time_key = f"{h:02d}:{m:02d}"
+                if time_key in seen:
+                    return False, f"Duplicate dispense time detected ({time_key}). Please ensure all scheduled times are unique.", []
+                seen.add(time_key)
+                cleaned.append(formatted)
+            except ValueError:
+                return False, f"Invalid time format: '{t_str}'. Expected HH:MM or HH:MM:SS.", []
+        else:
+            return False, f"Invalid time format: '{t_str}'. Expected HH:MM.", []
+
+    return True, None, cleaned
+
+
 # ---------------------- Add a New Prescription ----------------------
 @medication_bp.route('/add_prescription', methods=['POST'])
 def add_prescription():
@@ -69,7 +107,7 @@ def add_prescription():
     Sends a notification to the patient about the new prescription.
     """
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         patient_id = data.get('patient_id')
         medication_name = data.get('medication_name')
         dosage_tablet = data.get('dosage_tablet')
@@ -89,9 +127,14 @@ def add_prescription():
         if start_date and end_date and str(end_date).strip() and str(end_date)[:10] < str(start_date)[:10]:
             return jsonify({"success": False, "message": "End date cannot be earlier than start date"}), 400
 
+        # Validate dispense_times against duplicates and invalid formats
+        is_valid_times, time_err, normalized_times = validate_and_normalize_dispense_times(dispense_times)
+        if not is_valid_times:
+            return jsonify({"success": False, "message": time_err}), 400
+
         # Call model to create prescription; returns success, message, and new prescription data
         success, msg, new_prescription = create_prescription_config(
-            patient_id, medication_name, dosage_tablet, dispense_times,
+            patient_id, medication_name, dosage_tablet, normalized_times,
             start_date, end_date, current_inventory, refill_threshold, device_id, dispense_days
         )
 
@@ -213,10 +256,15 @@ def update_prescription(prescription_id):
         if start_date and end_date and str(end_date).strip() and str(end_date)[:10] < str(start_date)[:10]:
             return jsonify({"success": False, "message": "End date cannot be earlier than start date"}), 400
 
+        # Validate dispense_times against duplicates and invalid formats
+        is_valid_times, time_err, normalized_times = validate_and_normalize_dispense_times(dispense_times)
+        if not is_valid_times:
+            return jsonify({"success": False, "message": time_err}), 400
+
         # Check if device_id was explicitly provided (to distinguish from None)
         check_none = 'device_id' in data or 'motor_slot' in data
         success, msg = update_prescription_config(
-            prescription_id, medication_name, dosage_tablet, dispense_times,
+            prescription_id, medication_name, dosage_tablet, normalized_times,
             start_date, end_date, current_inventory, refill_threshold, device_id, check_none, dispense_days
         )
         if not success:

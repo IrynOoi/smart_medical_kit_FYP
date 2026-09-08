@@ -1,5 +1,10 @@
 /* //App.css */
 /* Main App Layout */
+
+
+/* ==========================================
+   Main App Layout & Structure
+   ========================================== */
 .app-container {
   display: flex;
   min-height: 100vh;
@@ -50,6 +55,7 @@
 }
 
 @media (max-width: 992px) {
+
   .main-layout,
   .main-layout.collapsed {
     margin-left: 0;
@@ -64,8 +70,9 @@
   width: 100%;
 }
 
-/* Sidebar Component */
-
+/* ==========================================
+   Sidebar Component Styles
+   ========================================== */
 .sidebar {
   position: fixed;
   top: 0;
@@ -222,7 +229,9 @@
   color: white;
 }
 
-/* Header Component */
+/* ==========================================
+   Header Component Styles
+   ========================================== */
 .header {
   height: 72px;
   background: white;
@@ -278,7 +287,9 @@
   color: var(--text-muted);
 }
 
-/* Login Screen Layout */
+/* ==========================================
+   Login Screen Layout Styles
+   ========================================== */
 .login-container {
   min-height: 100vh;
   display: flex;
@@ -360,7 +371,9 @@
   color: var(--text-muted);
 }
 
-/* Dashboard Metric Cards Grid */
+/* ==========================================
+   Dashboard Metrics & Grids Styles
+   ========================================== */
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -408,7 +421,6 @@
   color: var(--text-primary);
 }
 
-/* Section Grid */
 .dashboard-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -430,7 +442,9 @@
   border-bottom: 1px solid var(--border-color);
 }
 
-/* Tables */
+/* ==========================================
+   Data Tables Styles
+   ========================================== */
 .table-container {
   width: 100%;
   overflow-x: auto;
@@ -483,8 +497,13 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-content {
@@ -500,8 +519,15 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .form-group {

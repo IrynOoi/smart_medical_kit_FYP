@@ -25,7 +25,7 @@ import { Bar } from 'react-chartjs-2';
 import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
-// Register ChartJS modules
+// Register ChartJS modules for bar charts and tooltips
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -38,9 +38,15 @@ ChartJS.register(
   Filler
 );
 
+/**
+ * Dashboard component manages caregiver metrics overview, adherence statistics charts,
+ * AI risk watchlist filtering, and live adherence activity feed streams.
+ */
 export default function Dashboard({ isRefreshing, onRefreshComplete }) {
+  // Extract caregiver ID from authentication context
   const { caregiverId } = useAuth();
 
+  // Overview statistics state
   const [stats, setStats] = useState({
     taken_count: 0,
     missed_count: 0,
@@ -49,16 +55,21 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     low_stock_count: 0,
   });
 
+  // Chart time period state ('Day', 'Week', 'Month') and chart datasets
   const [period, setPeriod] = useState('Week');
   const [chartData, setChartData] = useState({
     taken: [0, 0, 0, 0, 0, 0, 0],
     missed: [0, 0, 0, 0, 0, 0, 0],
   });
 
+  // Recent activity logs and AI at-risk patients watchlist state
   const [recentLogs, setRecentLogs] = useState([]);
   const [atRiskPatients, setAtRiskPatients] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Fetches dashboard overview metrics, chart datasets, recent logs, and AI risk predictions.
+   */
   const fetchDashboardData = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -81,6 +92,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Initial fetch on mount and setup a 10-second background polling interval
   useEffect(() => {
     fetchDashboardData(true);
     const interval = setInterval(() => {
@@ -89,13 +101,16 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     return () => clearInterval(interval);
   }, [caregiverId, period]);
 
+  // Handle external refresh triggers (props)
   useEffect(() => {
     if (isRefreshing) {
       fetchDashboardData(true);
     }
   }, [isRefreshing]);
 
-  // Labels based on selected period
+  /**
+   * Generates chart X-axis labels based on the selected time period filter.
+   */
   const getPeriodLabels = () => {
     if (period === 'Day') {
       return (chartData.labels && chartData.labels.length > 0)
@@ -106,6 +121,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   };
 
+  // Chart configuration object for react-chartjs-2
   const chartConfig = {
     labels: getPeriodLabels(),
     datasets: [
@@ -128,6 +144,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
     ],
   };
 
+  // Chart display options
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -159,7 +176,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
 
   return (
     <div style={{ position: 'relative', minHeight: '400px' }}>
-      {/* Spinner overlay – shows during initial load or refresh */}
+      {/* Loading spinner overlay */}
       {showSpinner && (
         <div className="loading-overlay">
           <Loader2 className="spinner" size={48} color="#6A4C93" />
@@ -169,10 +186,12 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
         </div>
       )}
 
-      {/* Main content – dimmed when spinner is visible */}
+      {/* Main content area */}
       <div style={{ opacity: showSpinner ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-        {/* Metrics Row */}
+
+        {/* Metrics Row Cards */}
         <div className="metrics-grid">
+          {/* Assigned Patients Metric Card */}
           <div className="metric-card">
             <div>
               <div className="metric-title">Assigned Patients</div>
@@ -184,6 +203,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
+          {/* Doses Taken Metric Card */}
           <div className="metric-card">
             <div>
               <div className="metric-title">Doses Taken </div>
@@ -195,6 +215,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
+          {/* Missed Doses Metric Card */}
           <div className="metric-card">
             <div>
               <div className="metric-title">Missed Doses</div>
@@ -206,6 +227,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
+          {/* Low Stock Alerts Metric Card */}
           <div className="metric-card">
             <div>
               <div className="metric-title">Low Stock Alerts</div>
@@ -218,9 +240,9 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
           </div>
         </div>
 
-        {/* Main Grid: Chart & At Risk Patients */}
+        {/* Main Grid: Adherence Chart & AI Risk Watchlist */}
         <div className="dashboard-grid">
-          {/* Adherence Graph */}
+          {/* Adherence Bar Graph Card */}
           <div className="glass-card" style={{ padding: '24px', background: 'white' }}>
             <div className="card-header">
               <div>
@@ -231,7 +253,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
                 <p style={{ fontSize: '0.8rem', color: '#6B7280' }}>Track taken vs missed doses across all patients</p>
               </div>
 
-              {/* Period Selector Buttons */}
+              {/* Period Selector Buttons (Day, Week, Month) */}
               <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '10px' }}>
                 {['Day', 'Week', 'Month'].map((p) => (
                   <button
@@ -262,6 +284,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
           {/* High & Medium Risk AI Alerts Card */}
           <div className="glass-card" style={{ padding: '24px', background: 'white' }}>
             {(() => {
+              // Filter patients flagged as HIGH or MEDIUM risk
               const activeWatchlist = atRiskPatients.filter((p) => {
                 const r = (p.risk_level || '').toUpperCase();
                 const score = p.risk_score ?? p.prediction_score ?? p.forget_probability ?? p.prediction ?? 0;
@@ -325,7 +348,7 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
           </div>
         </div>
 
-        {/* Recent Activity Log Stream */}
+        {/* Recent Activity Log Stream Table */}
         <div className="glass-card" style={{ padding: '24px', background: 'white', marginTop: '24px' }}>
           <div className="card-header">
             <div>
@@ -370,10 +393,10 @@ export default function Dashboard({ isRefreshing, onRefreshComplete }) {
                       <td>
                         <span
                           className={`badge ${log.status?.toLowerCase() === 'taken' || log.taken
-                              ? 'badge-success'
-                              : log.status?.toLowerCase() === 'pending'
-                                ? 'badge-warning'    // <── pending gets yellow/orange
-                                : 'badge-danger'
+                            ? 'badge-success'
+                            : log.status?.toLowerCase() === 'pending'
+                              ? 'badge-warning'
+                              : 'badge-danger'
                             }`}
                         >
                           {log.status || (log.taken ? 'Taken' : 'Missed')}

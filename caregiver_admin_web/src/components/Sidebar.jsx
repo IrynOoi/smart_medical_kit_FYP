@@ -1,4 +1,4 @@
-/* Sidebar.jsx */
+// Sidebar.jsx
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
@@ -16,16 +16,25 @@ import { useAuth } from '../context/AuthContext';
 import { apiService, BASE_URL, getPhotoUrl, handleImageError } from '../services/apiService';
 import logoSvg from '../assets/medical-smart-kit-logo (1).svg';
 
+/**
+ * Sidebar component renders the primary navigation menu, collapse/expand toggle controls,
+ * caregiver profile badge, and logout actions.
+ */
 export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSidebar }) {
+  // Extract user info, caregiver ID, and logout function from authentication context
   const { user, caregiverId, logout } = useAuth();
+
+  // Local state for profile photo path
   const [profilePhoto, setProfilePhoto] = useState(user?.profile_photo || null);
 
+  // Synchronize profile photo state when user context changes
   useEffect(() => {
     if (user?.profile_photo) {
       setProfilePhoto(user.profile_photo);
     }
   }, [user]);
 
+  // Fetch updated caregiver profile details on mount or ID change
   useEffect(() => {
     const fetchProfile = async () => {
       if (caregiverId) {
@@ -42,6 +51,7 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
     fetchProfile();
   }, [caregiverId]);
 
+  // Navigation menu items definition mapping IDs, labels, and Lucide icons
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'patients', label: 'Patient Directory', icon: Users },
@@ -52,18 +62,19 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
     { id: 'profile', label: 'My Profile', icon: UserCircle },
   ];
 
-  // Resolve actual name from all possible backend property fields
+  // Resolve actual caregiver name, role, and fallback avatar initial from user data
   const caregiverName = user?.full_name || user?.fullname || user?.name || 'Caregiver User';
   const caregiverRole = user?.role || 'Caregiver';
   const avatarInitial = caregiverName ? caregiverName.charAt(0).toUpperCase() : 'C';
 
+  // Resolve profile photo URL using apiService helper
   const rawPhotoPath = profilePhoto || user?.profile_photo;
   const photoUrl = getPhotoUrl(rawPhotoPath);
 
   return (
     <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       {/* Brand Header / Logo Button to toggle expand/collapse */}
-      <div 
+      <div
         className="sidebar-header"
         onClick={toggleSidebar}
         title={isCollapsed ? "Click to expand sidebar" : "Click logo to collapse sidebar"}
@@ -73,9 +84,9 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
           <img
             src={logoSvg}
             alt="MedSmart Logo"
-            style={{ 
-              width: '42px', 
-              height: '42px', 
+            style={{
+              width: '42px',
+              height: '42px',
               objectFit: 'contain',
               transition: 'transform 0.2s ease',
             }}
@@ -92,7 +103,7 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
         </div>
       </div>
 
-      {/* Navigation Items */}
+      {/* Navigation Items List */}
       <nav className="sidebar-nav">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -111,10 +122,10 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
         })}
       </nav>
 
-      {/* Footer / Caregiver Badge */}
+      {/* Footer / Caregiver Profile Badge & Sign Out Button */}
       <div className="sidebar-footer">
-        <div 
-          className="user-profile-badge" 
+        <div
+          className="user-profile-badge"
           onClick={() => setActiveTab('profile')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
           title={isCollapsed ? caregiverName : "View My Profile"}
@@ -134,8 +145,8 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
               onError={(e) => handleImageError(e, rawPhotoPath)}
             />
           ) : null}
-          <div 
-            className="user-avatar" 
+          <div
+            className="user-avatar"
             style={{ display: photoUrl ? 'none' : 'flex', flexShrink: 0 }}
           >
             {avatarInitial}
@@ -167,6 +178,7 @@ export default function Sidebar({ activeTab, setActiveTab, isCollapsed, toggleSi
           )}
         </div>
 
+        {/* Sign Out Action Button */}
         <button
           className="sidebar-item"
           onClick={logout}

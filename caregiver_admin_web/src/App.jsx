@@ -13,16 +13,24 @@ import Devices from './pages/Devices';
 import Profile from './pages/Profile';
 import './App.css';
 
+/**
+ * MainApp component handles layout rendering, tab switching, and auth checks.
+ */
 function MainApp() {
+  // Pull authentication status and loading states from AuthContext
   const { isAuthenticated, loading } = useAuth();
+
+  // Local state for active navigation tab, data refresh flag, and sidebar collapse state
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  // Toggle function to expand or collapse the side navigation menu
   const toggleSidebar = () => {
     setIsCollapsed((prev) => !prev);
   };
 
+  // Render a full-screen loading spinner while checking authentication
   if (loading) {
     return (
       <div style={{
@@ -55,11 +63,12 @@ function MainApp() {
     );
   }
 
-  // Auth Guard: Force login if not authenticated
+  // Auth Guard: Force login view if the user is not authenticated
   if (!isAuthenticated) {
     return <Login />;
   }
 
+  // Mapping object defining page titles for each active tab
   const tabTitles = {
     dashboard: 'Caregiver Dashboard Overview',
     patients: 'Patient Directory & Enrolment',
@@ -72,16 +81,19 @@ function MainApp() {
 
   return (
     <div className={`app-container ${isCollapsed ? 'sidebar-is-collapsed' : ''}`}>
-      <Sidebar 
-        activeTab={activeTab} 
+      {/* Sidebar navigation component */}
+      <Sidebar
+        activeTab={activeTab}
         setActiveTab={setActiveTab}
         isCollapsed={isCollapsed}
         toggleSidebar={toggleSidebar}
       />
+      {/* Main app layout area */}
       <div className={`main-layout ${isCollapsed ? 'collapsed' : ''}`}>
         <Header
           title={tabTitles[activeTab] || 'Caregiver Portal'}
         />
+        {/* Dynamic content area rendering views based on the active tab */}
         <main className="content-area">
           {activeTab === 'dashboard' && (
             <Dashboard
@@ -126,6 +138,9 @@ function MainApp() {
   );
 }
 
+/**
+ * Root App component wrapping the application with the AuthProvider context.
+ */
 export default function App() {
   return (
     <AuthProvider>

@@ -1,17 +1,28 @@
-/* Header.jsx */
+// Header.jsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, AlertTriangle, Pill, CheckCircle2, Info, X, CheckCheck, ShieldAlert, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/apiService';
 
+/**
+ * Header component renders the top navigation header, page titles, and interactive
+ * notification dropdown panel featuring unread/all filters and read-status synchronization.
+ */
 export default function Header({ title }) {
+  // Extract caregiver ID from authentication context
   const { caregiverId } = useAuth();
+
+  // Notification states and dropdown controls
   const [notifications, setNotifications] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [filterView, setFilterView] = useState('unread'); // 'unread' (like Flutter app default) or 'all'
   const dropdownRef = useRef(null);
 
+  /**
+   * Fetches caregiver notifications from the backend API and deduplicates them.
+   */
   const fetchNotifications = async () => {
     if (!caregiverId) return;
     try {
@@ -32,13 +43,14 @@ export default function Header({ title }) {
     }
   };
 
+  // Initial fetch on mount and setup a 15-second polling interval for notifications
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 15000); // Refresh notifications every 15s
     return () => clearInterval(interval);
   }, [caregiverId]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown menu when clicking outside of the reference element
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -49,13 +61,18 @@ export default function Header({ title }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Filter unread notifications and compute count
   const unreadNotifications = notifications.filter((n) => !n.is_read);
   const unreadCount = unreadNotifications.length;
 
+  // Determine displayed list based on active filter view tab
   const displayedNotifications = filterView === 'unread'
     ? unreadNotifications
     : notifications;
 
+  /**
+   * Marks a specific notification as read.
+   */
   const handleMarkAsRead = async (notifId, e) => {
     if (e) e.stopPropagation();
     if (!notifId) return;
@@ -69,6 +86,9 @@ export default function Header({ title }) {
     );
   };
 
+  /**
+   * Marks all caregiver notifications as read simultaneously.
+   */
   const handleMarkAllRead = async () => {
     if (!caregiverId) return;
     setLoadingNotifs(true);
@@ -77,6 +97,9 @@ export default function Header({ title }) {
     setLoadingNotifs(false);
   };
 
+  /**
+   * Helper function to format notification creation timestamps into readable strings.
+   */
   const formatCreatedDateTime = (timeStr) => {
     if (!timeStr) return 'Just now';
     try {
@@ -103,7 +126,7 @@ export default function Header({ title }) {
       </div>
 
       <div className="header-actions" ref={dropdownRef} style={{ position: 'relative' }}>
-        {/* Notification Bell Button */}
+        {/* Notification Bell Button with Badge Counter */}
         <button
           className="icon-btn"
           onClick={() => {
@@ -228,7 +251,7 @@ export default function Header({ title }) {
               )}
             </div>
 
-            {/* Filter Tabs: Unread (Default, matches App) vs All History */}
+            {/* Filter Tabs: Unread (Default) vs All History */}
             <div
               style={{
                 display: 'flex',
@@ -276,7 +299,7 @@ export default function Header({ title }) {
               </button>
             </div>
 
-            {/* Notifications Card List */}
+            {/* Notifications Card List Stream */}
             <div style={{ maxHeight: '420px', overflowY: 'auto', padding: '12px', background: '#F8FAFC' }}>
               {displayedNotifications.length === 0 ? (
                 <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94A3B8' }}>
@@ -313,7 +336,7 @@ export default function Header({ title }) {
                         position: 'relative',
                       }}
                     >
-                      {/* Card Top Row: Icon + Title + Created Time + Unread Dot */}
+                      {/* Notification Header Row */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                         <div
                           style={{
@@ -354,7 +377,7 @@ export default function Header({ title }) {
                         )}
                       </div>
 
-                      {/* Message Box */}
+                      {/* Notification Message Content Box */}
                       <div
                         style={{
                           background: '#F8FAFC',
@@ -372,7 +395,7 @@ export default function Header({ title }) {
                         </p>
                       </div>
 
-                      {/* Warning Advice Box for Stock Alerts (Matches Mobile App UI) */}
+                      {/* Warning Advice Box for Stock Alerts */}
                       {isStockAlert && (
                         <div
                           style={{
@@ -395,7 +418,7 @@ export default function Header({ title }) {
                         </div>
                       )}
 
-                      {/* Bottom Action Area: Mark as Read Button (Matching Mobile App Button) */}
+                      {/* Bottom Action Area: Mark as Read Button */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '4px' }}>
                         {isUnread ? (
                           <button

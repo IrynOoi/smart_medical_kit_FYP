@@ -1,22 +1,31 @@
 <!-- index.html -->
 <!doctype html>
+<!-- Define the root HTML document with English language localization -->
 <html lang="en">
 
 <head>
+  <!-- Define character encoding as UTF-8 for universal text support -->
   <meta charset="UTF-8" />
+  <!-- Set the browser tab icon to the SVG vector logo -->
   <link rel="icon" type="image/svg+xml" href="/medical-smart-kit-logo.svg" />
+  <!-- Configure viewport settings to ensure responsive scaling across mobile and desktop devices -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Set the browser tab title for the Caregiver & Admin Portal -->
   <title>Caregiver & Admin Portal | Smart Medical Kit</title>
-  <!-- Google Fonts -->
+
+  <!-- Google Fonts Preconnect Connections for Font Loading Performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Import Google Fonts: 'Outfit' (for headings) and 'Plus Jakarta Sans' (for body text and UI components) -->
   <link
     href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
     rel="stylesheet">
 </head>
 
 <body>
+  <!-- Root container element where the entire React application is mounted -->
   <div id="root"></div>
+  <!-- Load the main Vite React application entry script module -->
   <script type="module" src="/src/main.jsx"></script>
 </body>
 

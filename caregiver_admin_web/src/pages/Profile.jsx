@@ -21,12 +21,19 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { apiService, BASE_URL, getPhotoUrl, handleImageError } from '../services/apiService';
 
+/**
+ * Profile component manages caregiver account details, profile editing, photo uploads, 
+ * background auto-refresh syncing, and account lifecycle actions (deactivate/delete).
+ */
 export default function Profile() {
+  // Extract user details, caregiver ID, logout function, and context update helper from AuthContext
   const { user, caregiverId, logout, updateUser } = useAuth();
+
+  // Component local state for profile data and initial loading status
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Modals
+  // Modal visibility states, action loading spinners, and error/success messaging
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -34,7 +41,7 @@ export default function Profile() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Edit Form State
+  // Form state for editing caregiver profile fields
   const [editForm, setEditForm] = useState({
     full_name: '',
     email: '',
@@ -43,9 +50,14 @@ export default function Profile() {
     date_of_birth: '',
     address: '',
   });
+  // State for newly selected photo file upload and live preview URL
   const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState('');
 
+  /**
+   * Fetches the latest caregiver profile details from the backend API.
+   * @param {boolean} showSpinner - Whether to show the main loading overlay.
+   */
   const fetchProfileDetails = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -67,6 +79,7 @@ export default function Profile() {
     }
   };
 
+  // Fetch profile details on mount and setup a 15-second background auto-reload interval
   useEffect(() => {
     fetchProfileDetails(true);
     const interval = setInterval(() => {
@@ -75,9 +88,12 @@ export default function Profile() {
     return () => clearInterval(interval);
   }, [caregiverId]);
 
+  // Resolve current active profile entity from state or auth fallback
   const profile = profileData || user || {};
 
-  // Safely resolve photo URL with fallback
+  /**
+   * Safely resolves a full profile photo URL with base URL mapping and fallback paths.
+   */
   const getPhotoUrl = (photoPath) => {
     if (!photoPath) return null;
 
@@ -96,6 +112,9 @@ export default function Profile() {
     return `${base}${path}`;
   };
 
+  /**
+   * Extracts the file name string from a profile photo server path.
+   */
   const extractFilename = (photoPath) => {
     if (!photoPath || typeof photoPath !== 'string') return null;
     if (photoPath.includes('/static/profiles/')) {
@@ -104,6 +123,9 @@ export default function Profile() {
     return photoPath.split('/').pop();
   };
 
+  /**
+   * Handles image load errors by retrying with a local fallback URL or hiding the element.
+   */
   const handleImageError = (e, photoPath) => {
     const filename = extractFilename(photoPath);
     if (filename && !e.target.dataset.triedLocal) {
@@ -117,8 +139,12 @@ export default function Profile() {
     }
   };
 
+  // Resolve the current profile photo URL for rendering
   const currentPhotoUrl = getPhotoUrl(profile.profile_photo);
 
+  /**
+   * Opens the edit profile modal and populates form fields with existing profile data.
+   */
   const handleOpenEdit = () => {
     setEditForm({
       full_name: profile.full_name || profile.fullname || profile.name || '',
@@ -135,6 +161,9 @@ export default function Profile() {
     setShowEditModal(true);
   };
 
+  /**
+   * Handles local file selection for profile picture updates and generates a preview URL.
+   */
   const handlePhotoFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -143,6 +172,9 @@ export default function Profile() {
     }
   };
 
+  /**
+   * Handles saving profile updates, validating required fields, age requirements, and multipart photo uploads.
+   */
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setActionLoading(true);
@@ -157,12 +189,14 @@ export default function Profile() {
         return;
       }
 
+      // Validate that all required profile fields are populated
       if (!editForm.full_name || !editForm.email || !editForm.phone_no || !editForm.gender || !editForm.date_of_birth || !editForm.address) {
         setErrorMsg('All profile fields are compulsory and must be filled in.');
         setActionLoading(false);
         return;
       }
 
+      // Validate that the caregiver is at least 18 years old
       if (editForm.date_of_birth) {
         const birthDate = new Date(editForm.date_of_birth);
         const today = new Date();
@@ -179,6 +213,7 @@ export default function Profile() {
       }
 
       let res;
+      // Send FormData if a new photo file was attached, otherwise send JSON payload
       if (selectedPhotoFile) {
         const formData = new FormData();
         formData.append('full_name', editForm.full_name);
@@ -216,6 +251,9 @@ export default function Profile() {
     }
   };
 
+  /**
+   * Handles temporary caregiver account deactivation.
+   */
   const handleDeactivate = async () => {
     setActionLoading(true);
     setErrorMsg('');
@@ -234,6 +272,9 @@ export default function Profile() {
     }
   };
 
+  /**
+   * Handles permanent caregiver account deletion.
+   */
   const handleDeleteAccount = async () => {
     setActionLoading(true);
     setErrorMsg('');
@@ -254,7 +295,7 @@ export default function Profile() {
 
   return (
     <div style={{ position: 'relative', minHeight: '400px', maxWidth: '840px', margin: '0 auto', paddingBottom: '40px' }}>
-      {/* Spinner overlay */}
+      {/* Loading spinner overlay */}
       {loading && (
         <div className="loading-overlay">
           <Loader2 className="spinner" size={48} color="#6A4C93" />
@@ -264,7 +305,7 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Main content */}
+      {/* Main profile layout container */}
       <div style={{ opacity: loading ? 0.4 : 1, transition: 'opacity 0.2s' }}>
 
         {/* Profile Banner Card (Inspired by Mobile App Design) */}
@@ -281,7 +322,7 @@ export default function Profile() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
 
-            {/* Circular Profile Avatar */}
+            {/* Circular Profile Avatar Display & Camera Button */}
             <div style={{ position: 'relative', width: '104px', height: '104px', marginBottom: '16px' }}>
               {currentPhotoUrl ? (
                 <img
@@ -299,6 +340,7 @@ export default function Profile() {
                 />
               ) : null}
 
+              {/* Fallback avatar showing first letter of caregiver name */}
               <div
                 style={{
                   display: currentPhotoUrl ? 'none' : 'flex',
@@ -319,6 +361,7 @@ export default function Profile() {
                 {profile.full_name || profile.fullname || profile.name ? (profile.full_name || profile.fullname || profile.name).charAt(0).toUpperCase() : 'C'}
               </div>
 
+              {/* Quick photo edit camera trigger button */}
               <button
                 onClick={handleOpenEdit}
                 title="Update Profile Photo"
@@ -344,7 +387,7 @@ export default function Profile() {
               </button>
             </div>
 
-            {/* Profile Name & Badges */}
+            {/* Profile Name & Status Badges */}
             <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: 'white', marginBottom: '8px' }}>
               {profile.full_name || profile.fullname || profile.name || 'Caregiver User'}
             </h2>
@@ -386,7 +429,7 @@ export default function Profile() {
               </span>
             </div>
 
-            {/* Edit Profile Action Button */}
+            {/* Edit Personal Details Action Button */}
             <button
               onClick={handleOpenEdit}
               style={{
@@ -412,7 +455,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Contact Details Card (Structured like Flutter App) */}
+        {/* Contact Details Card */}
         <div className="glass-card" style={{ padding: '24px 28px', background: 'white', borderRadius: '20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#2D3142', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -442,7 +485,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Personal Info Card (Structured like Flutter App) */}
+        {/* Personal Info Card */}
         <div className="glass-card" style={{ padding: '24px 28px', background: 'white', borderRadius: '20px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#2D3142', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -482,7 +525,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Danger Zone */}
+        {/* Danger Zone Card */}
         <div style={{ padding: '24px', background: '#FFF5F5', border: '1px solid #FEE2E2', borderRadius: '20px' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#991B1B', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <AlertTriangle size={20} color="#EF4444" />
@@ -524,7 +567,7 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Edit Profile Modal (Redesigned & Improvised UI) */}
+        {/* Edit Profile Modal */}
         {showEditModal && (
           <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px', width: '92%' }}>
@@ -560,7 +603,7 @@ export default function Profile() {
 
               <form onSubmit={handleSaveProfile}>
 
-                {/* Photo Upload Section (Custom UI Box) */}
+                {/* Photo Upload Section */}
                 <div style={{ padding: '18px', background: '#F8FAFC', borderRadius: '16px', border: '1.5px solid #E2E8F0', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
                   <div style={{ position: 'relative', width: '76px', height: '76px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#E2E8F0', border: '3px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                     {photoPreviewUrl ? (
@@ -721,7 +764,7 @@ export default function Profile() {
           </div>
         )}
 
-        {/* Deactivate Modal */}
+        {/* Deactivate Account Confirmation Modal */}
         {showDeactivateModal && (
           <div className="modal-overlay" onClick={() => setShowDeactivateModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
@@ -756,7 +799,7 @@ export default function Profile() {
           </div>
         )}
 
-        {/* Delete Account Modal */}
+        {/* Delete Account Permanently Confirmation Modal */}
         {showDeleteModal && (
           <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>

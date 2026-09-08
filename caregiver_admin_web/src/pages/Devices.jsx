@@ -48,10 +48,15 @@ import {
 import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
+/**
+ * Devices component manages IoT smart kit hardware monitoring, ESP32 sleep/wake power control,
+ * motor slot pill inventory restocking, remote hardware diagnostics, and technician support ticket dispatch.
+ */
 export default function Devices({ isRefreshing, onRefreshComplete }) {
+  // Extract user info and caregiver ID from authentication context
   const { user, caregiverId } = useAuth();
 
-  // Core Data State
+  // Core Data State for devices, selected device, assigned patient, and prescriptions
   const [devices, setDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [selectedDeviceDetail, setSelectedDeviceDetail] = useState(null);
@@ -59,14 +64,14 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   const [devicePrescriptions, setDevicePrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Diagnostic Controls State
+  // Diagnostic Controls State for remote commands, IP settings, and control logs
   const [testEspIp, setTestEspIp] = useState('');
   const [selectedTestMotor, setSelectedTestMotor] = useState(1);
   const [displayMsg, setDisplayMsg] = useState('MEDKIT READY');
   const [controlLogs, setControlLogs] = useState([]);
   const [powerActionLoading, setPowerActionLoading] = useState(false);
 
-  // Contact Technician State
+  // Contact Technician & Dispatch Support State
   const [copiedField, setCopiedField] = useState(null);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [dispatchIssue, setDispatchIssue] = useState('Motor Jam / Dispensing Calibration');
@@ -75,12 +80,18 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   const [submittingTicket, setSubmittingTicket] = useState(false);
   const [lastTicketInfo, setLastTicketInfo] = useState(null);
 
+  /**
+   * Copies contact information (phone/email) to the clipboard with visual feedback.
+   */
   const handleCopyContact = (text, fieldName) => {
     navigator.clipboard.writeText(text);
     setCopiedField(fieldName);
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  /**
+   * Handles technician support ticket submission and Mailtrap notification dispatch.
+   */
   const handleDispatchSubmit = async (e) => {
     e.preventDefault();
     setSubmittingTicket(true);
@@ -117,6 +128,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Closes the technician dispatch request modal and resets state.
+   */
   const handleCloseDispatchModal = () => {
     setShowDispatchModal(false);
     setDispatchSuccess(false);
@@ -124,16 +138,14 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     setDispatchIssue('Motor Jam / Dispensing Calibration');
   };
 
-  // Add Device Modal State
+  // Add, Edit, and Delete Device Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSerial, setNewSerial] = useState('');
 
-  // Edit Device Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editDeviceId, setEditDeviceId] = useState(null);
   const [editSerial, setEditSerial] = useState('');
 
-  // Delete Device Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -142,11 +154,16 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
   const [restockQty, setRestockQty] = useState('');
   const [restockLoading, setRestockLoading] = useState(false);
 
+  /**
+   * Appends timestamped log messages to the diagnostic control activity feed.
+   */
   const addLog = (msg) => {
     setControlLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 20)]);
   };
 
-  // Helper formatting functions
+  /**
+   * Helper function to format timestamp into a relative duration string (e.g., "5m ago").
+   */
   const formatLastActive = (timestamp) => {
     if (!timestamp) return 'Never';
     try {
@@ -165,6 +182,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Checks whether a device has a recent heartbeat within the last 24 hours.
+   */
   const isDeviceOnline = (timestamp) => {
     if (!timestamp) return false;
     try {
@@ -177,7 +197,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Group dispenser prescriptions by motor slot / physical medication cartridge
+  /**
+   * Groups dispenser prescriptions by physical motor slot / medication cartridge.
+   */
   const groupedSlots = useMemo(() => {
     const groups = {};
     (devicePrescriptions || []).forEach((item) => {
@@ -203,9 +225,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     return Object.values(groups).sort((a, b) => a.slot - b.slot);
   }, [devicePrescriptions]);
 
-  // ------------------------------------------------------------
-  // Load All Devices & Patients
-  // ------------------------------------------------------------
+  /**
+   * Fetches all registered hardware devices from the backend API.
+   */
   const fetchAllDevices = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -213,14 +235,12 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
       if (Array.isArray(devList)) {
         setDevices(devList);
 
-        // If no device is currently selected, select the first device by default
         if (devList.length > 0 && !selectedDeviceId) {
           const firstDev = devList[0];
           const firstId = firstDev.id || firstDev.device_id;
           setSelectedDeviceId(firstId);
           await loadSelectedDeviceData(firstId, devList);
         } else if (selectedDeviceId) {
-          // Refresh existing selected device
           await loadSelectedDeviceData(selectedDeviceId, devList);
         }
       }
@@ -233,9 +253,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // ------------------------------------------------------------
-  // Load Details for Selected Device
-  // ------------------------------------------------------------
+  /**
+   * Loads detailed status, assigned patient, and prescriptions for a selected device ID.
+   */
   const loadSelectedDeviceData = async (deviceId, currentDevicesList = devices) => {
     if (!deviceId) return;
     try {
@@ -250,7 +270,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
         if (deviceDetail.last_known_ip) {
           setTestEspIp(deviceDetail.last_known_ip);
         }
-        // Update corresponding item in devices state list
         setDevices((prev) =>
           prev.map((d) => {
             const dId = d.id || d.device_id;
@@ -261,7 +280,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
           })
         );
       } else {
-        // Fallback to finding device from current devices list
         const fallback = currentDevicesList.find(
           (d) => (d.id || d.device_id) === parseInt(deviceId, 10) || (d.id || d.device_id) === deviceId
         );
@@ -278,7 +296,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Handle device selection change from Dropdown Menu
+  /**
+   * Handles switching selected devices from the dropdown selector.
+   */
   const handleDeviceDropdownChange = async (e) => {
     const newId = e.target.value;
     setSelectedDeviceId(newId);
@@ -293,6 +313,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Initial fetch on mount and setup 10-second background polling interval
   useEffect(() => {
     fetchAllDevices(true);
     const interval = setInterval(() => {
@@ -301,15 +322,16 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     return () => clearInterval(interval);
   }, [caregiverId]);
 
+  // Handle external refresh triggers (props)
   useEffect(() => {
     if (isRefreshing) {
       fetchAllDevices(true);
     }
   }, [isRefreshing]);
 
-  // ------------------------------------------------------------
-  // ESP32 POWER CONTROL (SLEEP / WAKE)
-  // ------------------------------------------------------------
+  /**
+   * Remotely controls ESP32 power states (sleep / wake).
+   */
   const handlePowerControl = async (action) => {
     if (!selectedDeviceDetail && !selectedDeviceId) {
       alert('Please select a device first.');
@@ -355,7 +377,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
         }
       }
 
-      // Re-fetch status after a short delay
       setTimeout(() => {
         if (devId) loadSelectedDeviceData(devId);
       }, 2500);
@@ -367,9 +388,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // ------------------------------------------------------------
-  // DIRECT HARDWARE DIAGNOSTIC CONTROLS
-  // ------------------------------------------------------------
+  /**
+   * Helper to assemble target identifiers for remote diagnostic commands.
+   */
   const getControlTarget = () => {
     const patId = assignedPatient?.patient_id;
     const serial = selectedDeviceDetail?.device_serial;
@@ -381,6 +402,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     };
   };
 
+  /**
+   * Remotely toggles the device notification LED.
+   */
   const handleLedToggle = async (turnOn) => {
     const target = getControlTarget();
     const actionText = turnOn ? 'ON' : 'OFF';
@@ -393,6 +417,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Remotely toggles the device audio buzzer alarm.
+   */
   const handleBuzzerToggle = async (turnOn) => {
     const target = getControlTarget();
     const actionText = turnOn ? 'ON' : 'OFF';
@@ -405,6 +432,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Remotely updates the device OLED display text.
+   */
   const handleDisplaySend = async (e, customMsg = null) => {
     if (e && e.preventDefault) e.preventDefault();
     const msgToSend = customMsg !== null ? customMsg : displayMsg;
@@ -419,6 +449,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Triggers stepper motor rotation tests on the hardware dispenser.
+   */
   const handleStepperTest = async (motorNum, action = '90') => {
     const target = getControlTarget();
     const actionDesc =
@@ -436,9 +469,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // ------------------------------------------------------------
-  // REFILL PILL INVENTORY
-  // ------------------------------------------------------------
+  /**
+   * Submits pill inventory restock updates.
+   */
   const handleRestockSubmit = async (e) => {
     e.preventDefault();
     if (!restockModal) return;
@@ -472,9 +505,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // ------------------------------------------------------------
-  // ADD & EDIT DEVICE SERIAL
-  // ------------------------------------------------------------
+  /**
+   * Registers a new IoT hardware device serial.
+   */
   const handleAddDeviceSubmit = async (e) => {
     e.preventDefault();
     const cleanNum = newSerial.replace(/[^0-9]/g, '');
@@ -502,6 +535,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     setShowEditModal(true);
   };
 
+  /**
+   * Updates an existing device serial number.
+   */
   const handleEditDeviceSubmit = async (e) => {
     e.preventDefault();
     const cleanNum = editSerial.replace(/[^0-9]/g, '');
@@ -522,6 +558,9 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  /**
+   * Deletes a registered hardware device.
+   */
   const handleDeleteDeviceSubmit = async () => {
     if (!deleteTarget) return;
     const devId = deleteTarget.id || deleteTarget.device_id;
@@ -540,18 +579,16 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Device display variables
+  // Resolve current active device metadata
   const currentDev = selectedDeviceDetail || {};
   const currentSerial = currentDev.device_serial || (selectedDeviceId ? `DISP-${selectedDeviceId}` : 'No Device Selected');
   const batteryLevel = currentDev.battery_level ?? currentDev.battery ?? null;
 
-  // Power & Online Logic:
-  // A device is ONLY Online if it has recent heartbeat (<24h) AND is not explicitly sleeping
+  // Power & Online connectivity evaluation logic
   const hasHeartbeat = isDeviceOnline(currentDev.last_active_timestamp);
   const rawAwake = currentDev.is_awake;
   const isAwakeExplicit = !(rawAwake === false || rawAwake === 0);
 
-  // If the device is offline / no heartbeat (e.g. 19d ago), it cannot be Awake
   const isOnline = hasHeartbeat && isAwakeExplicit;
   const isAwake = isOnline;
   const isLowBattery = isOnline && batteryLevel !== null && batteryLevel < 20;
@@ -573,7 +610,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
       <div style={{ opacity: showSpinner ? 0.35 : 1, transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
         {/* ========================================================================= */}
-        {/* 1. HERO DEVICE HEADER & OVERVIEW CARD (MATCHING FLUTTER APP DESIGN)       */}
+        {/* 1. HERO DEVICE HEADER & OVERVIEW CARD (MATCHING FLUTTER APP DESIGN)        */}
         {/* ========================================================================= */}
         <div
           style={{
@@ -629,7 +666,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
               </div>
             </div>
 
-            {/* Online/Offline Status Indicator */}
+            {/* Online/Offline Status Indicator Badge */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div
                 style={{
@@ -651,7 +688,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
-          {/* Quick Stat Indicators (Battery, Status, Sync, Power) */}
+          {/* Quick Stat Indicators (Battery, Network Status, Sync, Power State) */}
           <div
             style={{
               display: 'grid',
@@ -721,7 +758,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
         </div>
 
         {/* ========================================================================= */}
-        {/* 2. DEVICE SERIAL DROPDOWN SELECTOR BAR (CLEAN SERIAL NUMBERS ONLY)        */}
+        {/* 2. DEVICE SERIAL DROPDOWN SELECTOR BAR                                    */}
         {/* ========================================================================= */}
         <div
           className="glass-card"
@@ -801,7 +838,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
-          {/* Action Buttons Right Side */}
+          {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <button
               className="btn btn-outline"
@@ -891,7 +928,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
 
-          {/* Power Action Buttons */}
           <div
             style={{
               background: '#F8FAFC',
@@ -915,7 +951,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {/* Sleep Button */}
               <button
                 className="btn"
                 onClick={() => handlePowerControl('sleep')}
@@ -1072,7 +1107,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                         </div>
                       </div>
 
-                      {/* Stock Indicator Bar */}
+                      {/* Stock Indicator Progress Bar */}
                       <div style={{ marginBottom: '16px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '6px' }}>
                           <span style={{ color: '#64748B' }}>Pill Count:</span>
@@ -1131,7 +1166,7 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                   Remote Hardware Diagnostic Panel
                 </h3>
 
-                {/* ESP32 IP Configuration */}
+                {/* ESP32 IP Configuration Input */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Server size={16} color="#64748B" />
                   <input
@@ -1326,7 +1361,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             }}
           >
             <div>
-              {/* Card Header */}
               <div className="card-header" style={{ marginBottom: '14px' }}>
                 <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#1E293B' }}>
                   <Wrench size={20} color="#6A4C93" />
@@ -1380,7 +1414,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
 
               {/* Contact Information Channels */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {/* Direct Phone Hotline */}
                 <div
                   style={{
                     display: 'flex',
@@ -1418,20 +1451,16 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <button
-                      className="btn btn-outline"
-                      onClick={() => handleCopyContact('+60123456789', 'phone')}
-                      style={{ padding: '6px 10px', fontSize: '0.78rem', background: 'white' }}
-                      title="Copy Phone Number"
-                    >
-                      {copiedField === 'phone' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
-                      <span>{copiedField === 'phone' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => handleCopyContact('+60123456789', 'phone')}
+                    style={{ padding: '6px 10px', fontSize: '0.78rem', background: 'white' }}
+                  >
+                    {copiedField === 'phone' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
+                    <span>{copiedField === 'phone' ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
 
-                {/* Email Channel */}
                 <div
                   style={{
                     display: 'flex',
@@ -1469,20 +1498,16 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <button
-                      className="btn btn-outline"
-                      onClick={() => handleCopyContact('hardware.support@smartmedkit.my', 'email')}
-                      style={{ padding: '6px 10px', fontSize: '0.78rem', background: 'white' }}
-                      title="Copy Email Address"
-                    >
-                      {copiedField === 'email' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
-                      <span>{copiedField === 'email' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => handleCopyContact('hardware.support@smartmedkit.my', 'email')}
+                    style={{ padding: '6px 10px', fontSize: '0.78rem', background: 'white' }}
+                  >
+                    {copiedField === 'email' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
+                    <span>{copiedField === 'email' ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
 
-                {/* Operating Hours & Dispatch Notice */}
                 <div
                   style={{
                     display: 'flex',
@@ -1525,7 +1550,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
               </div>
             </div>
 
-            {/* Quick Action Button & Guidelines */}
             <div style={{ paddingTop: '8px' }}>
               <button
                 className="btn btn-primary"
@@ -1584,12 +1608,11 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     const effectiveDev = isSelected && selectedDeviceDetail ? { ...device, ...selectedDeviceDetail } : device;
                     const devBatt = effectiveDev.battery_level ?? effectiveDev.battery ?? null;
 
-                    // A device is ONLY Online if it has recent heartbeat (<24h) AND is not explicitly sleeping
                     const devHasHeartbeat = isDeviceOnline(effectiveDev.last_active_timestamp);
                     const devRawAwake = effectiveDev.is_awake;
                     const devAwakeExplicit = !(devRawAwake === false || devRawAwake === 0);
                     const online = devHasHeartbeat && devAwakeExplicit;
-                    const devAwake = online; // If offline (e.g. 19d ago or sleeping), power state shows Sleeping
+                    const devAwake = online;
                     const isDevLowBatt = online && devBatt !== null && devBatt < 20;
 
                     return (
@@ -1979,7 +2002,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
                     Ticket <strong style={{ color: '#6A4C93' }}>#{lastTicketInfo?.ticketId || 'HW-8492'}</strong> has been registered for <strong>{currentSerial}</strong>.
                   </p>
 
-                  {/* Mailtrap Notification Delivery Confirmation Box */}
                   <div
                     style={{
                       background: 'linear-gradient(135deg, #F0FDF4 0%, #E8F5E9 100%)',
@@ -2061,7 +2083,6 @@ export default function Devices({ isRefreshing, onRefreshComplete }) {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

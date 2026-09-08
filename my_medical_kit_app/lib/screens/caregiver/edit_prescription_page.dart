@@ -274,6 +274,32 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     }
   }
 
+  // Determines the next available unique TimeOfDay slot.
+  TimeOfDay _getNextAvailableTimeOfDay() {
+    const defaultSlots = [
+      TimeOfDay(hour: 8, minute: 0),
+      TimeOfDay(hour: 12, minute: 0),
+      TimeOfDay(hour: 16, minute: 0),
+      TimeOfDay(hour: 20, minute: 0),
+      TimeOfDay(hour: 22, minute: 0),
+      TimeOfDay(hour: 6, minute: 0),
+      TimeOfDay(hour: 10, minute: 0),
+      TimeOfDay(hour: 14, minute: 0),
+      TimeOfDay(hour: 18, minute: 0),
+    ];
+    for (var slot in defaultSlots) {
+      if (!_selectedTimes.any((t) => t.hour == slot.hour && t.minute == slot.minute)) {
+        return slot;
+      }
+    }
+    for (int h = 0; h < 24; h++) {
+      if (!_selectedTimes.any((t) => t.hour == h && t.minute == 0)) {
+        return TimeOfDay(hour: h, minute: 0);
+      }
+    }
+    return const TimeOfDay(hour: 8, minute: 0);
+  }
+
   // Save the updated prescription.
   // Performs duplicate check: no two active prescriptions for the same patient with the same medication.
   Future<void> _savePrescription() async {
@@ -333,6 +359,42 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not verify duplicates: $e')),
+      );
+      return;
+    }
+
+    // =============================================
+    // ⏰ Check for duplicate dispense times
+    // =============================================
+    if (_selectedTimes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one dispense time.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final Set<String> uniqueTimeKeys = {};
+    bool hasDuplicateTimes = false;
+    for (var t in _selectedTimes) {
+      final key = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+      if (uniqueTimeKeys.contains(key)) {
+        hasDuplicateTimes = true;
+        break;
+      }
+      uniqueTimeKeys.add(key);
+    }
+
+    if (hasDuplicateTimes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '⚠️ Duplicate dispense times detected. Please ensure all scheduled times are unique.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -463,51 +525,92 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     const SizedBox(height: 24),
 
                     // Dispense Times section: list of TimeOfDay widgets with add/remove
-                    const Text(
-                      'Dispense Times',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Dispense Times',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (_selectedTimes.asMap().entries.any((e) =>
+                            _selectedTimes.where((t) => t.hour == e.value.hour && t.minute == e.value.minute).length > 1))
+                          const Text(
+                            '⚠️ Duplicate times detected',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Column(
                       children: _selectedTimes.asMap().entries.map((entry) {
                         int index = entry.key;
                         TimeOfDay time = entry.value;
+                        final isDuplicate = _selectedTimes
+                                .where((t) =>
+                                    t.hour == time.hour &&
+                                    t.minute == time.minute)
+                                .length >
+                            1;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Row(
                             children: [
                               Expanded(
-                                child: ListTile(
-                                  tileColor: Colors.grey.shade100,
-                                  shape: RoundedRectangleBorder(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: isDuplicate ? const Color(0xFFFEF2F2) : Colors.grey.shade100,
                                     borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  leading: const Icon(
-                                    Icons.access_time,
-                                    color: AppColors.primaryPurple,
-                                  ),
-                                  title: Text(
-                                    time.format(context),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: AppColors.primaryPurple,
+                                    border: Border.all(
+                                      color: isDuplicate ? Colors.red.shade300 : Colors.transparent,
+                                      width: isDuplicate ? 1.5 : 0.0,
                                     ),
                                   ),
-                                  onTap: () async {
-                                    final picked = await showTimePicker(
-                                      context: context,
-                                      initialTime: time,
-                                    );
-                                    if (picked != null) {
-                                      setState(
-                                        () => _selectedTimes[index] = picked,
+                                  child: ListTile(
+                                    tileColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    leading: Icon(
+                                      Icons.access_time,
+                                      color: isDuplicate ? Colors.red : AppColors.primaryPurple,
+                                    ),
+                                    title: Text(
+                                      time.format(context),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: isDuplicate ? Colors.red.shade700 : AppColors.primaryPurple,
+                                      ),
+                                    ),
+                                    onTap: () async {
+                                      final picked = await showTimePicker(
+                                        context: context,
+                                        initialTime: time,
                                       );
-                                    }
-                                  },
+                                      if (picked != null) {
+                                        if (_selectedTimes.asMap().entries.any((e) => e.key != index && e.value.hour == picked.hour && e.value.minute == picked.minute)) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('⚠️ This dispense time is already added.'),
+                                                backgroundColor: Colors.orange,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                        setState(
+                                          () => _selectedTimes[index] = picked,
+                                        );
+                                      }
+                                    },
+                                  ),
                                 ),
                               ),
                               // Remove button (only if more than one time)
@@ -531,11 +634,22 @@ class _EditPrescriptionPageState extends State<EditPrescriptionPage> {
                     // Add time button
                     TextButton.icon(
                       onPressed: () async {
+                        final nextSlot = _getNextAvailableTimeOfDay();
                         final picked = await showTimePicker(
                           context: context,
-                          initialTime: const TimeOfDay(hour: 8, minute: 0),
+                          initialTime: nextSlot,
                         );
                         if (picked != null) {
+                          if (_selectedTimes.any((t) => t.hour == picked.hour && t.minute == picked.minute)) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('⚠️ This dispense time is already added.'),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
+                            }
+                          }
                           setState(() => _selectedTimes.add(picked));
                         }
                       },

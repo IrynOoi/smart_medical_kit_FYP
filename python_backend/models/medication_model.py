@@ -96,7 +96,8 @@ def create_prescription_config(patient_id, medication_name, dosage_tablet, dispe
         new_prescription_id = cursor.lastrowid
 
         # 3️⃣ Insert the medication schedules (prescription_schedules)
-        for dt in dispense_times:
+        unique_dispense_times = list(dict.fromkeys(dispense_times))
+        for dt in unique_dispense_times:
             if dispense_days and len(dispense_days) > 0:
                 for day in dispense_days:
                     cursor.execute('''
@@ -349,7 +350,8 @@ def update_prescription_config(prescription_id, medication_name, dosage_tablet, 
         
         # Delete old schedules and insert new ones
         cursor.execute('DELETE FROM prescription_schedules WHERE prescription_id = %s', (prescription_id,))
-        for dt in dispense_times:
+        unique_dispense_times = list(dict.fromkeys(dispense_times))
+        for dt in unique_dispense_times:
             if dispense_days and len(dispense_days) > 0:
                 for day in dispense_days:
                     cursor.execute('''

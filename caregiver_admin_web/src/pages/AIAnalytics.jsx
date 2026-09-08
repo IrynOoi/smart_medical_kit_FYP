@@ -21,15 +21,22 @@ import {
 import { apiService } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 
+/**
+ * AIAnalytics component manages hybrid machine learning predictions (LSTM + Random Forest),
+ * risk analytics overviews, batch pipeline executions, and individual patient inference modals.
+ */
 export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
+  // Extract caregiver ID from authentication context
   const { caregiverId } = useAuth();
 
+  // Overview statistics state for AI risk analytics counts
   const [overview, setOverview] = useState({
     high_risk_patients: 0,
     medium_risk_patients: 0,
     total_analyzed: 0,
   });
 
+  // Patient prediction lists and loading states
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [jobRunning, setJobRunning] = useState(false);
@@ -46,6 +53,9 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
   // Prediction Complete Result Modal State
   const [predictionResult, setPredictionResult] = useState(null);
 
+  /**
+   * Fetches the AI analytics overview and concurrent prediction scores for all active patients.
+   */
   const fetchAIOverview = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -86,6 +96,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     }
   };
 
+  // Initial fetch on mount and setup 15-second background polling interval
   useEffect(() => {
     if (caregiverId) {
       fetchAIOverview(true);
@@ -96,11 +107,14 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     }
   }, [caregiverId]);
 
+  // Handle external refresh triggers (props)
   useEffect(() => {
     if (isRefreshing) fetchAIOverview(true);
   }, [isRefreshing]);
 
-  // Run Batch AI Model
+  /**
+   * Triggers the batch AI model prediction pipeline across all system patients.
+   */
   const handleRunBatchAI = async () => {
     setJobRunning(true);
     const success = await apiService.runBatchPrediction();
@@ -113,12 +127,17 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     setJobRunning(false);
   };
 
-  // Helper date/time calculations matching Flutter app
+  /**
+   * Helper returning the current day of the week string.
+   */
   const getCurrentDayOfWeek = () => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[new Date().getDay()];
   };
 
+  /**
+   * Helper returning the current time-of-day category (Morning, Afternoon, Evening).
+   */
   const getCurrentTimeOfDay = () => {
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) return 'Morning';
@@ -126,6 +145,9 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     return 'Evening';
   };
 
+  /**
+   * Helper function to compute patient age from a date of birth string.
+   */
   const calculateAge = (dobString) => {
     if (!dobString) return 65;
     try {
@@ -138,7 +160,9 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Fetch patient recent history (3 items: 1=Taken, 0=Missed, -1=No Data)
+  /**
+   * Fetches recent adherence history logs for a patient (1=Taken, 0=Missed, -1=No Data).
+   */
   const fetchPatientHistory = async (patientId) => {
     try {
       const logs = await apiService.getPatientAdherenceLogs(patientId, 10);
@@ -165,7 +189,9 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     }
   };
 
-  // Open Prediction Dialog (matching Flutter _showPredictionDialog)
+  /**
+   * Opens the single prediction setup dialog and loads recent patient history.
+   */
   const handleOpenPredictionDialog = async (patient) => {
     setSetupModalPatient(patient);
     setModalLoadingHistory(true);
@@ -175,7 +201,9 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
     setModalLoadingHistory(false);
   };
 
-  // Execute single prediction
+  /**
+   * Executes a single AI prediction request for the selected patient.
+   */
   const handleRunPrediction = async () => {
     if (!setupModalPatient) return;
     const pid = setupModalPatient.patient_id || setupModalPatient.id;
@@ -220,7 +248,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
 
   return (
     <div style={{ position: 'relative', minHeight: '400px' }}>
-      {/* Spinner overlay – shows during initial load or refresh */}
+      {/* Loading spinner overlay */}
       {showSpinner && (
         <div className="loading-overlay">
           <Loader2 className="spinner" size={48} color="#6A4C93" />
@@ -230,8 +258,9 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
         </div>
       )}
 
-      {/* Main content – dimmed when spinner is visible */}
+      {/* Main content area */}
       <div style={{ opacity: showSpinner ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+
         {/* Top Banner & Batch Trigger */}
         <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', background: 'white' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
@@ -252,7 +281,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
           </div>
         </div>
 
-        {/* AI Metrics Overview Row – 3 Cards (Overall Predicted Adherence REMOVED as requested) */}
+        {/* AI Metrics Overview Row – 3 Cards */}
         <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
           {/* Card 1: High Risk Patients */}
           <div className="metric-card">
@@ -385,7 +414,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. PREDICTION SETUP MODAL (Matches Flutter _showPredictionDialog) */}
+      {/* 1. PREDICTION SETUP MODAL                                                 */}
       {/* ========================================================================= */}
       {setupModalPatient && (
         <div className="modal-overlay" onClick={() => !isPredicting && setSetupModalPatient(null)}>
@@ -426,7 +455,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
                   <li>• Temporal pattern analysis</li>
                 </ul>
 
-                {/* Info Card Box */}
+                {/* Patient Information & Adherence History Box */}
                 <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '10px', border: '1px solid #E2E8F0', marginBottom: '20px' }}>
                   <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1E293B', marginBottom: '8px' }}>
                     Patient Information:
@@ -456,7 +485,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
                     Recent Adherence History:
                   </div>
 
-                  {/* 3 Circle Indicators */}
+                  {/* Adherence History Circle Indicators */}
                   <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '8px' }}>
                     {patientHistory.map((val, idx) => {
                       const isTaken = val === 1;
@@ -507,7 +536,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
       )}
 
       {/* ========================================================================= */}
-      {/* 2. INSUFFICIENT DATA ALERT MODAL (Matches Flutter AlertDialog) */}
+      {/* 2. INSUFFICIENT DATA ALERT MODAL                                          */}
       {/* ========================================================================= */}
       {insufficientDataMsg && (
         <div className="modal-overlay" onClick={() => setInsufficientDataMsg(null)}>
@@ -527,7 +556,7 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
       )}
 
       {/* ========================================================================= */}
-      {/* 3. PREDICTION COMPLETE RESULT MODAL (Matches Flutter Result Card) */}
+      {/* 3. PREDICTION COMPLETE RESULT MODAL                                       */}
       {/* ========================================================================= */}
       {predictionResult && (
         <div className="modal-overlay" onClick={() => setPredictionResult(null)}>
@@ -542,7 +571,6 @@ export default function AIAnalytics({ isRefreshing, onRefreshComplete }) {
               </button>
             </div>
 
-            {/* Gradient Result Card */}
             {(() => {
               const { score, riskLevel, patientName } = predictionResult;
               const riskColor = riskLevel === 'HIGH' ? '#EF4444' : riskLevel === 'MEDIUM' ? '#F59E0B' : '#10B981';
