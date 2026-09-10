@@ -293,3 +293,14 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
 <img width="861" height="414" alt="image" src="https://github.com/user-attachments/assets/aaf6e360-07b6-404c-a43c-c8bf601a6bc8" />
 
 
+<p><strong>6）Smart kit device webpage</strong></p>
+
+<img width="752" height="354" alt="image" src="https://github.com/user-attachments/assets/5cb676f0-23cf-4237-a03c-363c497dce1c" />
+
+<p><strong>7）Smart kit device webpage</strong></p>
+
+<img width="861" height="505" alt="image" src="https://github.com/user-attachments/assets/118452c7-ad93-4447-bbe5-3476efccba02" />
+
+
+
+
