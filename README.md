@@ -324,6 +324,8 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
 <img width="861" height="505" alt="image" src="https://github.com/user-attachments/assets/35dd2567-3fed-493c-80fe-550756f13802" />
 
 
+## 📽️ Presentation Video
 
+[![Project Presentation](https://img.youtube.com/vi/LO_kBAOSEs8/0.jpg)](https://youtu.be/LO_kBAOSEs8)
 
 
