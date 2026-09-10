@@ -278,11 +278,11 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
   <img width="260" alt="Inventory and device page" src="https://github.com/user-attachments/assets/42d70590-edb2-4b57-94a3-98097abe8b58" />
     <br><br>
 
-    <p><strong>6)Dose taken and history page</strong></p>
+    <p><strong>6) Dose taken and history page</strong></p>
 <img width="269" height="604" alt="image" src="https://github.com/user-attachments/assets/212093be-dd94-4509-8e0b-d329a290cfbf" />
   <br><br>
 
-    <p><strong>6)Profile page of caregiver </strong></p>
+    <p><strong>7)Profile page of caregiver </strong></p>
 <img width="258" height="577" alt="image" src="https://github.com/user-attachments/assets/f7707611-ed69-4312-9f5e-f4706b063fe5" />
   <br><br>
 
