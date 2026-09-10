@@ -260,12 +260,33 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
   <img width="320" alt="Caregiver Dashboard 2" src="https://github.com/user-attachments/assets/661c774b-c64d-4d79-ae71-97e891ae41b3" />
   <br><br>
 
+
+  <p><strong>4) Patient Dashboard</strong></p>
+<img width="250" height="560" alt="image" src="https://github.com/user-attachments/assets/d4b80a56-ce14-4812-92b8-e319b9b7bb60" />
+
+
+  <br><br>
+<img width="299" height="483" alt="image" src="https://github.com/user-attachments/assets/0045ea95-805d-4ee4-a468-97f9b64a64af" />
+
+  <br><br>
+  
   <p><strong>4) Forget Probability Prediction Page</strong></p>
   <img width="260" alt="Forget Probability prediction page" src="https://github.com/user-attachments/assets/f31edb0b-36ab-496e-a5c9-19d4e4a2d24a" />
   <br><br>
 
   <p><strong>5) Inventory and Device Page</strong></p>
   <img width="260" alt="Inventory and device page" src="https://github.com/user-attachments/assets/42d70590-edb2-4b57-94a3-98097abe8b58" />
+    <br><br>
+
+    <p><strong>6)Dose taken and history page</strong></p>
+<img width="269" height="604" alt="image" src="https://github.com/user-attachments/assets/212093be-dd94-4509-8e0b-d329a290cfbf" />
+  <br><br>
+
+    <p><strong>6)Profile page of caregiver </strong></p>
+<img width="258" height="577" alt="image" src="https://github.com/user-attachments/assets/f7707611-ed69-4312-9f5e-f4706b063fe5" />
+  <br><br>
+
+
 
 </div>
 
