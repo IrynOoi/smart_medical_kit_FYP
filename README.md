@@ -1,4 +1,5 @@
-<img width="861" height="414" alt="image" src="https://github.com/user-attachments/assets/a3025aa4-1584-4fbd-bed5-b09524673cae" /># MedSmart (Smart Medical Kit System)
+
+# MedSmart (Smart Medical Kit System)
 
 MedSmart is an IoT-based medication adherence platform that combines:
 - a **Flutter mobile application** (patient + caregiver),
@@ -299,7 +300,8 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
 
 <p><strong>7）Smart kit device webpage</strong></p>
 
-<img width="861" height="505" alt="image" src="https://github.com/user-attachments/assets/118452c7-ad93-4447-bbe5-3476efccba02" />
+<img width="861" height="505" alt="image" src="https://github.com/user-attachments/assets/35dd2567-3fed-493c-80fe-550756f13802" />
+
 
 
 
