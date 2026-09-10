@@ -245,6 +245,7 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
 1）Landing  page 
 <img width="246" height="512" alt="image" src="https://github.com/user-attachments/assets/1f67b19f-d4d7-449b-baa6-0f3a1d2aef68" />
 <br><br>
+<br><br>
 2)Login page
 <img width="243" height="513" alt="image" src="https://github.com/user-attachments/assets/7af8c389-1b6a-4693-b2c1-d77ecece20af" />
 <br><br>
