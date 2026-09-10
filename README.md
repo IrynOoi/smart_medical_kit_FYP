@@ -272,8 +272,14 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
 ### Website UI (Caregiver Portal)
 <p><strong>1)Dashboard webpage</strong></p>
 
-<img width="1873" height="890" alt="MedSmart caregiver portal UI" src="https://github.com/user-attachments/assets/535e3e21-2291-45b8-8828-140417c24477" />
+<img width="798" height="380" alt="image" src="https://github.com/user-attachments/assets/2394594e-551c-444c-82b6-a0d9fce7d140" />
+
 <br><br>
 <p><strong>2）Patient directory webpage</strong></p>
 
 <img width="861" height="415" alt="image" src="https://github.com/user-attachments/assets/39df14c3-fa6f-4b3f-8863-7af3aa2f0650" />
+
+<p><strong>3）Patient directory webpage</strong></p>
+
+<img width="861" height="415" alt="image" src="https://github.com/user-attachments/assets/d3dde47c-320e-4b09-a8ec-9dba2d0ca04f" />
+
