@@ -917,7 +917,7 @@ export const apiService = {
 
   async markNotificationRead(notifId) {
     try {
-      const response = await fetch(`${BASE_URL}/notification/${notifId}/read`, {
+      const response = await fetch(`${BASE_URL}/caregiver/notification/${notifId}/read`, {
         method: 'PUT',
         headers: getHeaders(true),
       });
@@ -931,13 +931,22 @@ export const apiService = {
 
   async markAllCaregiverNotificationsRead(caregiverId) {
     try {
+      const response = await fetch(`${BASE_URL}/caregiver/${caregiverId}/notifications/read`, {
+        method: 'PUT',
+        headers: getHeaders(true),
+      });
+      const json = await response.json();
+      if (json.success === true) return true;
+
+      // Fallback: individually mark unread notifications
       const notifs = await this.getCaregiverNotifications(caregiverId);
       if (Array.isArray(notifs)) {
-        const unread = notifs.filter(n => !n.is_read && n.id);
-        await Promise.all(unread.map(n => this.markNotificationRead(n.id)));
+        const unread = notifs.filter(n => !n.is_read && (n.notification_id || n.id));
+        await Promise.all(unread.map(n => this.markNotificationRead(n.notification_id || n.id)));
       }
       return true;
     } catch (err) {
+      console.error('Error marking all caregiver notifications as read:', err);
       return false;
     }
   },

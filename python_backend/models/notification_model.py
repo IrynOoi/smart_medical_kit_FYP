@@ -218,6 +218,22 @@ def mark_all_reminders_read(patient_id):
         cursor.close()
 
 
+# ---------------------- Mark All Notifications as Read for Caregiver ----------------------
+def mark_all_caregiver_notifications_read(caregiver_id):
+    """
+    Mark all unread notifications for a caregiver as read.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE notifications
+            SET is_read = 1
+            WHERE recipient_id = %s AND is_read = 0
+        ''', (caregiver_id,))
+        conn.commit()
+        cursor.close()
+
+
 # ---------------------- Mark Reminders for a Specific Medication as Read ----------------------
 def mark_single_reminder_read(patient_id, medication_name):
     """
@@ -303,18 +319,16 @@ def get_caregiver_stock_notification_rows(caregiver_id):
                 message = f'{med_name} is running low for: {patient_list}. Please restock soon.'
                 notif_type = 'LOW_STOCK'
 
-            # Check if there is already an unread notification for this caregiver+medication
+            # Check if there is already a notification for this caregiver+medication
             cursor.execute('''
                 SELECT notification_id, is_read
                 FROM notifications
                 WHERE recipient_id = %s
-                  AND title = %s
-                  AND message = %s
-                  AND type = %s
-                  AND is_read = 0
+                  AND message LIKE %s
+                  AND type IN ('LOW_STOCK', 'OUT_OF_STOCK')
                 ORDER BY created_at DESC
                 LIMIT 1
-            ''', (caregiver_id, title, message, notif_type))
+            ''', (caregiver_id, f'%{med_name}%'))
             existing = cursor.fetchone()
 
             if existing:
@@ -511,7 +525,7 @@ def _mark_related_stock_alerts_read(cursor, caregiver_id, medication_name, excep
     and medication as read, optionally excluding a specific type.
     Used when stock is restored to OK status.
     """
-    params = [caregiver_id, f'%{medication_name}%', f'%{medication_name}%']
+    params = [caregiver_id, f'%{medication_name}%']
     type_filter = ''
     if except_type is not None:
         type_filter = 'AND type <> %s'
@@ -523,7 +537,6 @@ def _mark_related_stock_alerts_read(cursor, caregiver_id, medication_name, excep
         WHERE recipient_id = %s
           AND type IN ('LOW_STOCK', 'OUT_OF_STOCK')
           AND is_read = 0
-          AND message LIKE %s
           AND message LIKE %s
           {type_filter}
     ''', tuple(params))
@@ -581,7 +594,7 @@ def sync_stock_notifications(caregiver_id=None, patient_id=None, medication_id=N
         # ── Dedup: keep only ONE aggregated entry per (caregiver_id, medication_id).
         # _fetch_stock_rows and _fetch_device_stock_rows can both return rows for
         # the same medication, producing two separate aggregated items and therefore
-        # two duplicate notification INSERTs.  We merge them here before touching the DB.
+        # two duplicate notification INSERTs. We merge them here before touching the DB.
         seen_keys: set = set()
         deduped_aggregated = []
         for agg in aggregated:
@@ -601,61 +614,71 @@ def sync_stock_notifications(caregiver_id=None, patient_id=None, medication_id=N
             # Build patient list string
             patient_names = [p['patient_name'] for p in agg['patients']]
             patient_list = ", ".join(patient_names)
+            med_name = agg["medication_name"]
 
             # Determine title, message, and type based on worst status
             if agg['worst_status'] == 'OUT_OF_STOCK':
                 title = 'Medicine Out of Stock'
-                message = f'{agg["medication_name"]} is out of stock for: {patient_list}. Please restock immediately.'
+                message = f'{med_name} is out of stock for: {patient_list}. Please restock immediately.'
                 notif_type = 'OUT_OF_STOCK'
             elif agg['worst_status'] == 'LOW_STOCK':
                 title = 'Medicine Low Stock'
-                message = f'{agg["medication_name"]} is running low for: {patient_list}. Please restock soon.'
+                message = f'{med_name} is running low for: {patient_list}. Please restock soon.'
                 notif_type = 'LOW_STOCK'
             else:
-                # Stock is OK: mark any existing unread alerts for this medication as read
-                _mark_related_stock_alerts_read(cursor, caregiver, agg['medication_name'], agg['medication_name'])
+                # Stock is OK: the medication has been refilled above the threshold.
+                # Remove previous stock alert notifications for this medication so that
+                # a new unread alert will be triggered when stock drops low again in the future.
+                cursor.execute('''
+                    DELETE FROM notifications
+                    WHERE recipient_id = %s
+                      AND type IN ('LOW_STOCK', 'OUT_OF_STOCK')
+                      AND message LIKE %s
+                ''', (caregiver, f'%{med_name}%'))
                 continue
 
-            # Fetch ALL unread stock notifications for this medication name.
-            # If more than one exists (leftover duplicates from prior runs), we
-            # update the first one and delete the rest to self-heal the DB.
+            # Fetch ALL existing stock notifications (both read and unread) for this medication name.
             cursor.execute('''
-                SELECT notification_id, type
+                SELECT notification_id, type, is_read, title, message
                 FROM notifications
                 WHERE recipient_id = %s
                   AND type IN ('LOW_STOCK', 'OUT_OF_STOCK')
-                  AND is_read = 0
                   AND message LIKE %s
-                ORDER BY created_at ASC
-            ''', (caregiver, f'%{agg["medication_name"]}%'))
+                ORDER BY created_at DESC
+            ''', (caregiver, f'%{med_name}%'))
             existing_rows = cursor.fetchall()
 
             if existing_rows:
-                # Keep the oldest unread notification; mark any extras as read
+                # Keep the newest notification as primary; mark duplicate unread ones as read
                 primary = existing_rows[0]
                 for duplicate in existing_rows[1:]:
-                    cursor.execute(
-                        'UPDATE notifications SET is_read = 1 WHERE notification_id = %s',
-                        (duplicate['notification_id'],)
-                    )
+                    if duplicate['is_read'] == 0:
+                        cursor.execute(
+                            'UPDATE notifications SET is_read = 1 WHERE notification_id = %s',
+                            (duplicate['notification_id'],)
+                        )
 
-                # Update the surviving notification with the latest message/type
-                if primary['type'] != notif_type:
-                    # Type changed (e.g., from LOW_STOCK to OUT_OF_STOCK)
+                # Check if severity escalated (e.g., from LOW_STOCK to OUT_OF_STOCK)
+                if primary['type'] == 'LOW_STOCK' and notif_type == 'OUT_OF_STOCK':
+                    # Escalated: update to OUT_OF_STOCK and re-alert caregiver (is_read = 0)
                     cursor.execute('''
                         UPDATE notifications
-                        SET title = %s, message = %s, type = %s, created_at = NOW()
+                        SET title = %s, message = %s, type = %s, is_read = 0, created_at = NOW()
+                        WHERE notification_id = %s
+                    ''', (title, message, notif_type, primary['notification_id']))
+                elif primary['is_read'] == 0:
+                    # Still unread: refresh message and title if needed
+                    cursor.execute('''
+                        UPDATE notifications
+                        SET title = %s, message = %s, type = %s
                         WHERE notification_id = %s
                     ''', (title, message, notif_type, primary['notification_id']))
                 else:
-                    # Same type: just refresh message and timestamp
-                    cursor.execute('''
-                        UPDATE notifications
-                        SET message = %s, created_at = NOW()
-                        WHERE notification_id = %s
-                    ''', (message, primary['notification_id']))
+                    # Notification was already marked as read by the caregiver.
+                    # Keep it as is_read = 1 so it does not resurrect.
+                    pass
             else:
-                # No existing unread notification: insert a new one
+                # No existing notification: insert a new one as unread
                 cursor.execute('''
                     INSERT INTO notifications (recipient_id, title, message, type, is_read, created_at)
                     VALUES (%s, %s, %s, %s, 0, NOW())

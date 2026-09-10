@@ -318,6 +318,22 @@ class CaregiverService {
     }
   }
 
+  // ---------------------- Mark All Notifications as Read ----------------------
+  /// Mark all unread notifications for a caregiver as read.
+  /// Returns true on success, false otherwise.
+  Future<bool> markAllCaregiverNotificationsRead(int caregiverId) async {
+    try {
+      final response = await ApiClient.put(
+        '/caregiver/$caregiverId/notifications/read',
+      );
+      final jsonResponse = jsonDecode(response.body);
+      return jsonResponse['success'] == true;
+    } catch (e) {
+      debugPrint('Error marking all notifications read: $e');
+      return false;
+    }
+  }
+
   // ---------------------- Get Available Patients (for Linking) ----------------------
   /// Retrieve patients that are not currently assigned to this caregiver.
   /// Optional `status` filter: 'active', 'inactive', 'all' (default 'all').

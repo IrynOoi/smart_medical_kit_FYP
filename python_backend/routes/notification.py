@@ -8,6 +8,7 @@ from models.notification_model import (
     mark_all_reminders_read as mark_all_reminders_read_model,
     insert_notification,
     mark_notification_as_read,
+    mark_all_caregiver_notifications_read as mark_all_caregiver_notifications_read_model,
     get_caregiver_notifications as get_caregiver_notifications_model,
     get_caregiver_stock_notification_rows
 )
@@ -165,5 +166,18 @@ def mark_caregiver_notification_read(notif_id):
     try:
         mark_notification_as_read(notif_id)
         return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ---------------------- Mark All Caregiver Notifications as Read ----------------------
+@notification_bp.route('/caregiver/<int:caregiver_id>/notifications/read', methods=['PUT'])
+def api_mark_all_caregiver_notifications_read(caregiver_id):
+    """
+    Mark all unread notifications for a caregiver as read.
+    """
+    try:
+        mark_all_caregiver_notifications_read_model(caregiver_id)
+        return jsonify({"success": True, "message": "All notifications marked as read"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

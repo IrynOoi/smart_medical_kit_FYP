@@ -158,11 +158,16 @@ class _CaregiverNotificationsPageState
 
     if (confirm != true) return;
 
-    // Mark each unread notification
-    for (final notif in _notifications) {
-      final notifId = _asInt(notif['notification_id']);
-      if (notifId != null && !_isRead(notif['is_read'])) {
-        await _caregiverService.markCaregiverNotificationRead(notifId);
+    // Use bulk mark all read endpoint
+    final success = await _caregiverService.markAllCaregiverNotificationsRead(_caregiverId);
+
+    // If bulk endpoint failed, fallback to marking individually
+    if (!success) {
+      for (final notif in _notifications) {
+        final notifId = _asInt(notif['notification_id']);
+        if (notifId != null && !_isRead(notif['is_read'])) {
+          await _caregiverService.markCaregiverNotificationRead(notifId);
+        }
       }
     }
 
