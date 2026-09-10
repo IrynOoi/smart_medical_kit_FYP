@@ -241,6 +241,17 @@ Path: `/home/runner/work/smart_medical_kit_FYP/smart_medical_kit_FYP/iot_codes/t
 
 <br><br>
 <img width="1280" height="960" alt="Smart Medical Kit hardware 2" src="https://github.com/user-attachments/assets/c8c3b15d-bb33-4be2-9bc7-b4943e81ef9e" />
+### Mobile app UI (Mobile application for both caregiver and patient)
+1）<img width="246" height="512" alt="image" src="https://github.com/user-attachments/assets/1f67b19f-d4d7-449b-baa6-0f3a1d2aef68" />
+<br><br>
+2) <img width="243" height="513" alt="image" src="https://github.com/user-attachments/assets/7af8c389-1b6a-4693-b2c1-d77ecece20af" />
+<br><br>
+3)<img width="255" height="571" alt="image" src="https://github.com/user-attachments/assets/f428579a-c062-476a-91ad-def0acd805af" />
+<br><br>
+4)<img width="269" height="601" alt="image" src="https://github.com/user-attachments/assets/f31edb0b-36ab-496e-a5c9-19d4e4a2d24a" />
+<br><br>
+5)<img width="263" height="589" alt="image" src="https://github.com/user-attachments/assets/42d70590-edb2-4b57-94a3-98097abe8b58" />
+
 
 ### Website UI (Caregiver Portal)
 <img width="1873" height="890" alt="MedSmart caregiver portal UI" src="https://github.com/user-attachments/assets/535e3e21-2291-45b8-8828-140417c24477" />
